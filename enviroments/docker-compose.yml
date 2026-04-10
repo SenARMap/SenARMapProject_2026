@@ -1,0 +1,11 @@
+services:
+  python:
+    image: iki_project_2026:1.0
+    build: ./
+    container_name: 'iki_project_2026'
+    ports: 
+      - 5001:5001
+    working_dir: '/project/programs'
+    volumes:
+      - ../:/project/
+    command: tail -f /dev/null
