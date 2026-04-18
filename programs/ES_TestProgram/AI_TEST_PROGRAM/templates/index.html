@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>大学ARマップ — 3D経路ビューア</title>
+  <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+  <style>
+    /* ============================================================
+       BASE RESET
+    ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --border:    #30363d;
+      --muted:     #8b949e;
+      --text:      #e6edf3;
+      --text-sub:  #c9d1d9;
+      --accent:    #58a6ff;
+      --success-bg:#0d2d0d;
+      --success-br:#238636;
+      --success-tx:#56d364;
+      --error-bg:  #2d0d0d;
+      --error-br:  #f85149;
+      --error-tx:  #f85149;
+      --header-h:  52px;
+      --peek-h:    64px; /* handle(20px) + tab-bar(44px) */
+      --sheet-r:   18px;
+    }
+
+    html, body { height: 100%; }
+    body {
+      font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ============================================================
+       HEADER
+    ============================================================ */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      height: var(--header-h);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+    header h1   { font-size: 1.05rem; font-weight: 700; letter-spacing: .04em; }
+    header .sub { font-size: .72rem; color: var(--muted); }
+
+    /* ============================================================
+       MAIN LAYOUT (desktop: side-by-side)
+    ============================================================ */
+    .main-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ============================================================
+       SIDEBAR (desktop)
+    ============================================================ */
+    .sidebar {
+      width: 290px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    /* Drag handle — hidden on desktop */
+    .sheet-drag-handle { display: none; }
+
+    /* Scroll area wraps all tab panels */
+    .sheet-scroll-area {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* ============================================================
+       TABS
+    ============================================================ */
+    .tab-bar {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .tab {
+      flex: 1;
+      padding: 11px 4px;
+      font-size: .76rem;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      color: var(--muted);
+      border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ============================================================
+       PANEL / FORM ELEMENTS
+    ============================================================ */
+    .panel {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .panel h2 {
+      font-size: .68rem;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    label {
+      display: block;
+      font-size: .82rem;
+      color: var(--text-sub);
+      margin-bottom: 4px;
+    }
+
+    select, input[type=text] {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 9px 12px;
+      font-size: 1rem; /* ≥16px prevents iOS zoom */
+      margin-bottom: 10px;
+      outline: none;
+      transition: border-color .15s;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238b949e' d='M1 1l5 5 5-5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
+    select:focus, input:focus { border-color: var(--accent); }
+
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 11px;
+      border: none;
+      border-radius: 8px;
+      font-size: .9rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn-primary   { background: var(--success-br); color: #fff; }
+    .btn-secondary { background: #21262d; color: var(--text-sub); border: 1px solid var(--border); margin-top: 8px; }
+
+    /* ============================================================
+       AUTOCOMPLETE
+    ============================================================ */
+    .autocomplete-wrap { position: relative; margin-bottom: 10px; }
+    .autocomplete-wrap input { margin-bottom: 0; }
+
+    .ac-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0; right: 0;
+      background: #21262d;
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+      max-height: 180px;
+      overflow-y: auto;
+      z-index: 300;
+      display: none;
+    }
+    .room-option {
+      padding: 10px 12px;
+      font-size: .85rem;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      min-height: 44px;
+    }
+    .room-option:active,
+    .room-option.ac-active { background: var(--border); }
+    .room-option .room-meta { font-size: .72rem; color: var(--muted); }
+
+    /* ============================================================
+       ROOM BADGE
+    ============================================================ */
+    .room-badge {
+      display: none;
+      margin-bottom: 10px;
+      font-size: .78rem;
+      padding: 5px 10px;
+      background: #0d2d3d;
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      color: var(--accent);
+      word-break: break-all;
+    }
+
+    /* ============================================================
+       RESULT BOX
+    ============================================================ */
+    #result-box, #room-result-box {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: .82rem;
+      line-height: 1.7;
+      display: none;
+    }
+    .success { background: var(--success-bg); border: 1px solid var(--success-br); color: var(--success-tx); }
+    .error   { background: var(--error-bg);   border: 1px solid var(--error-br);   color: var(--error-tx); }
+
+    /* ============================================================
+       LEGEND & STATS
+    ============================================================ */
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: .82rem;
+      margin-bottom: 6px;
+    }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: .82rem;
+      padding: 5px 0;
+      border-bottom: 1px solid #21262d;
+      color: var(--muted);
+    }
+    .stat-row span:last-child { color: var(--text); font-weight: 600; }
+
+    /* ============================================================
+       3D MAP
+    ============================================================ */
+    #map-container {
+      flex: 1;
+      position: relative;
+      background: var(--bg);
+      min-width: 0;
+    }
+    #map { width: 100%; height: 100%; }
+
+    .map-hint {
+      position: absolute;
+      bottom: 14px; right: 16px;
+      background: rgba(22,27,34,.85);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: .68rem;
+      color: var(--muted);
+      pointer-events: none;
+      user-select: none;
+    }
+    .map-hint .hint-desktop { display: inline; }
+    .map-hint .hint-mobile  { display: none; }
+
+    /* ============================================================
+       MOBILE STYLES  (≤ 767px)
+    ============================================================ */
+    @media (max-width: 767px) {
+
+      header {
+        height: var(--header-h);
+        padding: 0 16px;
+      }
+      header h1  { font-size: .92rem; }
+      header .sub{ display: none; }
+
+      .main-layout {
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      /* Map fills the entire main area */
+      #map-container {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+      }
+
+      /* ---- BOTTOM SHEET ---- */
+      .sidebar {
+        position: absolute;
+        left: 0; right: 0; bottom: 0;
+        width: 100%;
+        /* peek = just handle + tab-bar */
+        height: var(--peek-h);
+        max-height: 82vh;
+        border-right: none;
+        border-top: 1px solid var(--border);
+        border-radius: var(--sheet-r) var(--sheet-r) 0 0;
+        z-index: 100;
+        overflow: hidden;
+        transition: height 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+        /* bottom safe area */
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+      }
+
+      .sidebar.sheet-open {
+        height: 76vh;
+      }
+
+      /* Drag handle */
+      .sheet-drag-handle {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 20px;
+        flex-shrink: 0;
+        cursor: grab;
+        touch-action: none;
+      }
+      .sheet-drag-handle::after {
+        content: "";
+        display: block;
+        width: 36px; height: 4px;
+        background: #4a5568;
+        border-radius: 2px;
+      }
+
+      /* Tab bar */
+      .tab-bar {
+        height: 44px;
+        flex-shrink: 0;
+        align-items: center;
+        border-bottom-color: transparent;
+      }
+      .sidebar.sheet-open .tab-bar {
+        border-bottom-color: var(--border);
+      }
+      .tab { font-size: .72rem; padding: 10px 4px; }
+
+      /* Scroll area */
+      .sheet-scroll-area {
+        flex: 1;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      /* Map hint — touch version */
+      .map-hint {
+        bottom: calc(var(--peek-h) + 10px);
+        right: 10px;
+        font-size: .65rem;
+        padding: 5px 8px;
+      }
+      .map-hint .hint-desktop { display: none; }
+      .map-hint .hint-mobile  { display: inline; }
+
+      /* Larger touch targets for autocomplete */
+      .room-option { min-height: 48px; }
+
+      /* Sheet backdrop (tap map to close) */
+      #map-container.sheet-open-backdrop::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 50;
+        background: transparent;
+      }
+    }
+
+    /* ============================================================
+       VERY SMALL SCREENS (≤ 360px)
+    ============================================================ */
+    @media (max-width: 360px) {
+      .tab { font-size: .65rem; }
+      header h1 { font-size: .82rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>大学 AR マップ — 3D 経路ビューア</h1>
+    <div class="sub">ノード&amp;エッジ CSV から生成 ／ Dijkstra 最短経路</div>
+  </div>
+</header>
+
+<div class="main-layout">
+
+  <!-- ========== SIDEBAR / BOTTOM SHEET ========== -->
+  <aside class="sidebar" id="sidebar">
+
+    <!-- Drag handle (mobile only) -->
+    <div class="sheet-drag-handle" id="sheet-handle"></div>
+
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <div class="tab active" onclick="switchTab('room')">教室を探す</div>
+      <div class="tab"       onclick="switchTab('node')">ノード指定</div>
+      <div class="tab"       onclick="switchTab('info')">情報</div>
+    </div>
+
+    <!-- Scrollable content -->
+    <div class="sheet-scroll-area">
+
+      <!-- ===== TAB: 教室検索 ===== -->
+      <div id="tab-room" class="tab-panel active">
+        <div class="panel">
+          <h2>教室で経路を探す</h2>
+
+          <label>出発教室の建物</label>
+          <select id="start-building" onchange="acStart.onBuildingChange()">
+            <option value="0">すべての建物</option>
+            {% for b in buildings %}
+            <option value="{{ b }}">Building {{ b }}</option>
+            {% endfor %}
+          </select>
+
+          <label>出発教室名</label>
+          <div class="autocomplete-wrap">
+            <input type="text" id="start-room-input" placeholder="例: 101A" autocomplete="off" autocorrect="off" />
+            <div class="ac-dropdown" id="start-room-dropdown"></div>
+          </div>
+          <div class="room-badge" id="start-room-badge"></div>
+
+          <label>目的教室の建物</label>
+          <select id="goal-building" onchange="acGoal.onBuildingChange()">
+            <option value="0">すべての建物</option>
+            {% for b in buildings %}
+            <option value="{{ b }}">Building {{ b }}</option>
+            {% endfor %}
+          </select>
+
+          <label>目的教室名</label>
+          <div class="autocomplete-wrap">
+            <input type="text" id="goal-room-input" placeholder="例: 10215" autocomplete="off" autocorrect="off" />
+            <div class="ac-dropdown" id="goal-room-dropdown"></div>
+          </div>
+          <div class="room-badge" id="goal-room-badge"></div>
+
+          <button class="btn btn-primary"   onclick="navigateToRoom()">経路を表示</button>
+          <button class="btn btn-secondary" onclick="clearPath()">クリア</button>
+
+          <div id="room-result-box"></div>
+        </div>
+      </div>
+
+      <!-- ===== TAB: ノード指定 ===== -->
+      <div id="tab-node" class="tab-panel">
+        <div class="panel">
+          <h2>ノード間の最短経路</h2>
+
+          <label for="sel-start">出発ノード</label>
+          <select id="sel-start">
+            {% for nid in node_ids %}
+            <option value="{{ nid }}">Node {{ nid }}</option>
+            {% endfor %}
+          </select>
+
+          <label for="sel-goal">目的地ノード</label>
+          <select id="sel-goal">
+            {% for nid in node_ids %}
+            <option value="{{ nid }}" {% if loop.last %}selected{% endif %}>Node {{ nid }}</option>
+            {% endfor %}
+          </select>
+
+          <button class="btn btn-primary"   onclick="findPathByNode()">経路を表示</button>
+          <button class="btn btn-secondary" onclick="clearPath()">クリア</button>
+
+          <div id="result-box"></div>
+        </div>
+
+        <div class="panel">
+          <h2>表示フィルタ</h2>
+          <label for="filter-building">建物で絞り込み</label>
+          <select id="filter-building" onchange="applyFilter()">
+            <option value="0">すべての建物</option>
+            {% for b in buildings %}
+            <option value="{{ b }}">Building {{ b }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <!-- ===== TAB: 情報 ===== -->
+      <div id="tab-info" class="tab-panel">
+        <div class="panel">
+          <h2>建物の凡例</h2>
+          <div id="legend-items"></div>
+        </div>
+        <div class="panel">
+          <h2>グラフ統計</h2>
+          <div class="stat-row"><span>ノード数</span><span id="stat-nodes">-</span></div>
+          <div class="stat-row"><span>エッジ数</span><span id="stat-edges">-</span></div>
+          <div class="stat-row"><span>建物数</span> <span id="stat-buildings">-</span></div>
+          <div class="stat-row"><span>教室数</span> <span id="stat-rooms">-</span></div>
+        </div>
+      </div>
+
+    </div><!-- /.sheet-scroll-area -->
+  </aside>
+
+  <!-- ========== 3D MAP ========== -->
+  <div id="map-container">
+    <div id="map"></div>
+    <div class="map-hint">
+      <span class="hint-desktop">左ドラッグ: 回転 ／ スクロール: ズーム ／ 右ドラッグ: 移動</span>
+      <span class="hint-mobile">1本指: 回転 ／ ピンチ: ズーム</span>
+    </div>
+  </div>
+
+</div><!-- /.main-layout -->
+
+<script>
+// ============================================================
+//  Globals
+// ============================================================
+let graphData   = null;
+let currentPath = null;
+let startEdge   = null;
+let destEdge    = null;
+let filterBuilding = 0;
+let acStart = null;
+let acGoal  = null;
+
+// ============================================================
+//  Boot
+// ============================================================
+(async () => {
+  const res = await fetch("/api/graph");
+  graphData = await res.json();
+  buildLegend();
+  updateStats();
+  renderMap();
+  prefetchRooms();
+
+  acStart = new RoomAutocomplete({
+    inputId: "start-room-input", dropdownId: "start-room-dropdown",
+    badgeId: "start-room-badge", buildingId: "start-building",
+  });
+  acGoal = new RoomAutocomplete({
+    inputId: "goal-room-input", dropdownId: "goal-room-dropdown",
+    badgeId: "goal-room-badge", buildingId: "goal-building",
+  });
+
+  initSheet();
+})();
+
+async function prefetchRooms() {
+  const res = await fetch("/api/rooms");
+  const all = await res.json();
+  document.getElementById("stat-rooms").textContent = new Set(all.map(r => r.room)).size;
+}
+
+// ============================================================
+//  Sheet (mobile bottom sheet)
+// ============================================================
+function isMobile() { return window.innerWidth <= 767; }
+
+function openSheet() {
+  if (!isMobile()) return;
+  document.getElementById("sidebar").classList.add("sheet-open");
+  document.getElementById("map-container").classList.add("sheet-open-backdrop");
+}
+function closeSheet() {
+  document.getElementById("sidebar").classList.remove("sheet-open");
+  document.getElementById("map-container").classList.remove("sheet-open-backdrop");
+}
+function toggleSheet(open) {
+  if (open) openSheet(); else closeSheet();
+}
+
+function initSheet() {
+  const handle = document.getElementById("sheet-handle");
+  const sidebar = document.getElementById("sidebar");
+  const mapEl   = document.getElementById("map-container");
+
+  // Tap map backdrop to close
+  mapEl.addEventListener("pointerdown", (e) => {
+    if (isMobile() && mapEl.classList.contains("sheet-open-backdrop")) {
+      closeSheet();
+    }
+  });
+
+  // Drag handle — touch
+  let dragStartY = 0;
+  let sheetOpenAtStart = false;
+
+  handle.addEventListener("touchstart", (e) => {
+    dragStartY = e.touches[0].clientY;
+    sheetOpenAtStart = sidebar.classList.contains("sheet-open");
+    e.preventDefault();
+  }, { passive: false });
+
+  handle.addEventListener("touchmove", (e) => {
+    e.preventDefault(); // prevent page scroll
+  }, { passive: false });
+
+  handle.addEventListener("touchend", (e) => {
+    const dy = e.changedTouches[0].clientY - dragStartY;
+    // swipe up (dy < -20) → open, swipe down (dy > 20) → close, small tap → toggle
+    if (dy < -20) openSheet();
+    else if (dy > 20) closeSheet();
+    else toggleSheet(!sheetOpenAtStart);
+  });
+
+  // Tap on tab-bar drag handle area also toggles
+  handle.addEventListener("click", () => {
+    if (isMobile()) toggleSheet(!sidebar.classList.contains("sheet-open"));
+  });
+}
+
+// ============================================================
+//  Tab switching
+// ============================================================
+function switchTab(name) {
+  const names = ["room", "node", "info"];
+  document.querySelectorAll(".tab").forEach((t, i) =>
+    t.classList.toggle("active", names[i] === name));
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+  document.getElementById("tab-" + name).classList.add("active");
+
+  // On mobile: open the sheet when a tab is tapped
+  if (isMobile()) openSheet();
+}
+
+// ============================================================
+//  Legend & Stats
+// ============================================================
+function buildLegend() {
+  const container = document.getElementById("legend-items");
+  container.innerHTML = "";
+  const buildings = [...new Set(graphData.nodes.map(n => n.building))].sort((a,b)=>a-b);
+  buildings.forEach(b => {
+    const color = graphData.building_colors[(b - 1) % graphData.building_colors.length];
+    const div = document.createElement("div");
+    div.className = "legend-item";
+    div.innerHTML = `<div class="legend-dot" style="background:${color}"></div><span>Building ${b}</span>`;
+    container.appendChild(div);
+  });
+}
+function updateStats() {
+  const buildings = new Set(graphData.nodes.map(n => n.building));
+  document.getElementById("stat-nodes").textContent     = graphData.nodes.length;
+  document.getElementById("stat-edges").textContent     = graphData.edges.length;
+  document.getElementById("stat-buildings").textContent = buildings.size;
+}
+
+// ============================================================
+//  RoomAutocomplete
+// ============================================================
+class RoomAutocomplete {
+  constructor({ inputId, dropdownId, badgeId, buildingId }) {
+    this.input       = document.getElementById(inputId);
+    this.dropdown    = document.getElementById(dropdownId);
+    this.badge       = document.getElementById(badgeId);
+    this.buildingSel = document.getElementById(buildingId);
+    this.roomList    = [];
+    this.acIndex     = -1;
+    this.selected    = null;
+
+    this.input.addEventListener("input",   () => this._onInput());
+    this.input.addEventListener("blur",    () => setTimeout(() => this._hide(), 200));
+    this.input.addEventListener("keydown", (e) => this._onKeydown(e));
+
+    // On mobile: scroll sheet to keep input visible when keyboard opens
+    this.input.addEventListener("focus", () => {
+      if (isMobile()) {
+        openSheet();
+        setTimeout(() => this.input.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
+      }
+    });
+  }
+
+  onBuildingChange() {
+    this.selected = null;
+    this.input.value = "";
+    this.badge.style.display = "none";
+    this._hide();
+  }
+
+  async _onInput() {
+    const q        = this.input.value.trim();
+    const building = parseInt(this.buildingSel.value) || 0;
+    this.selected  = null;
+    this.badge.style.display = "none";
+    if (!q) { this._hide(); return; }
+    const url = `/api/rooms?q=${encodeURIComponent(q)}` + (building ? `&building=${building}` : "");
+    const res = await fetch(url);
+    this.roomList = await res.json();
+    this.acIndex  = -1;
+    this._render();
+  }
+
+  _render() {
+    this.dropdown.innerHTML = "";
+    if (!this.roomList.length) { this._hide(); return; }
+    this.roomList.forEach((r, i) => {
+      const div = document.createElement("div");
+      div.className = "room-option";
+      div.innerHTML = `<span>${r.room}</span><span class="room-meta">B${r.building} / ${r.floor}F</span>`;
+      // Use pointerdown instead of mousedown for better mobile support
+      div.addEventListener("pointerdown", (e) => { e.preventDefault(); this._select(i); });
+      this.dropdown.appendChild(div);
+    });
+    this.dropdown.style.display = "block";
+  }
+
+  _select(i) {
+    if (i < 0 || i >= this.roomList.length) return;
+    this.selected    = this.roomList[i];
+    this.input.value = this.selected.room;
+    this.badge.textContent = `✓ ${this.selected.room}（Building ${this.selected.building} / ${this.selected.floor}F）`;
+    this.badge.style.display = "block";
+    this._hide();
+    this.input.blur();
+  }
+
+  _hide() { this.dropdown.style.display = "none"; }
+
+  _onKeydown(e) {
+    const items = this.dropdown.querySelectorAll(".room-option");
+    if      (e.key === "ArrowDown") this.acIndex = Math.min(this.acIndex + 1, items.length - 1);
+    else if (e.key === "ArrowUp")   this.acIndex = Math.max(this.acIndex - 1, 0);
+    else if (e.key === "Enter") {
+      if (this.acIndex >= 0) { this._select(this.acIndex); e.preventDefault(); }
+      return;
+    } else { return; }
+    items.forEach((el, i) => el.classList.toggle("ac-active", i === this.acIndex));
+    e.preventDefault();
+  }
+
+  reset() {
+    this.selected = null;
+    this.input.value = "";
+    this.badge.style.display = "none";
+    this._hide();
+  }
+}
+
+// ============================================================
+//  Navigate: 教室 → 教室
+// ============================================================
+async function navigateToRoom() {
+  const box = document.getElementById("room-result-box");
+  box.style.display = "none";
+
+  if (!acStart.selected) {
+    showResult(box, "error", "出発教室を選択してください"); return;
+  }
+  if (!acGoal.selected) {
+    showResult(box, "error", "目的教室を選択してください"); return;
+  }
+
+  const { room: sRoom, building: sBuilding } = acStart.selected;
+  const { room: gRoom, building: gBuilding } = acGoal.selected;
+
+  const url = `/api/navigate_to_room` +
+    `?room=${encodeURIComponent(gRoom)}&building=${gBuilding}` +
+    `&start_room=${encodeURIComponent(sRoom)}&start_building=${sBuilding}`;
+
+  const data = await fetch(url).then(r => r.json());
+
+  if (data.error) {
+    showResult(box, "error", data.error);
+    currentPath = null; startEdge = null; destEdge = null;
+  } else {
+    currentPath = data;
+    startEdge   = data.start_edge       || null;
+    destEdge    = data.destination_edge || null;
+    const totalLen = data.path_edges.reduce((s, e) => s + (e.length || 0), 0);
+    showResult(box, "success",
+      `<b>出発:</b> ${sRoom}（Building ${sBuilding}）<br>` +
+      `<b>目的地:</b> ${gRoom}（Building ${gBuilding}）<br>` +
+      `<b>経路:</b> ${data.path.join(" → ")}<br>` +
+      `<b>距離:</b> ${totalLen.toFixed(1)} m`
+    );
+  }
+  renderMap();
+}
+
+// ============================================================
+//  Navigate: ノード → ノード
+// ============================================================
+async function findPathByNode() {
+  const start = parseInt(document.getElementById("sel-start").value);
+  const goal  = parseInt(document.getElementById("sel-goal").value);
+  const box   = document.getElementById("result-box");
+  box.style.display = "none";
+
+  const data = await fetch(`/api/shortest_path?start=${start}&goal=${goal}`).then(r => r.json());
+
+  if (data.error) {
+    showResult(box, "error", data.error);
+    currentPath = null; startEdge = null; destEdge = null;
+  } else {
+    currentPath = data;
+    startEdge = null; destEdge = null;
+    const totalLen = data.path_edges.reduce((s, e) => s + (e.length || 0), 0);
+    showResult(box, "success",
+      `<b>経路:</b> ${data.path.join(" → ")}<br>` +
+      `<b>距離:</b> ${totalLen.toFixed(1)} m`
+    );
+  }
+  renderMap();
+}
+
+function clearPath() {
+  currentPath = null; startEdge = null; destEdge = null;
+  acStart?.reset(); acGoal?.reset();
+  document.getElementById("room-result-box").style.display = "none";
+  document.getElementById("result-box").style.display = "none";
+  renderMap();
+}
+
+function showResult(el, type, html) {
+  el.className = type;
+  el.innerHTML = html;
+  el.style.display = "block";
+}
+
+// ============================================================
+//  Filter
+// ============================================================
+function applyFilter() {
+  filterBuilding = parseInt(document.getElementById("filter-building").value);
+  renderMap();
+}
+
+// ============================================================
+//  Render 3D map
+// ============================================================
+function buildPathEdgeSet() {
+  const s = new Set();
+  if (!currentPath) return s;
+  currentPath.path_edges.forEach(e => { s.add(`${e.from}-${e.to}`); s.add(`${e.to}-${e.from}`); });
+  return s;
+}
+function sameEdge(a, b) {
+  return a && b && ((a.from===b.from && a.to===b.to)||(a.from===b.to && a.to===b.from));
+}
+
+function renderMap() {
+  const nodes = filterBuilding
+    ? graphData.nodes.filter(n => n.building === filterBuilding) : graphData.nodes;
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const edges   = filterBuilding
+    ? graphData.edges.filter(e => nodeIds.has(e.from) && nodeIds.has(e.to)) : graphData.edges;
+
+  const traces = [];
+  const pathEdgeSet = buildPathEdgeSet();
+  const pathNodeSet = new Set(currentPath ? currentPath.path : []);
+
+  // 1. Normal edges
+  const normalEdges = edges.filter(e =>
+    !pathEdgeSet.has(`${e.from}-${e.to}`) && !pathEdgeSet.has(`${e.to}-${e.from}`) &&
+    !sameEdge(e, destEdge) && !sameEdge(e, startEdge));
+  if (normalEdges.length) {
+    const ex=[],ey=[],ez=[];
+    normalEdges.forEach(e=>{ex.push(e.x0,e.x1,null);ey.push(e.y0,e.y1,null);ez.push(e.z0,e.z1,null);});
+    traces.push({ type:"scatter3d", mode:"lines", x:ex, y:ey, z:ez,
+      line:{color:"#4a5568",width:2}, hoverinfo:"none", name:"通路", showlegend:false });
+  }
+
+  // 2. Nodes by building
+  const byBuilding = {};
+  nodes.forEach(n => { (byBuilding[n.building]=byBuilding[n.building]||[]).push(n); });
+  Object.entries(byBuilding).forEach(([b, bNodes]) => {
+    const color  = graphData.building_colors[(parseInt(b)-1) % graphData.building_colors.length];
+    const normal = bNodes.filter(n => !pathNodeSet.has(n.id));
+    if (!normal.length) return;
+    traces.push({ type:"scatter3d", mode:"markers",
+      x:normal.map(n=>n.x), y:normal.map(n=>n.y), z:normal.map(n=>n.z),
+      marker:{size:6, color, opacity:.85, line:{color:"#fff",width:.5}},
+      text:normal.map(n=>n.label), hovertemplate:"%{text}<extra></extra>",
+      name:`Building ${b}` });
+  });
+
+  // 3. Path edges (yellow)
+  if (currentPath?.path_edges.length) {
+    const px=[],py=[],pz=[];
+    currentPath.path_edges.forEach(e=>{px.push(e.x0,e.x1,null);py.push(e.y0,e.y1,null);pz.push(e.z0,e.z1,null);});
+    traces.push({ type:"scatter3d", mode:"lines", x:px, y:py, z:pz,
+      line:{color:"#ffd700",width:6}, hoverinfo:"none", name:"最短経路" });
+  }
+
+  // 4. Start edge (green)
+  if (startEdge) {
+    traces.push({ type:"scatter3d", mode:"lines",
+      x:[startEdge.x0,startEdge.x1], y:[startEdge.y0,startEdge.y1], z:[startEdge.z0,startEdge.z1],
+      line:{color:"#4ade80",width:10},
+      hovertemplate:`出発: ${startEdge.name}<extra></extra>`,
+      name:`出発: ${acStart?.selected?.room||startEdge.name}` });
+  }
+
+  // 5. Dest edge (orange)
+  if (destEdge) {
+    traces.push({ type:"scatter3d", mode:"lines",
+      x:[destEdge.x0,destEdge.x1], y:[destEdge.y0,destEdge.y1], z:[destEdge.z0,destEdge.z1],
+      line:{color:"#ff6b2b",width:10},
+      hovertemplate:`目的地: ${destEdge.name}<extra></extra>`,
+      name:`目的地: ${acGoal?.selected?.room||destEdge.name}` });
+  }
+
+  // 6. Path nodes (diamonds)
+  if (currentPath?.path_coords.length) {
+    const pn = currentPath.path_coords;
+    traces.push({ type:"scatter3d", mode:"markers+text",
+      x:pn.map(n=>n.x), y:pn.map(n=>n.y), z:pn.map(n=>n.z),
+      marker:{size:10, color:"#ffd700", symbol:"diamond", line:{color:"#fff",width:1}},
+      text:pn.map((n,i)=>i===0?"START":i===pn.length-1?"GOAL":String(i)),
+      textposition:"top center", textfont:{color:"#ffd700",size:11},
+      hovertemplate:"Node %{text}<extra></extra>", name:"経路ノード" });
+  }
+
+  const layout = {
+    paper_bgcolor:"#0d1117", plot_bgcolor:"#0d1117",
+    margin:{l:0,r:0,t:0,b:0},
+    scene:{
+      bgcolor:"#0d1117",
+      xaxis:axisStyle("X"), yaxis:axisStyle("Y"), zaxis:axisStyle("階"),
+      camera:{eye:{x:1.8,y:1.8,z:1.4}},
+      aspectmode:"data",
+    },
+    legend:{
+      x:.01, y:.99,
+      bgcolor:"rgba(22,27,34,.8)", bordercolor:"#30363d", borderwidth:1,
+      font:{color:"#e6edf3",size:11},
+    },
+    uirevision:"keep",
+  };
+  Plotly.react("map", traces, layout, { responsive:true });
+}
+
+function axisStyle(title) {
+  return {
+    title:{text:title,font:{color:"#8b949e",size:11}},
+    gridcolor:"#21262d", linecolor:"#30363d",
+    tickcolor:"#8b949e", tickfont:{color:"#8b949e",size:10},
+    backgroundcolor:"#0d1117", showbackground:true, zerolinecolor:"#30363d",
+  };
+}
+
+// Resize Plotly when sheet opens/closes on mobile (sheet changes map viewport)
+document.getElementById("sidebar").addEventListener("transitionend", () => {
+  Plotly.Plots.resize(document.getElementById("map"));
+});
+</script>
+</body>
+</html>
