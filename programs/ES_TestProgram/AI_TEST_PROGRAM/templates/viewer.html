@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>一人称ビューア — SenARMap</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.148.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.148.0/examples/jsm/"
+    }
+  }
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0d1117; overflow: hidden;
+      font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", sans-serif;
+      color: #e6edf3;
+    }
+    canvas { display: block; }
+
+    #blocker {
+      position: fixed; inset: 0; background: rgba(0,0,0,.78);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 30; cursor: pointer;
+    }
+    #blocker h2 { font-size: 1.4rem; margin-bottom: 10px; }
+    #blocker p  { color: #8b949e; font-size: .84rem; line-height: 1.9; text-align: center; }
+    #blocker .key {
+      display: inline-block; background: #21262d; border: 1px solid #30363d;
+      border-radius: 4px; padding: 1px 7px; font-size: .78rem; color: #e6edf3;
+    }
+
+    #crosshair {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
+      pointer-events: none; z-index: 5; display: none;
+    }
+    #crosshair::before, #crosshair::after {
+      content: ""; position: absolute; background: rgba(255,255,255,.65);
+    }
+    #crosshair::before { width: 2px; height: 16px; left: 7px; top: 0; }
+    #crosshair::after  { width: 16px; height: 2px; top: 7px; left: 0; }
+
+    #hud {
+      position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+      background: rgba(22,27,34,.88); border: 1px solid #30363d;
+      padding: 6px 16px; border-radius: 8px; font-size: .78rem;
+      color: #8b949e; pointer-events: none; z-index: 5; white-space: nowrap;
+    }
+
+    #node-info {
+      position: fixed; top: 56px; left: 50%; transform: translateX(-50%);
+      background: rgba(22,27,34,.92); border: 1px solid #58a6ff;
+      padding: 7px 16px; border-radius: 8px; font-size: .82rem;
+      color: #58a6ff; z-index: 5; display: none; pointer-events: none;
+    }
+
+    #floor-btns {
+      position: fixed; right: 14px; top: 50%; transform: translateY(-50%);
+      display: flex; flex-direction: column; gap: 8px; z-index: 10;
+    }
+    .floor-btn {
+      background: rgba(22,27,34,.9); border: 1px solid #30363d;
+      color: #e6edf3; padding: 9px 13px; border-radius: 8px;
+      cursor: pointer; font-size: .82rem; text-align: center;
+      transition: border-color .15s, color .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .floor-btn.active { color: #58a6ff; border-color: #58a6ff; }
+
+    #mobile-move {
+      position: fixed; left: 16px; bottom: 20px;
+      display: none; flex-direction: column; align-items: center;
+      gap: 4px; z-index: 10;
+    }
+    #mobile-move .row { display: flex; gap: 4px; }
+    .mv-btn {
+      width: 52px; height: 52px; background: rgba(22,27,34,.88);
+      border: 1px solid #30363d; border-radius: 10px;
+      color: #e6edf3; font-size: 1.1rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      -webkit-tap-highlight-color: transparent; user-select: none;
+    }
+
+    #back {
+      position: fixed; top: 14px; left: 14px; z-index: 20;
+      background: rgba(22,27,34,.9); border: 1px solid #30363d;
+      color: #e6edf3; padding: 8px 14px; border-radius: 8px;
+      text-decoration: none; font-size: .82rem;
+      transition: border-color .15s;
+    }
+    #back:hover { border-color: #58a6ff; }
+
+    @media (max-width: 767px) {
+      #blocker { display: none; }
+      #mobile-move { display: flex; }
+      #hud { font-size: .72rem; bottom: 80px; }
+    }
+  </style>
+</head>
+<body>
+
+<a href="/" id="back">← マップへ戻る</a>
+
+<div id="blocker">
+  <h2>一人称ビューア</h2>
+  <p>
+    クリックして開始 ／ <span class="key">ESC</span> で終了<br>
+    <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> 移動 ／ マウス 視点<br>
+    <span class="key">H</span> 上の階 ／ <span class="key">B</span> 下の階 ／ <span class="key">M</span> マップへ戻る
+  </p>
+</div>
+
+<div id="crosshair"></div>
+<div id="hud">WASD: 移動 ／ マウス: 視点 ／ H: 上階 ／ B: 下階 ／ M: マップへ</div>
+<div id="node-info"></div>
+<div id="floor-btns"></div>
+
+<div id="mobile-move">
+  <div class="row"><button class="mv-btn" id="mv-fwd">↑</button></div>
+  <div class="row">
+    <button class="mv-btn" id="mv-left">←</button>
+    <button class="mv-btn" id="mv-back">↓</button>
+    <button class="mv-btn" id="mv-right">→</button>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+// ================================================================
+//  座標系の定義
+//
+//  CSV 空間:   x(東西),  y(南北),  z(階高 m)
+//  Three.js:   x(右=東), y(上=高), z(手前=南)
+//
+//  変換: CSV(x,y,z) → Three(x, z, y)
+//    ・CSV x  → Three x  (そのまま)
+//    ・CSV y  → Three z  (南北をz奥行きに)
+//    ・CSV z  → Three y  (階高を高さに)
+//
+//  Plotlyの Y反転(autorange:reversed)は「CSV y を南北逆に表示」する。
+//  Three.jsでは「z軸が手前＝南方向」なので +y → +z でそのまま一致。
+// ================================================================
+const c2t = (cx, cy, cz) => new THREE.Vector3(cx, cz, cy);
+
+// ================================================================
+//  定数
+// ================================================================
+const FLOOR_COLORS = [0xFF8C42,0x06D6A0,0x118AB2,0xFFD166,0xEF476F,0x9B5DE5,0x00BBF9,0xF15BB5];
+const floorColor   = f => FLOOR_COLORS[(Math.max(f,1)-1) % FLOOR_COLORS.length];
+const EDGE_TYPE_COLORS = { "2": 0xFFB347, "3": 0x00CED1, "4": 0xDA70D6 };
+const EYE_H   = 1.7;   // 目線の高さ (m)
+const CEIL_H  = 3.2;   // 床からの天井高 (m)
+const SPEED   = 9.0;   // 移動速度
+const T_RAD   = 0.28;  // 通路チューブ半径 (m)
+
+// ================================================================
+//  Renderer / Scene / Camera
+// ================================================================
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1117);
+scene.fog = new THREE.FogExp2(0x0d1117, 0.016);
+
+const camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.1, 400);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const sun = new THREE.DirectionalLight(0xffffff, 0.7);
+sun.position.set(20, 40, 20);
+scene.add(sun);
+
+// ================================================================
+//  PointerLock (デスクトップ)
+// ================================================================
+const controls = new PointerLockControls(camera, renderer.domElement);
+const blocker   = document.getElementById("blocker");
+const crosshair = document.getElementById("crosshair");
+
+blocker.addEventListener("click", () => controls.lock());
+controls.addEventListener("lock",   () => { blocker.style.display="none";  crosshair.style.display="block"; });
+controls.addEventListener("unlock", () => { blocker.style.display="flex";  crosshair.style.display="none";  });
+
+// ================================================================
+//  キーボード
+// ================================================================
+const keys = {};
+addEventListener("keydown", e => {
+  keys[e.code] = true;
+  if (e.code === "KeyH") jumpFloor(+1);          // 上の階へ
+  if (e.code === "KeyB") jumpFloor(-1);           // 下の階へ
+  if (e.code === "KeyM") location.href = "/";     // マップへ戻る
+});
+addEventListener("keyup", e => { keys[e.code] = false; });
+
+["mv-fwd","mv-back","mv-left","mv-right"].forEach(id => {
+  const code = { "mv-fwd":"KeyW","mv-back":"KeyS","mv-left":"KeyA","mv-right":"KeyD" }[id];
+  const el   = document.getElementById(id);
+  el.addEventListener("touchstart", e => { keys[code]=true;  e.preventDefault(); }, { passive:false });
+  el.addEventListener("touchend",   e => { keys[code]=false; e.preventDefault(); }, { passive:false });
+  el.addEventListener("mousedown",  () => keys[code]=true);
+  el.addEventListener("mouseup",    () => keys[code]=false);
+});
+
+// ================================================================
+//  モバイル: タッチで視点操作 / タップでテレポート
+// ================================================================
+const euler  = new THREE.Euler(0, 0, 0, "YXZ");
+let touch0   = null;
+let tapStart = null;
+const nodeMeshes = [];
+
+renderer.domElement.addEventListener("touchstart", e => {
+  if (e.touches.length !== 1) return;
+  const t = { x: e.touches[0].clientX, y: e.touches[0].clientY, time: Date.now() };
+  touch0   = t;
+  tapStart = t;
+}, { passive: true });
+
+renderer.domElement.addEventListener("touchmove", e => {
+  if (!touch0 || e.touches.length !== 1) return;
+  const dx = e.touches[0].clientX - touch0.x;
+  const dy = e.touches[0].clientY - touch0.y;
+  touch0 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  euler.setFromQuaternion(camera.quaternion);
+  euler.y -= dx * 0.0028;
+  euler.x  = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, euler.x - dy * 0.0028));
+  camera.quaternion.setFromEuler(euler);
+  e.preventDefault();
+}, { passive: false });
+
+renderer.domElement.addEventListener("touchend", e => {
+  if (tapStart) {
+    const dx = e.changedTouches[0].clientX - tapStart.x;
+    const dy = e.changedTouches[0].clientY - tapStart.y;
+    const dt = Date.now() - tapStart.time;
+    if (Math.hypot(dx, dy) < 10 && dt < 300) {
+      const tx =  (e.changedTouches[0].clientX / innerWidth)  * 2 - 1;
+      const ty = -(e.changedTouches[0].clientY / innerHeight) * 2 + 1;
+      const rc = new THREE.Raycaster();
+      rc.setFromCamera(new THREE.Vector2(tx, ty), camera);
+      const hits = rc.intersectObjects(nodeMeshes);
+      if (hits.length > 0) {
+        const p = hits[0].object.position.clone();
+        camera.position.set(p.x, p.y + EYE_H, p.z);
+      }
+    }
+  }
+  touch0 = tapStart = null;
+}, { passive: true });
+
+// ================================================================
+//  データ読み込み
+// ================================================================
+const { nodes, edges } = await fetch("/api/graph").then(r => r.json());
+
+// ---- 建物全体の Three.js 空間範囲を計算 ----
+// CSV x → Three x,  CSV y → Three z  なので:
+const allTX = nodes.map(n => n.x);   // Three.x = CSV.x
+const allTZ = nodes.map(n => n.y);   // Three.z = CSV.y
+const tx0 = Math.min(...allTX) - 4,  tx1 = Math.max(...allTX) + 4;
+const tz0 = Math.min(...allTZ) - 4,  tz1 = Math.max(...allTZ) + 4;
+const tW  = tx1 - tx0, tD = tz1 - tz0;
+const tcx = (tx0 + tx1) / 2;        // Three.js 中心 x
+const tcz = (tz0 + tz1) / 2;        // Three.js 中心 z
+
+// ---- フロアごとの Three.js y (高さ) を計算 ----
+const floorYSum = {}, floorCount = {};
+nodes.forEach(n => {
+  floorYSum[n.floor]   = (floorYSum[n.floor]   || 0) + n.z;
+  floorCount[n.floor]  = (floorCount[n.floor]  || 0) + 1;
+});
+const floorY   = {};   // floor番号 → Three.js y 座標
+Object.keys(floorYSum).forEach(f => { floorY[f] = floorYSum[f] / floorCount[f]; });
+const floorList = Object.keys(floorY).map(Number).sort();
+
+// ================================================================
+//  シーン構築 — フロアごとに Group にまとめる
+// ================================================================
+
+// フロアグループ生成
+const floorGroups = {};
+floorList.forEach(f => {
+  floorGroups[f] = new THREE.Group();
+  scene.add(floorGroups[f]);
+});
+
+// ---- 床・天井・グリッド・枠 ----
+floorList.forEach(f => {
+  const g   = floorGroups[f];
+  const ty  = floorY[f];
+  const col = floorColor(f);
+
+  // 床メッシュなし — 上下方向の視線を塞がないよう削除（グリッドで代替）
+
+  const grid = new THREE.GridHelper(Math.max(tW, tD) + 8, 40, 0x1e242c, 0x1e242c);
+  grid.position.set(tcx, ty + 0.005, tcz);
+  g.add(grid);
+
+  const frame = new THREE.LineLoop(
+    new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(tx0, ty + 0.02, tz0),
+      new THREE.Vector3(tx1, ty + 0.02, tz0),
+      new THREE.Vector3(tx1, ty + 0.02, tz1),
+      new THREE.Vector3(tx0, ty + 0.02, tz1),
+    ]),
+    new THREE.LineBasicMaterial({ color: col, opacity: 0.5, transparent: true })
+  );
+  g.add(frame);
+});
+
+// ---- 通路チューブ (type別色: 1=フロア色, 2=階段/#FFB347, 3=エスカレーター/#00CED1, 4=EV/#DA70D6) ----
+edges.forEach(e => {
+  const color = EDGE_TYPE_COLORS[String(e.type)] ?? floorColor(e.floor);
+  const p0 = c2t(e.x0, e.y0, e.z0); p0.y += 0.04;
+  const p1 = c2t(e.x1, e.y1, e.z1); p1.y += 0.04;
+  const tube = new THREE.Mesh(
+    new THREE.TubeGeometry(new THREE.LineCurve3(p0, p1), 1, T_RAD, 6, false),
+    new THREE.MeshLambertMaterial({ color })
+  );
+  floorGroups[e.floor].add(tube);
+});
+
+// ---- ノードマーカー ----
+nodes.forEach(n => {
+  const col     = floorColor(n.floor);
+  const pos     = c2t(n.x, n.y, n.z);
+  const isEntry = n.type === 2;
+
+  const geo = isEntry
+    ? new THREE.CylinderGeometry(0.22, 0.22, 1.8, 8)
+    : new THREE.SphereGeometry(0.20, 10, 10);
+  const mat = new THREE.MeshLambertMaterial({
+    color: col,
+    emissive: new THREE.Color(col),
+    emissiveIntensity: isEntry ? 0.6 : 0.3,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(pos.x, pos.y + (isEntry ? 0.9 : 0.20), pos.z);
+  mesh.userData = n;
+  floorGroups[n.floor].add(mesh);
+  nodeMeshes.push(mesh);
+});
+
+// ---- カレントフロアをインデックスで管理 ----
+// (カメラ高さからの推定は同一z値フロアで破綻するため使わない)
+let currentFloorIdx = Math.max(floorList.indexOf(1), 0);
+
+// goToFloorIdx: 表示とボタンだけ更新（カメラ位置は変えない）
+function goToFloorIdx(idx) {
+  if (idx < 0 || idx >= floorList.length) return;
+  currentFloorIdx = idx;
+  const f = floorList[currentFloorIdx];
+  floorList.forEach(fl => {
+    floorGroups[fl].visible = Math.abs(fl - f) <= 1;
+  });
+  document.querySelectorAll(".floor-btn").forEach(b => {
+    b.classList.toggle("active", b.textContent === `${f}F`);
+  });
+}
+
+function updateFloorVisibility() { /* goToFloorIdx で管理 */ }
+
+// ---- カメラ初期位置: CSV原点(0,0,0) ----
+camera.position.set(0, EYE_H, 0);
+camera.lookAt(new THREE.Vector3(tcx, EYE_H, tcz));
+goToFloorIdx(currentFloorIdx);  // 初期フロアの可視性を適用
+
+// ---- フロアジャンプボタン ----
+const floorBtns = document.getElementById("floor-btns");
+[...floorList].reverse().forEach(f => {
+  const colHex = "#" + floorColor(f).toString(16).padStart(6, "0");
+  const btn = document.createElement("button");
+  btn.className   = "floor-btn" + (f === 1 ? " active" : "");
+  btn.textContent = `${f}F`;
+  btn.style.borderColor = colHex;
+  btn.addEventListener("click", () => {
+    // x,z はそのまま、y だけ対象フロアの高さへ
+    camera.position.y = floorY[f] + EYE_H;
+    goToFloorIdx(floorList.indexOf(f));
+  });
+  floorBtns.appendChild(btn);
+});
+
+// ================================================================
+//  ノードホバー表示 (デスクトップ)
+// ================================================================
+const raycaster = new THREE.Raycaster();
+const center2d  = new THREE.Vector2(0, 0);
+const nodeInfo  = document.getElementById("node-info");
+
+// ================================================================
+//  フロアジャンプ (H=上 / B=下)
+// ================================================================
+function jumpFloor(dir) {
+  const nextIdx = currentFloorIdx + dir;
+  if (nextIdx < 0 || nextIdx >= floorList.length) return;
+  // x,z はそのまま、y だけ対象フロアの高さへ
+  camera.position.y = floorY[floorList[nextIdx]] + EYE_H;
+  goToFloorIdx(nextIdx);
+}
+
+// ================================================================
+//  アニメーションループ
+// ================================================================
+const vel  = new THREE.Vector3();
+let prevT  = performance.now();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const now = performance.now();
+  const dt  = Math.min((now - prevT) / 1000, 0.05);
+  prevT     = now;
+
+  const locked = controls.isLocked;
+  const mobile = innerWidth <= 767;
+
+  if (locked || mobile) {
+    vel.x *= Math.pow(0.0001, dt);
+    vel.z *= Math.pow(0.0001, dt);
+
+    const fwd = ((keys["KeyW"]||keys["ArrowUp"])    ? 1:0) - ((keys["KeyS"]||keys["ArrowDown"])  ? 1:0);
+    const rgt = ((keys["KeyD"]||keys["ArrowRight"]) ? 1:0) - ((keys["KeyA"]||keys["ArrowLeft"])  ? 1:0);
+    vel.z -= fwd * SPEED * dt * 60;
+    vel.x -= rgt * SPEED * dt * 60;
+
+    controls.moveForward(-vel.z * dt);
+    controls.moveRight(-vel.x * dt);
+
+    if (locked) {
+      raycaster.setFromCamera(center2d, camera);
+      const hits = raycaster.intersectObjects(nodeMeshes);
+      if (hits.length > 0) {
+        const n = hits[0].object.userData;
+        nodeInfo.textContent   = `Node ${n.id} ／ B${n.building} ／ ${n.floor}F`;
+        nodeInfo.style.display = "block";
+      } else {
+        nodeInfo.style.display = "none";
+      }
+    }
+  } else {
+    prevT = performance.now();
+  }
+
+  updateFloorVisibility();
+  renderer.render(scene, camera);
+}
+animate();
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
