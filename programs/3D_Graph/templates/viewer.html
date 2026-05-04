@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>一人称ビューア — SenARMap</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <script type="importmap">
   {
     "imports": {
@@ -14,109 +17,366 @@
   </script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #07111d;
+      --surface:   #0c1b2d;
+      --border:    #1e3450;
+      --border-hi: #2e4e78;
+      --text:      #d4e8f8;
+      --muted:     #4a6e8e;
+      --accent:    #00c0ee;
+      --accent-dim:rgba(0,192,238,0.12);
+      --font:      'Outfit', 'Noto Sans JP', system-ui, sans-serif;
+      --font-mono: 'DM Mono', monospace;
+    }
+
     body {
-      background: #0d1117; overflow: hidden;
-      font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", sans-serif;
-      color: #e6edf3;
+      background: var(--bg);
+      overflow: hidden;
+      font-family: var(--font);
+      color: var(--text);
     }
     canvas { display: block; }
 
+    /* ============================================================
+       BLOCKER OVERLAY
+    ============================================================ */
     #blocker {
-      position: fixed; inset: 0; background: rgba(0,0,0,.78);
+      position: fixed; inset: 0;
+      background: rgba(7, 17, 29, 0.90);
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
       z-index: 30; cursor: pointer;
-    }
-    #blocker h2 { font-size: 1.4rem; margin-bottom: 10px; }
-    #blocker p  { color: #8b949e; font-size: .84rem; line-height: 1.9; text-align: center; }
-    #blocker .key {
-      display: inline-block; background: #21262d; border: 1px solid #30363d;
-      border-radius: 4px; padding: 1px 7px; font-size: .78rem; color: #e6edf3;
+      backdrop-filter: blur(4px);
     }
 
+    /* Grid background pattern */
+    #blocker::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(0,192,238,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,192,238,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    .blocker-card {
+      position: relative;
+      background: rgba(12, 27, 45, 0.92);
+      border: 1px solid var(--border-hi);
+      border-radius: 16px;
+      padding: 36px 40px;
+      max-width: 360px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,192,238,0.08);
+    }
+    .blocker-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 20%; right: 20%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      opacity: 0.5;
+      border-radius: 1px;
+    }
+
+    .blocker-icon {
+      font-size: 2.4rem;
+      margin-bottom: 14px;
+      display: block;
+      filter: drop-shadow(0 0 12px rgba(0,192,238,0.4));
+    }
+
+    #blocker h2 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+      letter-spacing: 0.04em;
+      color: var(--text);
+    }
+
+    .blocker-subtitle {
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      margin-bottom: 24px;
+    }
+
+    .blocker-keys {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 24px;
+      text-align: left;
+    }
+    .blocker-key-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      color: #6a9abf;
+    }
+    .blocker-key-row .keys { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+
+    .key {
+      display: inline-flex;
+      align-items: center; justify-content: center;
+      background: var(--surface);
+      border: 1px solid var(--border-hi);
+      border-bottom-width: 2px;
+      border-radius: 5px;
+      padding: 2px 8px;
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      color: var(--text);
+      min-width: 28px;
+      height: 24px;
+    }
+
+    .blocker-cta {
+      display: flex;
+      align-items: center; justify-content: center; gap: 8px;
+      background: linear-gradient(135deg, #00c0ee, #0098c8);
+      color: #07111d;
+      font-weight: 700;
+      font-size: 0.88rem;
+      letter-spacing: 0.06em;
+      padding: 12px 24px;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0,192,238,0.35);
+      animation: pulse-cta 2.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse-cta {
+      0%, 100% { box-shadow: 0 4px 20px rgba(0,192,238,0.35); }
+      50%       { box-shadow: 0 4px 32px rgba(0,192,238,0.60); }
+    }
+
+    /* ============================================================
+       CROSSHAIR
+    ============================================================ */
     #crosshair {
       position: fixed; top: 50%; left: 50%;
-      transform: translate(-50%,-50%);
+      transform: translate(-50%, -50%);
       pointer-events: none; z-index: 5; display: none;
+      width: 20px; height: 20px;
     }
     #crosshair::before, #crosshair::after {
-      content: ""; position: absolute; background: rgba(255,255,255,.65);
+      content: ''; position: absolute; background: rgba(255,255,255,0.7);
     }
-    #crosshair::before { width: 2px; height: 16px; left: 7px; top: 0; }
-    #crosshair::after  { width: 16px; height: 2px; top: 7px; left: 0; }
+    #crosshair::before { width: 1px; height: 14px; left: 9px; top: 3px; }
+    #crosshair::after  { width: 14px; height: 1px; top: 9px; left: 3px; }
 
+    /* Corner marks */
+    #crosshair-corner {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none; z-index: 5; display: none;
+      width: 24px; height: 24px;
+    }
+    #crosshair-corner::before {
+      content: '';
+      position: absolute; inset: 0;
+      border: 1px solid rgba(0,192,238,0.4);
+      border-radius: 2px;
+    }
+
+    /* ============================================================
+       HUD BAR
+    ============================================================ */
     #hud {
-      position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
-      background: rgba(22,27,34,.88); border: 1px solid #30363d;
-      padding: 6px 16px; border-radius: 8px; font-size: .78rem;
-      color: #8b949e; pointer-events: none; z-index: 5; white-space: nowrap;
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: rgba(7, 17, 29, 0.88);
+      border-top: 1px solid var(--border);
+      padding: 8px 16px;
+      padding-bottom: max(8px, env(safe-area-inset-bottom, 8px));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      pointer-events: none;
+      z-index: 5;
+      backdrop-filter: blur(10px);
+    }
+    .hud-item {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 0.66rem;
+      font-family: var(--font-mono);
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+    .hud-item .key {
+      font-size: 0.60rem;
+      min-width: 22px;
+      height: 20px;
+      padding: 1px 5px;
     }
 
+    /* ============================================================
+       NODE INFO
+    ============================================================ */
     #node-info {
-      position: fixed; top: 56px; left: 50%; transform: translateX(-50%);
-      background: rgba(22,27,34,.92); border: 1px solid #58a6ff;
-      padding: 7px 16px; border-radius: 8px; font-size: .82rem;
-      color: #58a6ff; z-index: 5; display: none; pointer-events: none;
+      position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+      background: rgba(12, 27, 45, 0.92);
+      border: 1px solid rgba(0,192,238,0.4);
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 0.76rem;
+      font-family: var(--font-mono);
+      color: var(--accent);
+      z-index: 5; display: none; pointer-events: none;
+      letter-spacing: 0.04em;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 16px rgba(0,192,238,0.15);
     }
 
+    /* ============================================================
+       FLOOR BUTTONS
+    ============================================================ */
     #floor-btns {
-      position: fixed; right: 14px; top: 50%; transform: translateY(-50%);
-      display: flex; flex-direction: column; gap: 8px; z-index: 10;
+      position: fixed; right: 12px; top: 50%; transform: translateY(-50%);
+      display: flex; flex-direction: column; gap: 6px; z-index: 10;
     }
     .floor-btn {
-      background: rgba(22,27,34,.9); border: 1px solid #30363d;
-      color: #e6edf3; padding: 9px 13px; border-radius: 8px;
-      cursor: pointer; font-size: .82rem; text-align: center;
-      transition: border-color .15s, color .15s;
+      background: rgba(12, 27, 45, 0.88);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 8px 11px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.76rem;
+      font-family: var(--font-mono);
+      font-weight: 500;
+      text-align: center;
+      transition: border-color 0.15s, color 0.15s, background 0.15s, box-shadow 0.15s;
       -webkit-tap-highlight-color: transparent;
+      backdrop-filter: blur(8px);
+      min-width: 40px;
     }
-    .floor-btn.active { color: #58a6ff; border-color: #58a6ff; }
+    .floor-btn:hover {
+      border-color: var(--border-hi);
+      color: var(--text);
+    }
+    .floor-btn.active {
+      color: var(--accent);
+      border-color: rgba(0,192,238,0.6);
+      background: rgba(0,192,238,0.1);
+      box-shadow: 0 0 10px rgba(0,192,238,0.2);
+    }
 
+    /* ============================================================
+       BACK BUTTON
+    ============================================================ */
+    #back {
+      position: fixed; top: 14px; left: 14px; z-index: 20;
+      background: rgba(12, 27, 45, 0.88);
+      border: 1px solid var(--border-hi);
+      color: var(--text-sub, #7aaacb);
+      padding: 8px 14px;
+      border-radius: 9px;
+      text-decoration: none;
+      font-size: 0.76rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      transition: border-color 0.15s, color 0.15s, box-shadow 0.15s;
+      backdrop-filter: blur(8px);
+      display: flex; align-items: center; gap: 6px;
+    }
+    #back:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 12px rgba(0,192,238,0.2);
+    }
+
+    /* ============================================================
+       MOBILE MOVE CONTROLS
+    ============================================================ */
     #mobile-move {
-      position: fixed; left: 16px; bottom: 20px;
+      position: fixed; left: 14px; bottom: 70px;
       display: none; flex-direction: column; align-items: center;
       gap: 4px; z-index: 10;
     }
     #mobile-move .row { display: flex; gap: 4px; }
-    .mv-btn {
-      width: 52px; height: 52px; background: rgba(22,27,34,.88);
-      border: 1px solid #30363d; border-radius: 10px;
-      color: #e6edf3; font-size: 1.1rem; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      -webkit-tap-highlight-color: transparent; user-select: none;
-    }
 
-    #back {
-      position: fixed; top: 14px; left: 14px; z-index: 20;
-      background: rgba(22,27,34,.9); border: 1px solid #30363d;
-      color: #e6edf3; padding: 8px 14px; border-radius: 8px;
-      text-decoration: none; font-size: .82rem;
-      transition: border-color .15s;
+    .mv-btn {
+      width: 52px; height: 52px;
+      background: rgba(12, 27, 45, 0.88);
+      border: 1px solid var(--border-hi);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      transition: background 0.1s, border-color 0.1s;
+      backdrop-filter: blur(8px);
     }
-    #back:hover { border-color: #58a6ff; }
+    .mv-btn:active {
+      background: var(--accent-dim);
+      border-color: rgba(0,192,238,0.5);
+    }
 
     @media (max-width: 767px) {
       #blocker { display: none; }
       #mobile-move { display: flex; }
-      #hud { font-size: .72rem; bottom: 80px; }
+      #hud { font-size: 0.62rem; padding-bottom: max(70px, env(safe-area-inset-bottom, 70px)); }
     }
   </style>
 </head>
 <body>
 
-<a href="/" id="back">← マップへ戻る</a>
+<a href="/3d/" id="back">← マップへ戻る</a>
 
 <div id="blocker">
-  <h2>一人称ビューア</h2>
-  <p>
-    クリックして開始 ／ <span class="key">ESC</span> で終了<br>
-    <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> 移動 ／ マウス 視点<br>
-    <span class="key">H</span> 上の階 ／ <span class="key">B</span> 下の階 ／ <span class="key">M</span> マップへ戻る
-  </p>
+  <div class="blocker-card">
+    <span class="blocker-icon">🧭</span>
+    <h2>一人称ビューア</h2>
+    <p class="blocker-subtitle">FIRST PERSON VIEW · SENARMAP</p>
+
+    <div class="blocker-keys">
+      <div class="blocker-key-row">
+        <div class="keys">
+          <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span>
+        </div>
+        <span>移動</span>
+      </div>
+      <div class="blocker-key-row">
+        <div class="keys"><span style="font-size:0.72rem;color:var(--muted);">マウス</span></div>
+        <span>視点操作</span>
+      </div>
+      <div class="blocker-key-row">
+        <div class="keys"><span class="key">H</span><span class="key">B</span></div>
+        <span>上の階 / 下の階</span>
+      </div>
+      <div class="blocker-key-row">
+        <div class="keys"><span class="key">M</span></div>
+        <span>マップへ戻る</span>
+      </div>
+      <div class="blocker-key-row">
+        <div class="keys"><span class="key">ESC</span></div>
+        <span>カーソル解放</span>
+      </div>
+    </div>
+
+    <div class="blocker-cta">クリックして開始 ▶</div>
+  </div>
 </div>
 
 <div id="crosshair"></div>
-<div id="hud">WASD: 移動 ／ マウス: 視点 ／ H: 上階 ／ B: 下階 ／ M: マップへ</div>
+<div id="crosshair-corner"></div>
+
+<div id="hud">
+  <div class="hud-item"><span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span><span>移動</span></div>
+  <div class="hud-item"><span class="key">H</span><span>上階</span></div>
+  <div class="hud-item"><span class="key">B</span><span>下階</span></div>
+  <div class="hud-item"><span class="key">M</span><span>マップへ</span></div>
+</div>
+
 <div id="node-info"></div>
 <div id="floor-btns"></div>
 
@@ -147,7 +407,8 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 //  Plotlyの Y反転(autorange:reversed)は「CSV y を南北逆に表示」する。
 //  Three.jsでは「z軸が手前＝南方向」なので +y → +z でそのまま一致。
 // ================================================================
-const c2t = (cx, cy, cz) => new THREE.Vector3(cx, cz, cy);
+const Z_SCALE = 3.0;  // 高さ方向の倍率（建物を厚く見せる）
+const c2t = (cx, cy, cz) => new THREE.Vector3(cx, cz * Z_SCALE, cy);
 
 // ================================================================
 //  定数
@@ -169,8 +430,8 @@ renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0d1117);
-scene.fog = new THREE.FogExp2(0x0d1117, 0.016);
+scene.background = new THREE.Color(0x07111d);
+scene.fog = new THREE.FogExp2(0x07111d, 0.014);
 
 const camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.1, 400);
 
@@ -185,10 +446,19 @@ scene.add(sun);
 const controls = new PointerLockControls(camera, renderer.domElement);
 const blocker   = document.getElementById("blocker");
 const crosshair = document.getElementById("crosshair");
+const crosshairCorner = document.getElementById("crosshair-corner");
 
 blocker.addEventListener("click", () => controls.lock());
-controls.addEventListener("lock",   () => { blocker.style.display="none";  crosshair.style.display="block"; });
-controls.addEventListener("unlock", () => { blocker.style.display="flex";  crosshair.style.display="none";  });
+controls.addEventListener("lock",   () => {
+  blocker.style.display = "none";
+  crosshair.style.display = "block";
+  crosshairCorner.style.display = "block";
+});
+controls.addEventListener("unlock", () => {
+  blocker.style.display = "flex";
+  crosshair.style.display = "none";
+  crosshairCorner.style.display = "none";
+});
 
 // ================================================================
 //  キーボード
@@ -198,7 +468,7 @@ addEventListener("keydown", e => {
   keys[e.code] = true;
   if (e.code === "KeyH") jumpFloor(+1);          // 上の階へ
   if (e.code === "KeyB") jumpFloor(-1);           // 下の階へ
-  if (e.code === "KeyM") location.href = "/";     // マップへ戻る
+  if (e.code === "KeyM") location.href = "/3d/";  // マップへ戻る
 });
 addEventListener("keyup", e => { keys[e.code] = false; });
 
@@ -264,7 +534,6 @@ renderer.domElement.addEventListener("touchend", e => {
 const { nodes, edges } = await fetch("/api/graph").then(r => r.json());
 
 // ---- 建物全体の Three.js 空間範囲を計算 ----
-// CSV x → Three x,  CSV y → Three z  なので:
 const allTX = nodes.map(n => n.x);   // Three.x = CSV.x
 const allTZ = nodes.map(n => n.y);   // Three.z = CSV.y
 const tx0 = Math.min(...allTX) - 4,  tx1 = Math.max(...allTX) + 4;
@@ -276,7 +545,7 @@ const tcz = (tz0 + tz1) / 2;        // Three.js 中心 z
 // ---- フロアごとの Three.js y (高さ) を計算 ----
 const floorYSum = {}, floorCount = {};
 nodes.forEach(n => {
-  floorYSum[n.floor]   = (floorYSum[n.floor]   || 0) + n.z;
+  floorYSum[n.floor]   = (floorYSum[n.floor]   || 0) + n.z * Z_SCALE;
   floorCount[n.floor]  = (floorCount[n.floor]  || 0) + 1;
 });
 const floorY   = {};   // floor番号 → Three.js y 座標
@@ -287,7 +556,6 @@ const floorList = Object.keys(floorY).map(Number).sort();
 //  シーン構築 — フロアごとに Group にまとめる
 // ================================================================
 
-// フロアグループ生成
 const floorGroups = {};
 floorList.forEach(f => {
   floorGroups[f] = new THREE.Group();
@@ -300,9 +568,7 @@ floorList.forEach(f => {
   const ty  = floorY[f];
   const col = floorColor(f);
 
-  // 床メッシュなし — 上下方向の視線を塞がないよう削除（グリッドで代替）
-
-  const grid = new THREE.GridHelper(Math.max(tW, tD) + 8, 40, 0x1e242c, 0x1e242c);
+  const grid = new THREE.GridHelper(Math.max(tW, tD) + 8, 40, 0x0d1f33, 0x0d1f33);
   grid.position.set(tcx, ty + 0.005, tcz);
   g.add(grid);
 
@@ -313,7 +579,7 @@ floorList.forEach(f => {
       new THREE.Vector3(tx1, ty + 0.02, tz1),
       new THREE.Vector3(tx0, ty + 0.02, tz1),
     ]),
-    new THREE.LineBasicMaterial({ color: col, opacity: 0.5, transparent: true })
+    new THREE.LineBasicMaterial({ color: col, opacity: 0.4, transparent: true })
   );
   g.add(frame);
 });
@@ -352,10 +618,8 @@ nodes.forEach(n => {
 });
 
 // ---- カレントフロアをインデックスで管理 ----
-// (カメラ高さからの推定は同一z値フロアで破綻するため使わない)
 let currentFloorIdx = Math.max(floorList.indexOf(1), 0);
 
-// goToFloorIdx: 表示とボタンだけ更新（カメラ位置は変えない）
 function goToFloorIdx(idx) {
   if (idx < 0 || idx >= floorList.length) return;
   currentFloorIdx = idx;
@@ -373,7 +637,7 @@ function updateFloorVisibility() { /* goToFloorIdx で管理 */ }
 // ---- カメラ初期位置: CSV原点(0,0,0) ----
 camera.position.set(0, EYE_H, 0);
 camera.lookAt(new THREE.Vector3(tcx, EYE_H, tcz));
-goToFloorIdx(currentFloorIdx);  // 初期フロアの可視性を適用
+goToFloorIdx(currentFloorIdx);
 
 // ---- フロアジャンプボタン ----
 const floorBtns = document.getElementById("floor-btns");
@@ -384,7 +648,6 @@ const floorBtns = document.getElementById("floor-btns");
   btn.textContent = `${f}F`;
   btn.style.borderColor = colHex;
   btn.addEventListener("click", () => {
-    // x,z はそのまま、y だけ対象フロアの高さへ
     camera.position.y = floorY[f] + EYE_H;
     goToFloorIdx(floorList.indexOf(f));
   });
@@ -404,7 +667,6 @@ const nodeInfo  = document.getElementById("node-info");
 function jumpFloor(dir) {
   const nextIdx = currentFloorIdx + dir;
   if (nextIdx < 0 || nextIdx >= floorList.length) return;
-  // x,z はそのまま、y だけ対象フロアの高さへ
   camera.position.y = floorY[floorList[nextIdx]] + EYE_H;
   goToFloorIdx(nextIdx);
 }
