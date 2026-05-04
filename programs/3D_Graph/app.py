@@ -10,7 +10,7 @@ from flask import Flask, render_template, jsonify, request
 app = Flask(__name__)
 
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR        = os.path.join(BASE_DIR, "../../../data")
+DATA_DIR        = os.path.join(BASE_DIR, "../data")
 BUILDINGS_JSON  = os.path.join(DATA_DIR, "buildings.json")
 CONNECT_EDGE_CSV = os.path.join(DATA_DIR, "connect_edge.csv")
 
@@ -253,12 +253,13 @@ def _path_result(G, path, length):
 #  Routes
 # ------------------------------------------------------------------ #
 
-@app.route("/viewer")
+@app.route("/3d/viewer")
 def viewer():
     return render_template("viewer.html")
 
 
-@app.route("/")
+@app.route("/3d/")
+@app.route("/3d")
 def index():
     nodes_df, edges_df = load_data()
     node_ids  = sorted(nodes_df["id"].tolist())
@@ -340,6 +341,60 @@ def api_rooms():
 
     rooms.sort(key=lambda r: (r["building"], r["room"]))
     return jsonify(rooms)
+
+
+@app.route("/api/all")
+def api_all():
+    """
+    全教室・全ノード・建物一覧をまとめて返す。パラメータなし。
+    返却形式:
+      {
+        "rooms":     [ { "room", "building", "floor", "edge_id", "from", "to" }, ... ],
+        "nodes":     [ { "id", "building", "floor", "type" }, ... ],
+        "buildings": [ 1, 2, ... ]
+      }
+    """
+    nodes_df, edges_df = load_data()
+
+    rooms = []
+    seen = set()
+    for _, row in edges_df.iterrows():
+        raw_name = str(row["name"]).strip()
+        if not raw_name or raw_name == "nan":
+            continue
+        for room in raw_name.split(";"):
+            room = room.strip()
+            if not room:
+                continue
+            key = (room, int(row["building"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            rooms.append({
+                "room":     room,
+                "building": int(row["building"]),
+                "floor":    int(row["floor"]),
+                "edge_id":  int(row["id"]),
+                "from":     int(row["from"]),
+                "to":       int(row["to"]),
+            })
+    rooms.sort(key=lambda r: (r["building"], r["room"]))
+
+    nodes = [
+        {
+            "id":       int(row["id"]),
+            "building": int(row["building"]),
+            "floor":    int(row["floor"]),
+            "type":     int(row["type"]),
+        }
+        for _, row in nodes_df.iterrows()
+        if not any(pd.isna(row[c]) for c in ["id", "building", "floor", "type"])
+    ]
+    nodes.sort(key=lambda n: n["id"])
+
+    buildings = sorted(nodes_df["building"].dropna().astype(int).unique().tolist())
+
+    return jsonify({"rooms": rooms, "nodes": nodes, "buildings": buildings})
 
 
 def _find_edges_for_room(edges_df, room_name, building):
@@ -443,6 +498,221 @@ def api_navigate_to_room():
 
 
 # ------------------------------------------------------------------ #
+#  統合ルーティング API
+# ------------------------------------------------------------------ #
+
+@app.route("/api/route")
+def api_route():
+    """
+    出発点と目的地を指定して最短経路をJSONで返す。
+
+    出発点（いずれか）:
+      from_room=101A&from_building=10  ← 教室名
+      from_node=100001                 ← ノードID
+
+    目的地（いずれか）:
+      to_room=202B&to_building=10      ← 教室名
+      to_node=100050                   ← ノードID
+
+    条件:
+      use_elevator=0/1  （省略時 1）
+    """
+    use_elevator = request.args.get("use_elevator", "1") != "0"
+
+    from_room     = request.args.get("from_room",     "").strip()
+    from_building = request.args.get("from_building", type=int)
+    from_node_id  = request.args.get("from_node",     type=int)
+
+    to_room       = request.args.get("to_room",       "").strip()
+    to_building   = request.args.get("to_building",   type=int)
+    to_node_id    = request.args.get("to_node",       type=int)
+
+    if not from_room and from_node_id is None:
+        return jsonify({"error": "from_room（＋from_building）または from_node を指定してください"}), 400
+    if not to_room and to_node_id is None:
+        return jsonify({"error": "to_room（＋to_building）または to_node を指定してください"}), 400
+
+    nodes_df, edges_df = load_data()
+    G = build_graph(nodes_df, edges_df, use_elevator=use_elevator)
+
+    # --- 出発候補ノード ---
+    if from_room:
+        if from_building is None:
+            return jsonify({"error": "from_building を指定してください"}), 400
+        s_edges = _find_edges_for_room(edges_df, from_room, from_building)
+        if not s_edges:
+            return jsonify({"error": f"建物 {from_building} に教室 '{from_room}' が見つかりません"}), 404
+        seen_s = set()
+        start_candidates = []
+        for r in s_edges:
+            for nid in (int(r["from"]), int(r["to"])):
+                if nid in G.nodes and nid not in seen_s:
+                    seen_s.add(nid)
+                    start_candidates.append((nid, r))
+    else:
+        if from_node_id not in G.nodes:
+            return jsonify({"error": f"ノード {from_node_id} が存在しません"}), 404
+        start_candidates = [(from_node_id, None)]
+
+    # --- 目的候補ノード ---
+    if to_room:
+        if to_building is None:
+            return jsonify({"error": "to_building を指定してください"}), 400
+        d_edges = _find_edges_for_room(edges_df, to_room, to_building)
+        if not d_edges:
+            return jsonify({"error": f"建物 {to_building} に教室 '{to_room}' が見つかりません"}), 404
+        dest_candidates = [(nid, r) for r in d_edges
+                           for nid in (int(r["from"]), int(r["to"]))
+                           if nid in G.nodes]
+    else:
+        if to_node_id not in G.nodes:
+            return jsonify({"error": f"ノード {to_node_id} が存在しません"}), 404
+        dest_candidates = [(to_node_id, None)]
+
+    # --- 全組み合わせでDijkstra、最短を採用 ---
+    best_path, best_length = None, float("inf")
+    best_start_edge = best_dest_edge = None
+
+    for (s_node, s_row) in start_candidates:
+        for (d_node, d_row) in dest_candidates:
+            if s_node == d_node:
+                continue
+            try:
+                p = nx.dijkstra_path(G, s_node, d_node, weight="weight")
+                l = nx.dijkstra_path_length(G, s_node, d_node, weight="weight")
+                if l < best_length:
+                    best_length, best_path = l, p
+                    best_start_edge, best_dest_edge = s_row, d_row
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
+                continue
+
+    if best_path is None:
+        return jsonify({"error": "指定された出発点から目的地への経路が見つかりません"}), 404
+
+    result = _path_result(G, best_path, best_length)
+    if best_start_edge is not None:
+        result["from_room"]  = from_room
+        result["from_edge"]  = _edge_to_dict(best_start_edge, nodes_df)
+    if best_dest_edge is not None:
+        result["to_room"]    = to_room
+        result["to_edge"]    = _edge_to_dict(best_dest_edge, nodes_df)
+    return jsonify(result)
+
+
+# ------------------------------------------------------------------ #
+#  最寄りトイレ検索 API
+# ------------------------------------------------------------------ #
+
+_TOILET_TYPE_MAP = {
+    "M":   ["M_Toilet"],
+    "F":   ["F_Toilet"],
+    "C":   ["C_Toilet"],
+    "ALL": ["M_Toilet", "F_Toilet", "C_Toilet"],
+}
+_TOILET_LABEL = {"M_Toilet": "男子トイレ", "F_Toilet": "女子トイレ", "C_Toilet": "多目的トイレ"}
+
+
+@app.route("/api/nearest_toilet")
+def api_nearest_toilet():
+    """
+    最寄りのトイレへの最短経路を返す。
+
+    出発点（いずれか）:
+      from_room=101A&from_building=10
+      from_node=100001
+
+    種別:
+      type=M / F / C / all (省略時 all)
+
+    条件:
+      use_elevator=0/1 (省略時 1)
+    """
+    toilet_type  = request.args.get("type", "all").strip().upper()
+    use_elevator = request.args.get("use_elevator", "1") != "0"
+    from_room     = request.args.get("from_room",     "").strip()
+    from_building = request.args.get("from_building", type=int)
+    from_node_id  = request.args.get("from_node",     type=int)
+
+    if not from_room and from_node_id is None:
+        return jsonify({"error": "from_room（＋from_building）または from_node を指定してください"}), 400
+
+    targets = _TOILET_TYPE_MAP.get(toilet_type, _TOILET_TYPE_MAP["ALL"])
+
+    nodes_df, edges_df = load_data()
+    G = build_graph(nodes_df, edges_df, use_elevator=use_elevator)
+
+    # 出発候補
+    if from_room:
+        if from_building is None:
+            return jsonify({"error": "from_building を指定してください"}), 400
+        s_edges = _find_edges_for_room(edges_df, from_room, from_building)
+        if not s_edges:
+            return jsonify({"error": f"建物 {from_building} に教室 '{from_room}' が見つかりません"}), 404
+        seen_s = set()
+        start_candidates = []
+        for r in s_edges:
+            for nid in (int(r["from"]), int(r["to"])):
+                if nid in G.nodes and nid not in seen_s:
+                    seen_s.add(nid)
+                    start_candidates.append((nid, r))
+    else:
+        if from_node_id not in G.nodes:
+            return jsonify({"error": f"ノード {from_node_id} が存在しません"}), 404
+        start_candidates = [(from_node_id, None)]
+
+    # トイレエッジを全建物から収集
+    toilet_edges = []
+    for _, row in edges_df.iterrows():
+        names = [n.strip() for n in str(row["name"]).split(";")]
+        if any(t in names for t in targets):
+            toilet_edges.append(row)
+
+    if not toilet_edges:
+        return jsonify({"error": "該当するトイレがデータ内に見つかりません"}), 404
+
+    dest_candidates = [
+        (nid, row) for row in toilet_edges
+        for nid in (int(row["from"]), int(row["to"]))
+        if nid in G.nodes
+    ]
+
+    # 全組み合わせでDijkstra、最短を採用
+    best_path, best_length = None, float("inf")
+    best_start_row = best_toilet_row = None
+
+    for (s_node, s_row) in start_candidates:
+        for (d_node, d_row) in dest_candidates:
+            if s_node == d_node:
+                continue
+            try:
+                p = nx.dijkstra_path(G, s_node, d_node, weight="weight")
+                l = nx.dijkstra_path_length(G, s_node, d_node, weight="weight")
+                if l < best_length:
+                    best_length, best_path = l, p
+                    best_start_row, best_toilet_row = s_row, d_row
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
+                continue
+
+    if best_path is None:
+        return jsonify({"error": "指定された出発点から該当するトイレへの経路が見つかりません"}), 404
+
+    t_names = [n.strip() for n in str(best_toilet_row["name"]).split(";")]
+    found_key = next((t for t in ["M_Toilet", "F_Toilet", "C_Toilet"] if t in t_names), "")
+
+    result = _path_result(G, best_path, best_length)
+    result["toilet_type"]     = found_key.split("_")[0] if found_key else ""
+    result["toilet_name"]     = found_key
+    result["toilet_label"]    = _TOILET_LABEL.get(found_key, "トイレ")
+    result["toilet_building"] = int(best_toilet_row["building"])
+    result["toilet_floor"]    = int(best_toilet_row["floor"])
+    result["toilet_edge"]     = _edge_to_dict(best_toilet_row, nodes_df)
+    if best_start_row is not None:
+        result["from_room"]   = from_room
+        result["from_edge"]   = _edge_to_dict(best_start_row, nodes_df)
+    return jsonify(result)
+
+
+# ------------------------------------------------------------------ #
 #  ノード間最短経路 API（従来通り）
 # ------------------------------------------------------------------ #
 
@@ -474,4 +744,4 @@ def api_shortest_path():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0" , port=5001)
+    app.run(debug=False, host="0.0.0.0" , port=5001)

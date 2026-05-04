@@ -1,6 +1,6 @@
 FROM python:3.13-slim-trixie
 
-WORKDIR /project/programs
+WORKDIR /project/enviroments
 
 ENV TERM=xterm-256color
 
@@ -13,10 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir \
-    pandas \
-    networkx \
-    flask \
-    plotly \
-    pyvis
+COPY requirements.txt .
+    
+RUN pip install --no-cache-dir -r requirements.txt
+
+RUN pip install -r requirements.txt
+
+WORKDIR /project/programs
