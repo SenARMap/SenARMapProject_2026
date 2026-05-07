@@ -10,7 +10,7 @@ from flask import Flask, render_template, jsonify, request
 app = Flask(__name__)
 
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR        = os.path.join(BASE_DIR, "../data")
+DATA_DIR        = os.path.join(BASE_DIR, "../../data")
 BUILDINGS_JSON  = os.path.join(DATA_DIR, "buildings.json")
 CONNECT_EDGE_CSV = os.path.join(DATA_DIR, "connect_edge.csv")
 
