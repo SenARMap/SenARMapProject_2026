@@ -178,8 +178,11 @@ def load_data():
     return nodes_combined, edges_combined
 
 
+_DIRECTED_EDGE_TYPES = {"5", "6"}  # 上りエスカレータ(5)・下りエスカレータ(6)は一方向のみ
+
+
 def build_graph(nodes_df, edges_df, use_elevator=True):
-    G = nx.Graph()
+    G = nx.DiGraph()
     for _, row in nodes_df.iterrows():
         G.add_node(
             int(row["id"]),
@@ -193,9 +196,8 @@ def build_graph(nodes_df, edges_df, use_elevator=True):
     for _, row in edges_df.iterrows():
         if not use_elevator and str(row["type"]).strip() == "4":
             continue
-        G.add_edge(
-            int(row["from"]),
-            int(row["to"]),
+        u, v = int(row["from"]), int(row["to"])
+        edge_attrs = dict(
             edge_id=int(row["id"]),
             name=str(row["name"]),
             building=int(row["building"]),
@@ -204,6 +206,9 @@ def build_graph(nodes_df, edges_df, use_elevator=True):
             length=float(row["length"]),
             edge_type=str(row["type"]),
         )
+        G.add_edge(u, v, **edge_attrs)
+        if str(row["type"]).strip() not in _DIRECTED_EDGE_TYPES:
+            G.add_edge(v, u, **edge_attrs)
     return G
 
 
