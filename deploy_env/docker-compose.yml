@@ -16,4 +16,13 @@ services:
     volumes:
       - ./nginx/ssl/:/etc/nginx/certs/
       - ../:/project/
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    depends_on:
+      - nginx
     

@@ -596,7 +596,7 @@ edges.forEach(e => {
   floorGroups[e.floor].add(tube);
 
   // 一方向エスカレータ(type 5/6)は矢印で方向を示す
-  if (e.type === 5 || e.type === 6) {
+  if (e.type === "5" || e.type === "6") {
     const dir = new THREE.Vector3().subVectors(p1, p0);
     const len = dir.length();
     if (len > 0.01) {
