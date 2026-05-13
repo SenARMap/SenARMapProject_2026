@@ -13,9 +13,13 @@ BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR        = os.path.join(BASE_DIR, "../../data")
 BUILDINGS_JSON  = os.path.join(DATA_DIR, "buildings.json")
 CONNECT_EDGE_CSV = os.path.join(DATA_DIR, "connect_edge.csv")
+GLOBAL_NODE_CSV  = os.path.join(DATA_DIR, "global_node.csv")
+GLOBAL_EDGE_CSV  = os.path.join(DATA_DIR, "global_edge.csv")
 
 # グローバルID = building_id * ID_OFFSET + ローカルID
-ID_OFFSET = 100_000
+ID_OFFSET          = 100_000
+GLOBAL_NODE_OFFSET = 9_000_000   # 屋外ノードIDのオフセット
+OUTDOOR_COLOR      = "#5AFF5A"
 
 # Building color palette (up to 10 buildings)
 BUILDING_COLORS = [
@@ -35,16 +39,16 @@ def _load_transform_config():
 def _calc_transforms_from_anchors():
     """
     global_node.csv と anchors.csv から各建物の変換パラメータを自動計算する。
-    各建物につき2点のアンカーが必要。2点未満の建物はスキップ。
-    buildings.json の同建物エントリより優先される。
+    2点アンカー: 回転+平行移動を自動計算。
+    1点アンカー: 平行移動のみ自動計算、rot_deg は buildings.json から取得（なければ 0）。
+    tz_offset が buildings.json にあれば加算する。
     """
-    global_node_path = os.path.join(DATA_DIR, "global_node.csv")
-    anchor_path      = os.path.join(DATA_DIR, "anchors.csv")
+    anchor_path = os.path.join(DATA_DIR, "anchors.csv")
 
-    if not os.path.exists(global_node_path) or not os.path.exists(anchor_path):
+    if not os.path.exists(GLOBAL_NODE_CSV) or not os.path.exists(anchor_path):
         return {}
 
-    gn = pd.read_csv(global_node_path)
+    gn = pd.read_csv(GLOBAL_NODE_CSV)
     gn.columns = gn.columns.str.strip()
     if gn.empty:
         return {}
@@ -55,14 +59,15 @@ def _calc_transforms_from_anchors():
     if anchors.empty:
         return {}
 
+    config = _load_transform_config()
     transforms = {}
     for bldg_id, group in anchors.groupby("building"):
-        if len(group) < 2:
+        if len(group) < 1:
             continue
 
-        r0, r1 = group.iloc[0], group.iloc[1]
+        bldg_cfg = config.get(str(int(bldg_id)), {})
+        r0 = group.iloc[0]
 
-        # 建物ローカルCSVからアンカーノードの座標を取得
         bldg_dir = os.path.join(DATA_DIR, f"{int(bldg_id)}_bldg")
         local_nodes = pd.read_csv(os.path.join(bldg_dir, "node.csv"))
         local_nodes.columns = local_nodes.columns.str.strip()
@@ -71,26 +76,28 @@ def _calc_transforms_from_anchors():
         lx1 = float(local_nodes.loc[int(r0["local_node_id"]), "x"])
         ly1 = float(local_nodes.loc[int(r0["local_node_id"]), "y"])
         lz1 = float(local_nodes.loc[int(r0["local_node_id"]), "z"])
-        lx2 = float(local_nodes.loc[int(r1["local_node_id"]), "x"])
-        ly2 = float(local_nodes.loc[int(r1["local_node_id"]), "y"])
 
-        # global_node.csv からグローバル座標を取得
         gx1 = float(gn.loc[int(r0["global_node_id"]), "x"])
         gy1 = float(gn.loc[int(r0["global_node_id"]), "y"])
         gz1 = float(gn.loc[int(r0["global_node_id"]), "z"])
-        gx2 = float(gn.loc[int(r1["global_node_id"]), "x"])
-        gy2 = float(gn.loc[int(r1["global_node_id"]), "y"])
 
-        # Z軸周りの回転角を計算
-        θ = math.atan2(gy2 - gy1, gx2 - gx1) - math.atan2(ly2 - ly1, lx2 - lx1)
+        if len(group) >= 2:
+            r1 = group.iloc[1]
+            lx2 = float(local_nodes.loc[int(r1["local_node_id"]), "x"])
+            ly2 = float(local_nodes.loc[int(r1["local_node_id"]), "y"])
+            gx2 = float(gn.loc[int(r1["global_node_id"]), "x"])
+            gy2 = float(gn.loc[int(r1["global_node_id"]), "y"])
+            θ = math.atan2(gy2 - gy1, gx2 - gx1) - math.atan2(ly2 - ly1, lx2 - lx1)
+        else:
+            # 1点アンカー: buildings.json の rot_deg を回転として使用
+            θ = math.radians(bldg_cfg.get("rot_deg", 0.0))
+
         cos_θ, sin_θ = math.cos(θ), math.sin(θ)
-
-        # 平行移動量を計算（1点目を一致させる）
         tx = gx1 - (cos_θ * lx1 - sin_θ * ly1)
         ty = gy1 - (sin_θ * lx1 + cos_θ * ly1)
-        tz = gz1 - lz1
+        tz = gz1 - lz1 + bldg_cfg.get("tz_offset", 0.0)
 
-        transforms[str(bldg_id)] = {
+        transforms[str(int(bldg_id))] = {
             "tx": tx, "ty": ty, "tz": tz,
             "rot_deg": math.degrees(θ),
         }
@@ -157,16 +164,49 @@ def load_data():
         if not conn_df.empty:
             all_edges.append(conn_df)
 
+    # 屋外ノード (global_node.csv) — building=0 として追加
+    global_node_ids: set = set()
+    if os.path.exists(GLOBAL_NODE_CSV):
+        gn_raw = pd.read_csv(GLOBAL_NODE_CSV)
+        gn_raw.columns = gn_raw.columns.str.strip()
+        gn_raw = gn_raw.dropna(subset=["id", "x", "y", "z"])
+        if not gn_raw.empty:
+            global_node_ids = set(gn_raw["id"].astype(int))
+            gn_raw = gn_raw.copy()
+            gn_raw["id"] = gn_raw["id"].astype(int) + GLOBAL_NODE_OFFSET
+            gn_raw["building"] = 0
+            for col, default in [("floor", 1), ("type", 1)]:
+                if col not in gn_raw.columns:
+                    gn_raw[col] = default
+            all_nodes.append(gn_raw)
+
+    # 屋外エッジ (global_edge.csv) — from/to の小さいIDはグローバルノードローカルID
+    if os.path.exists(GLOBAL_EDGE_CSV):
+        ge_raw = pd.read_csv(GLOBAL_EDGE_CSV)
+        ge_raw.columns = ge_raw.columns.str.strip()
+        ge_raw = ge_raw.dropna(subset=["id", "from", "to"])
+        if not ge_raw.empty:
+            _gni = global_node_ids
+            def _resolve(x, _ids=_gni):
+                xi = int(x)
+                return xi + GLOBAL_NODE_OFFSET if xi in _ids else xi
+            ge_raw = ge_raw.copy()
+            ge_raw["from"] = ge_raw["from"].astype(int).apply(_resolve)
+            ge_raw["to"]   = ge_raw["to"].astype(int).apply(_resolve)
+            for col, default in [("building", 0), ("name", ""), ("floor", 1),
+                                  ("type", 1), ("weight", 1.0), ("length", 0.0)]:
+                if col not in ge_raw.columns:
+                    ge_raw[col] = default
+            all_edges.append(ge_raw)
+
     if not all_nodes:
         return pd.DataFrame(), pd.DataFrame()
 
     nodes_combined = pd.concat(all_nodes, ignore_index=True)
     edges_combined = pd.concat(all_edges, ignore_index=True)
 
-    # NaN・building=0 のプレースホルダーノードを除外
-    nodes_combined = nodes_combined[
-        nodes_combined["building"].notna() & (nodes_combined["building"] != 0)
-    ]
+    # NaN・座標欠損行のみ除外（building=0 = 屋外ノードは許容）
+    nodes_combined = nodes_combined.dropna(subset=["id", "x", "y", "z", "building", "floor"])
     valid_ids = set(nodes_combined["id"])
     edges_combined = edges_combined[
         edges_combined["from"].isin(valid_ids) & edges_combined["to"].isin(valid_ids)
@@ -178,8 +218,11 @@ def load_data():
     return nodes_combined, edges_combined
 
 
+_DIRECTED_EDGE_TYPES = {"5", "6"}  # 上りエスカレータ(5)・下りエスカレータ(6)は一方向のみ
+
+
 def build_graph(nodes_df, edges_df, use_elevator=True):
-    G = nx.Graph()
+    G = nx.DiGraph()
     for _, row in nodes_df.iterrows():
         G.add_node(
             int(row["id"]),
@@ -191,19 +234,31 @@ def build_graph(nodes_df, edges_df, use_elevator=True):
             node_type=int(row["type"]),
         )
     for _, row in edges_df.iterrows():
-        if not use_elevator and str(row["type"]).strip() == "4":
+        edge_type = str(row["type"]).strip()
+        if not use_elevator and edge_type == "4":
             continue
-        G.add_edge(
-            int(row["from"]),
-            int(row["to"]),
+        u, v = int(row["from"]), int(row["to"])
+        edge_attrs = dict(
             edge_id=int(row["id"]),
             name=str(row["name"]),
             building=int(row["building"]),
             floor=int(row["floor"]),
             weight=float(row["weight"]),
             length=float(row["length"]),
-            edge_type=str(row["type"]),
+            edge_type=edge_type,
         )
+        if edge_type == "5":
+            # 上りESC: z が低い→高い方向のみ通行可
+            lo, hi = (u, v) if G.nodes[u]["z"] <= G.nodes[v]["z"] else (v, u)
+            G.add_edge(lo, hi, **edge_attrs)
+        elif edge_type == "6":
+            # 下りESC: z が高い→低い方向のみ通行可
+            hi, lo = (u, v) if G.nodes[u]["z"] >= G.nodes[v]["z"] else (v, u)
+            G.add_edge(hi, lo, **edge_attrs)
+        else:
+            G.add_edge(u, v, **edge_attrs)
+            if edge_type not in _DIRECTED_EDGE_TYPES:
+                G.add_edge(v, u, **edge_attrs)
     return G
 
 
@@ -275,17 +330,21 @@ def api_graph():
     for _, row in nodes_df.iterrows():
         if any(pd.isna(row[c]) for c in ["id", "x", "y", "z", "building", "floor"]):
             continue
-        color_idx = (int(row["building"]) - 1) % len(BUILDING_COLORS)
+        bldg = int(row["building"])
+        if bldg == 0:
+            color = OUTDOOR_COLOR
+        else:
+            color = BUILDING_COLORS[(bldg - 1) % len(BUILDING_COLORS)]
         nodes.append({
             "id":       int(row["id"]),
             "x":        float(row["x"]),
             "y":        float(row["y"]),
             "z":        float(row["z"]),
-            "building": int(row["building"]),
+            "building": bldg,
             "floor":    int(row["floor"]),
             "type":     int(row["type"]),
-            "color":    BUILDING_COLORS[color_idx],
-            "label":    f"Node {int(row['id'])}<br>Building {int(row['building'])} / Floor {int(row['floor'])}",
+            "color":    color,
+            "label":    f"Node {int(row['id'])}<br>{'屋外' if bldg == 0 else f'Building {bldg}'} / Floor {int(row['floor'])}",
         })
 
     valid_edges = edges_df.dropna(subset=["id", "from", "to", "building", "floor", "weight", "length"])
@@ -741,6 +800,47 @@ def api_shortest_path():
         return jsonify({"error": f"ノード {start} から {goal} への経路が見つかりません"}), 404
     except nx.NodeNotFound as e:
         return jsonify({"error": str(e)}), 404
+
+
+# ------------------------------------------------------------------ #
+#  建物変換パラメータ API
+# ------------------------------------------------------------------ #
+
+@app.route("/api/building_config", methods=["GET"])
+def api_building_config_get():
+    """全建物の rot_deg / tz_offset を返す"""
+    config = _load_transform_config()
+    nodes_df, _ = load_data()
+    buildings = sorted(
+        nodes_df[nodes_df["building"].astype(int) != 0]["building"]
+        .dropna().astype(int).unique().tolist()
+    )
+    result = {}
+    for b in buildings:
+        cfg = config.get(str(b), {})
+        result[b] = {
+            "rot_deg":   cfg.get("rot_deg",   0.0),
+            "tz_offset": cfg.get("tz_offset", 0.0),
+            "tx":        cfg.get("tx",        0.0),
+            "ty":        cfg.get("ty",        0.0),
+        }
+    return jsonify(result)
+
+
+@app.route("/api/building_config/<int:building_id>", methods=["POST"])
+def api_building_config_post(building_id):
+    """建物の rot_deg / tz_offset を buildings.json に保存する"""
+    data = request.get_json(force=True)
+    config = _load_transform_config()
+    cfg = config.get(str(building_id), {})
+    if "rot_deg"   in data:
+        cfg["rot_deg"]   = float(data["rot_deg"])
+    if "tz_offset" in data:
+        cfg["tz_offset"] = float(data["tz_offset"])
+    config[str(building_id)] = cfg
+    with open(BUILDINGS_JSON, "w") as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+    return jsonify({"ok": True, "building": building_id, "config": cfg})
 
 
 if __name__ == "__main__":

@@ -572,6 +572,72 @@
       .tab { font-size: 0.58rem; }
       header h1 { font-size: 0.78rem; }
     }
+
+    /* ============================================================
+       BUILDING ADJUST PANEL
+    ============================================================ */
+    .adjust-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .adjust-row label {
+      min-width: 80px;
+      flex-shrink: 0;
+      margin-bottom: 0;
+      font-size: 0.70rem;
+    }
+    .adjust-row input[type=range] {
+      flex: 1;
+      height: 4px;
+      background: var(--border-hi);
+      border-radius: 2px;
+      accent-color: var(--accent);
+      cursor: pointer;
+      padding: 0;
+      border: none;
+      outline: none;
+      margin-bottom: 0;
+      min-width: 0;
+    }
+    .adjust-row input[type=number] {
+      width: 60px;
+      flex-shrink: 0;
+      padding: 5px 6px;
+      font-size: 0.78rem;
+      margin-bottom: 0;
+      text-align: right;
+    }
+    .adjust-unit {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      font-family: var(--font-mono);
+    }
+
+    /* 俯瞰ボタン */
+    #top-view-btn {
+      position: absolute;
+      top: 10px; right: 10px;
+      z-index: 5;
+      background: rgba(12, 27, 45, 0.88);
+      border: 1px solid var(--border-hi);
+      color: var(--text-sub);
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      font-weight: 500;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.15s, color 0.15s;
+    }
+    #top-view-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
   </style>
 </head>
 <body>
@@ -604,6 +670,9 @@
       </div>
       <div class="tab" onclick="switchTab('info')">
         <span class="tab-icon">ℹ</span>情報
+      </div>
+      <div class="tab" onclick="switchTab('adjust')">
+        <span class="tab-icon">⚙</span>調整
       </div>
     </div>
 
@@ -759,12 +828,50 @@
         </div>
       </div>
 
+      <!-- ===== TAB: 調整 ===== -->
+      <div id="tab-adjust" class="tab-panel">
+        <div class="panel">
+          <h2>建物の位置・高さ調整</h2>
+          <p style="font-size:0.72rem;color:var(--text-muted);margin-bottom:12px;line-height:1.6;">
+            アンカーが1点以下の建物の回転・高さを手動で調整します。<br>
+            2点アンカーがある建物は回転は自動計算されますが、高さオフセットは有効です。
+          </p>
+
+          <label>対象の建物</label>
+          <select id="adjust-building" onchange="onAdjustBuildingChange()">
+            <option value="">— 建物を選択 —</option>
+          </select>
+
+          <div id="adjust-controls" style="display:none">
+            <div class="adjust-row">
+              <label>回転角</label>
+              <input type="range" id="adj-rot-range" min="-180" max="180" step="0.5" value="0"
+                     oninput="syncAdjust('rot',this.value)">
+              <input type="number" id="adj-rot-num" min="-180" max="180" step="0.5" value="0"
+                     oninput="syncAdjust('rot',this.value)">
+              <span class="adjust-unit">°</span>
+            </div>
+            <div class="adjust-row">
+              <label>高さ補正</label>
+              <input type="range" id="adj-tz-range" min="-20" max="20" step="0.1" value="0"
+                     oninput="syncAdjust('tz',this.value)">
+              <input type="number" id="adj-tz-num" min="-20" max="20" step="0.1" value="0"
+                     oninput="syncAdjust('tz',this.value)">
+              <span class="adjust-unit">m</span>
+            </div>
+            <button class="btn btn-primary" onclick="applyBuildingConfig()" style="margin-top:4px;">適用して再描画</button>
+            <div id="adjust-result" style="margin-top:8px;font-size:0.76rem;display:none;"></div>
+          </div>
+        </div>
+      </div>
+
     </div><!-- /.sheet-scroll-area -->
   </aside>
 
   <!-- ========== 3D MAP ========== -->
   <div id="map-container">
     <div id="map"></div>
+    <button id="top-view-btn" onclick="setTopView()">俯瞰 ↑</button>
     <div class="map-hint">
       <span class="hint-desktop">左ドラッグ: 回転 ／ スクロール: ズーム ／ 右ドラッグ: 移動</span>
       <span class="hint-mobile">1本指: 回転 ／ ピンチ: ズーム</span>
@@ -889,12 +996,13 @@ function initSheet() {
 //  Tab switching
 // ============================================================
 function switchTab(name) {
-  const names = ["room", "node", "toilet", "info"];
+  const names = ["room", "node", "toilet", "info", "adjust"];
   document.querySelectorAll(".tab").forEach((t, i) =>
     t.classList.toggle("active", names[i] === name));
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
   document.getElementById("tab-" + name).classList.add("active");
 
+  if (name === "adjust") loadBuildingConfigPanel();
   if (isMobile()) openSheet();
 }
 
@@ -1273,9 +1381,10 @@ function sameEdge(a, b) {
 }
 
 function renderMap() {
-  const nodes = (filterBuilding
+  const indoorNodes = (filterBuilding
     ? graphData.nodes.filter(n => n.building === filterBuilding)
     : graphData.nodes).filter(n => n.building !== 0);
+  const nodes   = indoorNodes;
   const nodeIds = new Set(nodes.map(n => n.id));
   const edges   = filterBuilding
     ? graphData.edges.filter(e => nodeIds.has(e.from) && nodeIds.has(e.to)) : graphData.edges;
@@ -1283,6 +1392,29 @@ function renderMap() {
   const traces = [];
   traces.push(...buildFloorPlaneTraces(nodes));
   traces.push(...buildBuildingBoxTraces(nodes));
+
+  // --- 屋外ノード・エッジ (building=0) ---
+  if (!filterBuilding) {
+    const outdoorNodes = graphData.nodes.filter(n => n.building === 0);
+    const outdoorNodeIds = new Set(outdoorNodes.map(n => n.id));
+    const outdoorEdges = graphData.edges.filter(e =>
+      outdoorNodeIds.has(e.from) || outdoorNodeIds.has(e.to));
+    if (outdoorEdges.length) {
+      const ox=[],oy=[],oz=[];
+      outdoorEdges.forEach(e=>{ox.push(e.x0,e.x1,null);oy.push(e.y0,e.y1,null);oz.push(e.z0,e.z1,null);});
+      traces.push({ type:"scatter3d", mode:"lines", x:ox, y:oy, z:oz,
+        line:{color:"#5AFF5A", width:3, dash:"dot"}, hoverinfo:"none",
+        name:"屋外通路", showlegend:true });
+    }
+    if (outdoorNodes.length) {
+      traces.push({ type:"scatter3d", mode:"markers",
+        x:outdoorNodes.map(n=>n.x), y:outdoorNodes.map(n=>n.y), z:outdoorNodes.map(n=>n.z),
+        marker:{size:7, color:"#5AFF5A", opacity:0.9, symbol:"square",
+                line:{color:"#fff", width:1}},
+        text:outdoorNodes.map(n=>n.label), hovertemplate:"%{text}<extra></extra>",
+        name:"屋外ノード", showlegend:true });
+    }
+  }
   const pathEdgeSet = buildPathEdgeSet();
   const pathNodeSet = new Set(currentPath ? currentPath.path : []);
 
@@ -1302,7 +1434,7 @@ function renderMap() {
       line:{color, width:3}, hoverinfo:"none", name:`${f}F 通路`, showlegend:false });
   });
 
-  [["2","#FFB347","階段"], ["3","#00CED1","エスカレーター"], ["4","#DA70D6","EV"]].forEach(([t, color, label]) => {
+  [["2","#FFB347","階段"], ["3","#00CED1","エスカレーター"], ["4","#DA70D6","EV"], ["5","#00FF88","上りESC"], ["6","#FF4500","下りESC"]].forEach(([t, color, label]) => {
     const typeEdges = normalEdges.filter(e => String(e.type) === t);
     if (!typeEdges.length) return;
     const ex=[],ey=[],ez=[];
@@ -1397,6 +1529,95 @@ function axisStyle(title) {
 document.getElementById("sidebar").addEventListener("transitionend", () => {
   Plotly.Plots.resize(document.getElementById("map"));
 });
+
+// ============================================================
+//  俯瞰ビュー
+// ============================================================
+function setTopView() {
+  Plotly.relayout("map", {
+    "scene.camera": {
+      eye:    { x: 0, y: 0, z: 2.5 },
+      up:     { x: 0, y: 1, z: 0 },
+      center: { x: 0, y: 0, z: 0 },
+    }
+  });
+}
+
+// ============================================================
+//  建物調整パネル
+// ============================================================
+let _adjConfig = {};
+
+async function loadBuildingConfigPanel() {
+  const res = await fetch("/api/building_config");
+  _adjConfig = await res.json();
+  const sel = document.getElementById("adjust-building");
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— 建物を選択 —</option>';
+  Object.keys(_adjConfig).sort((a,b)=>+a-+b).forEach(b => {
+    const opt = document.createElement("option");
+    opt.value = b;
+    opt.textContent = `Building ${b}`;
+    sel.appendChild(opt);
+  });
+  if (prev && _adjConfig[prev]) sel.value = prev;
+  onAdjustBuildingChange();
+}
+
+function onAdjustBuildingChange() {
+  const bId = document.getElementById("adjust-building").value;
+  const ctrl = document.getElementById("adjust-controls");
+  if (!bId || !_adjConfig[bId]) { ctrl.style.display = "none"; return; }
+  ctrl.style.display = "block";
+  const cfg = _adjConfig[bId];
+  const rot = (cfg.rot_deg ?? 0).toFixed(1);
+  const tz  = (cfg.tz_offset ?? 0).toFixed(1);
+  document.getElementById("adj-rot-range").value = rot;
+  document.getElementById("adj-rot-num").value   = rot;
+  document.getElementById("adj-tz-range").value  = tz;
+  document.getElementById("adj-tz-num").value    = tz;
+  document.getElementById("adjust-result").style.display = "none";
+}
+
+function syncAdjust(type, val) {
+  const v = parseFloat(val) || 0;
+  if (type === "rot") {
+    document.getElementById("adj-rot-range").value = v;
+    document.getElementById("adj-rot-num").value   = v;
+  } else {
+    document.getElementById("adj-tz-range").value = v;
+    document.getElementById("adj-tz-num").value   = v;
+  }
+}
+
+async function applyBuildingConfig() {
+  const bId = document.getElementById("adjust-building").value;
+  if (!bId) return;
+  const rot = parseFloat(document.getElementById("adj-rot-num").value) || 0;
+  const tz  = parseFloat(document.getElementById("adj-tz-num").value)  || 0;
+  const res = await fetch(`/api/building_config/${bId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rot_deg: rot, tz_offset: tz }),
+  });
+  const data = await res.json();
+  const box = document.getElementById("adjust-result");
+  if (data.ok) {
+    box.style.cssText = "display:block;color:#88f0cc;";
+    box.textContent = `✓ Building ${bId} を更新しました`;
+    _adjConfig[bId] = { ...(_adjConfig[bId]||{}), rot_deg: rot, tz_offset: tz };
+    // グラフデータを再取得して再描画
+    const gres = await fetch("/api/graph");
+    graphData = await gres.json();
+    graphData.nodes.forEach(n => { n.z *= Z_SCALE; });
+    graphData.edges.forEach(e => { e.z0 *= Z_SCALE; e.z1 *= Z_SCALE; });
+    updateStats();
+    renderMap();
+  } else {
+    box.style.cssText = "display:block;color:#f08098;";
+    box.textContent = "エラーが発生しました";
+  }
+}
 </script>
 </body>
 </html>

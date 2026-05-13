@@ -415,7 +415,7 @@ const c2t = (cx, cy, cz) => new THREE.Vector3(cx, cz * Z_SCALE, cy);
 // ================================================================
 const FLOOR_COLORS = [0xFF8C42,0x06D6A0,0x118AB2,0xFFD166,0xEF476F,0x9B5DE5,0x00BBF9,0xF15BB5];
 const floorColor   = f => FLOOR_COLORS[(Math.max(f,1)-1) % FLOOR_COLORS.length];
-const EDGE_TYPE_COLORS = { "2": 0xFFB347, "3": 0x00CED1, "4": 0xDA70D6 };
+const EDGE_TYPE_COLORS = { "2": 0xFFB347, "3": 0x00CED1, "4": 0xDA70D6, "5": 0x00FF88, "6": 0xFF4500 };
 const EYE_H   = 1.7;   // 目線の高さ (m)
 const CEIL_H  = 3.2;   // 床からの天井高 (m)
 const SPEED   = 9.0;   // 移動速度
@@ -584,7 +584,7 @@ floorList.forEach(f => {
   g.add(frame);
 });
 
-// ---- 通路チューブ (type別色: 1=フロア色, 2=階段/#FFB347, 3=エスカレーター/#00CED1, 4=EV/#DA70D6) ----
+// ---- 通路チューブ (type別色: 1=フロア色, 2=階段/#FFB347, 3=エスカレーター/#00CED1, 4=EV/#DA70D6, 5=上りESC/#00FF88, 6=下りESC/#FF4500) ----
 edges.forEach(e => {
   const color = EDGE_TYPE_COLORS[String(e.type)] ?? floorColor(e.floor);
   const p0 = c2t(e.x0, e.y0, e.z0); p0.y += 0.04;
@@ -594,6 +594,17 @@ edges.forEach(e => {
     new THREE.MeshLambertMaterial({ color })
   );
   floorGroups[e.floor].add(tube);
+
+  // 一方向エスカレータ(type 5/6)は矢印で方向を示す
+  if (e.type === "5" || e.type === "6") {
+    const dir = new THREE.Vector3().subVectors(p1, p0);
+    const len = dir.length();
+    if (len > 0.01) {
+      dir.normalize();
+      const arrow = new THREE.ArrowHelper(dir, p0.clone().lerp(p1, 0.5), len * 0.4, color, len * 0.3, 0.3);
+      floorGroups[e.floor].add(arrow);
+    }
+  }
 });
 
 // ---- ノードマーカー ----
