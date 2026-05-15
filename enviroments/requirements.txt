@@ -1,0 +1,6 @@
+pandas
+networkx
+Flask
+plotly
+gunicorn
+pyvis

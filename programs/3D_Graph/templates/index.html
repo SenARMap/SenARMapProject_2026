@@ -4,35 +4,44 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>大学ARマップ — 3D経路ビューア</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
   <style>
-    /* ============================================================
-       BASE RESET
-    ============================================================ */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #0d1117;
-      --surface:   #161b22;
-      --border:    #30363d;
-      --muted:     #8b949e;
-      --text:      #e6edf3;
-      --text-sub:  #c9d1d9;
-      --accent:    #58a6ff;
-      --success-bg:#0d2d0d;
-      --success-br:#238636;
-      --success-tx:#56d364;
-      --error-bg:  #2d0d0d;
-      --error-br:  #f85149;
-      --error-tx:  #f85149;
-      --header-h:  52px;
-      --peek-h:    64px; /* handle(20px) + tab-bar(44px) */
-      --sheet-r:   18px;
+      --bg:          #07111d;
+      --surface:     #0c1b2d;
+      --surface-hi:  #12243e;
+      --surface-2:   #162d4a;
+      --border:      #1e3450;
+      --border-hi:   #2e4e78;
+      --text:        #d4e8f8;
+      --text-sub:    #6a9abf;
+      --text-muted:  #3a5878;
+      --accent:      #00c0ee;
+      --accent-dim:  rgba(0, 192, 238, 0.12);
+      --accent-glow: rgba(0, 192, 238, 0.25);
+      --amber:       #f0a030;
+      --amber-dim:   rgba(240, 160, 48, 0.12);
+      --green:       #00d498;
+      --green-dim:   rgba(0, 212, 152, 0.10);
+      --red:         #f03858;
+      --red-dim:     rgba(240, 56, 88, 0.12);
+      --header-h:    52px;
+      --peek-h:      64px;
+      --sheet-r:     20px;
+      --font:        'Outfit', 'Noto Sans JP', system-ui, sans-serif;
+      --font-mono:   'DM Mono', 'Courier New', monospace;
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     html, body { height: 100%; }
     body {
-      font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", sans-serif;
+      font-family: var(--font);
       background: var(--bg);
       color: var(--text);
       height: 100dvh;
@@ -47,19 +56,70 @@
     header {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
-      padding: 0 20px;
+      padding: 0 18px;
       height: var(--header-h);
       display: flex;
       align-items: center;
       gap: 12px;
       flex-shrink: 0;
       z-index: 10;
+      position: relative;
     }
-    header h1   { font-size: 1.05rem; font-weight: 700; letter-spacing: .04em; }
-    header .sub { font-size: .72rem; color: var(--muted); }
+    header::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent) 70%, transparent);
+      opacity: 0.35;
+    }
+
+    .header-icon {
+      width: 28px; height: 28px;
+      background: var(--accent-dim);
+      border: 1px solid rgba(0,192,238,0.3);
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .header-title-wrap { display: flex; flex-direction: column; gap: 2px; }
+    header h1 {
+      font-size: 0.92rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text);
+    }
+    header .sub {
+      font-size: 0.62rem;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+      font-family: var(--font-mono);
+    }
+
+    .viewer-link {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 6px;
+      background: var(--accent-dim);
+      border: 1px solid rgba(0,192,238,0.35);
+      color: var(--accent);
+      padding: 6px 12px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+    }
+    .viewer-link:hover {
+      background: rgba(0,192,238,0.2);
+      border-color: rgba(0,192,238,0.6);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
 
     /* ============================================================
-       MAIN LAYOUT (desktop: side-by-side)
+       MAIN LAYOUT
     ============================================================ */
     .main-layout {
       display: flex;
@@ -69,10 +129,10 @@
     }
 
     /* ============================================================
-       SIDEBAR (desktop)
+       SIDEBAR
     ============================================================ */
     .sidebar {
-      width: 290px;
+      width: 280px;
       background: var(--surface);
       border-right: 1px solid var(--border);
       display: flex;
@@ -81,15 +141,18 @@
       overflow: hidden;
     }
 
-    /* Drag handle — hidden on desktop */
     .sheet-drag-handle { display: none; }
 
-    /* Scroll area wraps all tab panels */
     .sheet-scroll-area {
       flex: 1;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-hi) transparent;
     }
+    .sheet-scroll-area::-webkit-scrollbar { width: 3px; }
+    .sheet-scroll-area::-webkit-scrollbar-track { background: transparent; }
+    .sheet-scroll-area::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
 
     /* ============================================================
        TABS
@@ -98,79 +161,160 @@
       display: flex;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
+      position: relative;
+      background: var(--surface);
     }
     .tab {
       flex: 1;
-      padding: 11px 4px;
-      font-size: .76rem;
+      padding: 11px 2px 10px;
+      font-size: 0.70rem;
       font-weight: 600;
       text-align: center;
       cursor: pointer;
-      color: var(--muted);
+      color: var(--text-muted);
       border-bottom: 2px solid transparent;
-      transition: color .15s, border-color .15s;
+      transition: color 0.2s, border-color 0.2s;
       user-select: none;
       -webkit-tap-highlight-color: transparent;
+      letter-spacing: 0.02em;
     }
-    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .tab:hover:not(.active) { color: var(--text-sub); }
+
+    .tab-icon { display: block; font-size: 1rem; margin-bottom: 2px; }
 
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
 
     /* ============================================================
-       PANEL / FORM ELEMENTS
+       PANELS
     ============================================================ */
     .panel {
       padding: 14px 16px;
       border-bottom: 1px solid var(--border);
     }
     .panel h2 {
-      font-size: .68rem;
+      font-size: 0.60rem;
       text-transform: uppercase;
-      letter-spacing: .1em;
-      color: var(--muted);
-      margin-bottom: 10px;
+      letter-spacing: 0.14em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      font-family: var(--font-mono);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .panel h2::before {
+      content: '';
+      width: 14px; height: 1px;
+      background: var(--accent);
+      opacity: 0.6;
     }
 
+    /* ============================================================
+       LABELS & INPUTS
+    ============================================================ */
     label {
       display: block;
-      font-size: .82rem;
+      font-size: 0.72rem;
       color: var(--text-sub);
       margin-bottom: 4px;
+      letter-spacing: 0.02em;
     }
 
     select, input[type=text] {
       width: 100%;
-      background: var(--bg);
+      background: var(--surface-hi);
       border: 1px solid var(--border);
       border-radius: 8px;
       color: var(--text);
       padding: 9px 12px;
-      font-size: 1rem; /* ≥16px prevents iOS zoom */
+      font-size: 1rem;
+      font-family: var(--font);
       margin-bottom: 10px;
       outline: none;
-      transition: border-color .15s;
+      transition: border-color 0.15s, box-shadow 0.15s;
       -webkit-appearance: none;
       appearance: none;
     }
-    select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238b949e' d='M1 1l5 5 5-5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
-    select:focus, input:focus { border-color: var(--accent); }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%236a9abf' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 30px;
+      cursor: pointer;
+    }
+    select:focus, input[type=text]:focus {
+      border-color: rgba(0, 192, 238, 0.5);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+    input[type=text]::placeholder { color: var(--text-muted); }
 
+    /* ============================================================
+       BUTTONS
+    ============================================================ */
     .btn {
       display: block;
       width: 100%;
       padding: 11px;
       border: none;
-      border-radius: 8px;
-      font-size: .9rem;
+      border-radius: 9px;
+      font-size: 0.85rem;
       font-weight: 700;
+      font-family: var(--font);
       cursor: pointer;
-      transition: opacity .15s, transform .1s;
+      transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
+      letter-spacing: 0.04em;
       -webkit-tap-highlight-color: transparent;
     }
-    .btn:active { transform: scale(.97); }
-    .btn-primary   { background: var(--success-br); color: #fff; }
-    .btn-secondary { background: #21262d; color: var(--text-sub); border: 1px solid var(--border); margin-top: 8px; }
+    .btn:active { transform: scale(0.97); }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #00c0ee, #0098c8);
+      color: #07111d;
+      font-weight: 700;
+      box-shadow: 0 2px 12px rgba(0, 192, 238, 0.3);
+    }
+    .btn-primary:hover {
+      box-shadow: 0 4px 20px rgba(0, 192, 238, 0.45);
+      opacity: 0.95;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-sub);
+      border: 1px solid var(--border-hi);
+      margin-top: 8px;
+    }
+    .btn-secondary:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    /* ============================================================
+       CHECKBOX ROW
+    ============================================================ */
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 0.80rem;
+      color: var(--text-sub);
+      margin-bottom: 12px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .checkbox-row input[type=checkbox] {
+      width: 16px; height: 16px;
+      margin: 0;
+      cursor: pointer;
+      flex-shrink: 0;
+      accent-color: var(--accent);
+    }
 
     /* ============================================================
        AUTOCOMPLETE
@@ -180,29 +324,45 @@
 
     .ac-dropdown {
       position: absolute;
-      top: 100%;
+      top: calc(100% + 2px);
       left: 0; right: 0;
-      background: #21262d;
-      border: 1px solid var(--border);
-      border-top: none;
-      border-radius: 0 0 8px 8px;
-      max-height: 180px;
+      background: var(--surface-2);
+      border: 1px solid var(--border-hi);
+      border-radius: 10px;
+      max-height: 200px;
       overflow-y: auto;
       z-index: 300;
       display: none;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-hi) transparent;
     }
+
     .room-option {
       padding: 10px 12px;
-      font-size: .85rem;
+      font-size: 0.84rem;
       cursor: pointer;
       display: flex;
       justify-content: space-between;
       align-items: center;
       min-height: 44px;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
     }
-    .room-option:active,
-    .room-option.ac-active { background: var(--border); }
-    .room-option .room-meta { font-size: .72rem; color: var(--muted); }
+    .room-option:last-child { border-bottom: none; }
+    .room-option:hover, .room-option.ac-active {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+    .room-option .room-meta {
+      font-size: 0.68rem;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      flex-shrink: 0;
+      margin-left: 8px;
+    }
+    .room-option:hover .room-meta,
+    .room-option.ac-active .room-meta { color: var(--accent); opacity: 0.7; }
 
     /* ============================================================
        ROOM BADGE
@@ -210,28 +370,44 @@
     .room-badge {
       display: none;
       margin-bottom: 10px;
-      font-size: .78rem;
-      padding: 5px 10px;
-      background: #0d2d3d;
-      border: 1px solid var(--accent);
-      border-radius: 6px;
+      font-size: 0.76rem;
+      padding: 6px 10px;
+      background: var(--accent-dim);
+      border: 1px solid rgba(0,192,238,0.3);
+      border-radius: 7px;
       color: var(--accent);
       word-break: break-all;
     }
 
     /* ============================================================
-       RESULT BOX
+       RESULT BOXES
     ============================================================ */
-    #result-box, #room-result-box {
+    #result-box, #room-result-box, #toilet-result-box {
       margin-top: 10px;
       padding: 10px 12px;
-      border-radius: 8px;
-      font-size: .82rem;
-      line-height: 1.7;
+      border-radius: 9px;
+      font-size: 0.80rem;
+      line-height: 1.8;
       display: none;
+      font-family: var(--font);
     }
-    .success { background: var(--success-bg); border: 1px solid var(--success-br); color: var(--success-tx); }
-    .error   { background: var(--error-bg);   border: 1px solid var(--error-br);   color: var(--error-tx); }
+    .success {
+      background: var(--green-dim);
+      border: 1px solid rgba(0, 212, 152, 0.3);
+      color: #88f0cc;
+    }
+    .success b { color: var(--green); font-weight: 600; }
+    .error {
+      background: var(--red-dim);
+      border: 1px solid rgba(240, 56, 88, 0.3);
+      color: #f08098;
+    }
+
+    /* Distance value highlight */
+    .success br + b,
+    .dist-value {
+      font-family: var(--font-mono);
+    }
 
     /* ============================================================
        LEGEND & STATS
@@ -239,34 +415,33 @@
     .legend-item {
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: .82rem;
-      margin-bottom: 6px;
+      gap: 9px;
+      font-size: 0.82rem;
+      margin-bottom: 7px;
+      color: var(--text-sub);
     }
-    .legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .legend-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      box-shadow: 0 0 6px currentColor;
+    }
 
     .stat-row {
       display: flex;
       justify-content: space-between;
-      font-size: .82rem;
-      padding: 5px 0;
-      border-bottom: 1px solid #21262d;
-      color: var(--muted);
-    }
-    .stat-row span:last-child { color: var(--text); font-weight: 600; }
-
-    .checkbox-row {
-      display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: .82rem;
-      color: var(--text-sub);
-      margin-bottom: 12px;
-      cursor: pointer;
+      font-size: 0.80rem;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-muted);
     }
-    .checkbox-row input[type=checkbox] {
-      width: 16px; height: 16px;
-      margin: 0; cursor: pointer; flex-shrink: 0;
+    .stat-row:last-child { border-bottom: none; }
+    .stat-row span:last-child {
+      color: var(--text);
+      font-weight: 600;
+      font-family: var(--font-mono);
+      font-size: 0.88rem;
     }
 
     /* ============================================================
@@ -282,15 +457,18 @@
 
     .map-hint {
       position: absolute;
-      bottom: 14px; right: 16px;
-      background: rgba(22,27,34,.85);
+      bottom: 14px; right: 14px;
+      background: rgba(12, 27, 45, 0.88);
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: 8px;
       padding: 6px 10px;
-      font-size: .68rem;
-      color: var(--muted);
+      font-size: 0.66rem;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
       pointer-events: none;
       user-select: none;
+      backdrop-filter: blur(8px);
+      letter-spacing: 0.02em;
     }
     .map-hint .hint-desktop { display: inline; }
     .map-hint .hint-mobile  { display: none; }
@@ -299,20 +477,15 @@
        MOBILE STYLES  (≤ 767px)
     ============================================================ */
     @media (max-width: 767px) {
-
-      header {
-        height: var(--header-h);
-        padding: 0 16px;
-      }
-      header h1  { font-size: .92rem; }
-      header .sub{ display: none; }
+      header { padding: 0 14px; }
+      header h1  { font-size: 0.86rem; }
+      header .sub { display: none; }
 
       .main-layout {
         flex-direction: column;
         overflow: hidden;
       }
 
-      /* Map fills the entire main area */
       #map-container {
         position: absolute;
         inset: 0;
@@ -324,24 +497,22 @@
         position: absolute;
         left: 0; right: 0; bottom: 0;
         width: 100%;
-        /* peek = just handle + tab-bar */
         height: var(--peek-h);
-        max-height: 82vh;
+        max-height: 84vh;
         border-right: none;
-        border-top: 1px solid var(--border);
+        border-top: 1px solid var(--border-hi);
         border-radius: var(--sheet-r) var(--sheet-r) 0 0;
         z-index: 100;
         overflow: hidden;
-        transition: height 0.32s cubic-bezier(0.32, 0.72, 0, 1);
-        /* bottom safe area */
+        transition: height 0.38s var(--ease-out);
         padding-bottom: env(safe-area-inset-bottom, 0px);
+        background: rgba(10, 22, 36, 0.92);
+        backdrop-filter: blur(16px) saturate(1.4);
+        -webkit-backdrop-filter: blur(16px) saturate(1.4);
       }
 
-      .sidebar.sheet-open {
-        height: 76vh;
-      }
+      .sidebar.sheet-open { height: 78vh; }
 
-      /* Drag handle */
       .sheet-drag-handle {
         display: flex;
         justify-content: center;
@@ -352,26 +523,25 @@
         touch-action: none;
       }
       .sheet-drag-handle::after {
-        content: "";
+        content: '';
         display: block;
-        width: 36px; height: 4px;
-        background: #4a5568;
+        width: 34px; height: 3px;
+        background: var(--border-hi);
         border-radius: 2px;
+        transition: background 0.15s;
       }
+      .sidebar.sheet-open .sheet-drag-handle::after { background: var(--accent); opacity: 0.5; }
 
-      /* Tab bar */
       .tab-bar {
         height: 44px;
         flex-shrink: 0;
         align-items: center;
         border-bottom-color: transparent;
       }
-      .sidebar.sheet-open .tab-bar {
-        border-bottom-color: var(--border);
-      }
-      .tab { font-size: .72rem; padding: 10px 4px; }
+      .sidebar.sheet-open .tab-bar { border-bottom-color: var(--border); }
+      .tab { font-size: 0.65rem; padding: 8px 2px; }
+      .tab-icon { font-size: 0.9rem; }
 
-      /* Scroll area */
       .sheet-scroll-area {
         flex: 1;
         overflow-y: auto;
@@ -379,22 +549,18 @@
         -webkit-overflow-scrolling: touch;
       }
 
-      /* Map hint — touch version */
       .map-hint {
         bottom: calc(var(--peek-h) + 10px);
         right: 10px;
-        font-size: .65rem;
-        padding: 5px 8px;
+        font-size: 0.62rem;
       }
       .map-hint .hint-desktop { display: none; }
       .map-hint .hint-mobile  { display: inline; }
 
-      /* Larger touch targets for autocomplete */
       .room-option { min-height: 48px; }
 
-      /* Sheet backdrop (tap map to close) */
       #map-container.sheet-open-backdrop::after {
-        content: "";
+        content: '';
         position: absolute;
         inset: 0;
         z-index: 50;
@@ -402,23 +568,87 @@
       }
     }
 
-    /* ============================================================
-       VERY SMALL SCREENS (≤ 360px)
-    ============================================================ */
     @media (max-width: 360px) {
-      .tab { font-size: .65rem; }
-      header h1 { font-size: .82rem; }
+      .tab { font-size: 0.58rem; }
+      header h1 { font-size: 0.78rem; }
+    }
+
+    /* ============================================================
+       BUILDING ADJUST PANEL
+    ============================================================ */
+    .adjust-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .adjust-row label {
+      min-width: 80px;
+      flex-shrink: 0;
+      margin-bottom: 0;
+      font-size: 0.70rem;
+    }
+    .adjust-row input[type=range] {
+      flex: 1;
+      height: 4px;
+      background: var(--border-hi);
+      border-radius: 2px;
+      accent-color: var(--accent);
+      cursor: pointer;
+      padding: 0;
+      border: none;
+      outline: none;
+      margin-bottom: 0;
+      min-width: 0;
+    }
+    .adjust-row input[type=number] {
+      width: 60px;
+      flex-shrink: 0;
+      padding: 5px 6px;
+      font-size: 0.78rem;
+      margin-bottom: 0;
+      text-align: right;
+    }
+    .adjust-unit {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      font-family: var(--font-mono);
+    }
+
+    /* 俯瞰ボタン */
+    #top-view-btn {
+      position: absolute;
+      top: 10px; right: 10px;
+      z-index: 5;
+      background: rgba(12, 27, 45, 0.88);
+      border: 1px solid var(--border-hi);
+      color: var(--text-sub);
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      font-weight: 500;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.15s, color 0.15s;
+    }
+    #top-view-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
     }
   </style>
 </head>
 <body>
 
 <header>
-  <div>
-    <h1>大学 AR マップ — 3D 経路ビューア</h1>
-    <div class="sub">ノード&amp;エッジ CSV から生成 ／ Dijkstra 最短経路</div>
+  <div class="header-icon">🗺</div>
+  <div class="header-title-wrap">
+    <h1>大学 AR マップ</h1>
+    <div class="sub">3D ROUTE VIEWER · DIJKSTRA</div>
   </div>
-  <a href="/viewer" style="margin-left:auto;background:#21262d;border:1px solid #30363d;color:#e6edf3;padding:7px 14px;border-radius:8px;text-decoration:none;font-size:.8rem;white-space:nowrap;">一人称ビューア</a>
+  <a href="/3d/viewer" class="viewer-link">👁 一人称ビューア</a>
 </header>
 
 <div class="main-layout">
@@ -426,17 +656,26 @@
   <!-- ========== SIDEBAR / BOTTOM SHEET ========== -->
   <aside class="sidebar" id="sidebar">
 
-    <!-- Drag handle (mobile only) -->
     <div class="sheet-drag-handle" id="sheet-handle"></div>
 
-    <!-- Tab bar -->
     <div class="tab-bar">
-      <div class="tab active" onclick="switchTab('room')">教室を探す</div>
-      <div class="tab"       onclick="switchTab('node')">ノード指定</div>
-      <div class="tab"       onclick="switchTab('info')">情報</div>
+      <div class="tab active" onclick="switchTab('room')">
+        <span class="tab-icon">🏫</span>教室
+      </div>
+      <div class="tab" onclick="switchTab('node')">
+        <span class="tab-icon">🔵</span>ノード
+      </div>
+      <div class="tab" onclick="switchTab('toilet')">
+        <span class="tab-icon">🚻</span>トイレ
+      </div>
+      <div class="tab" onclick="switchTab('info')">
+        <span class="tab-icon">ℹ</span>情報
+      </div>
+      <div class="tab" onclick="switchTab('adjust')">
+        <span class="tab-icon">⚙</span>調整
+      </div>
     </div>
 
-    <!-- Scrollable content -->
     <div class="sheet-scroll-area">
 
       <!-- ===== TAB: 教室検索 ===== -->
@@ -528,6 +767,46 @@
         </div>
       </div>
 
+      <!-- ===== TAB: トイレ ===== -->
+      <div id="tab-toilet" class="tab-panel">
+        <div class="panel">
+          <h2>最寄りのトイレを探す</h2>
+
+          <label>トイレの種類</label>
+          <select id="toilet-type">
+            <option value="all">指定なし（最寄り）</option>
+            <option value="M">男子トイレ</option>
+            <option value="F">女子トイレ</option>
+            <option value="C">多目的トイレ</option>
+          </select>
+
+          <label>現在地の建物</label>
+          <select id="toilet-start-building" onchange="acToiletStart.onBuildingChange()">
+            <option value="0">すべての建物</option>
+            {% for b in buildings %}
+            <option value="{{ b }}">Building {{ b }}</option>
+            {% endfor %}
+          </select>
+
+          <label>現在地の教室名</label>
+          <div class="autocomplete-wrap">
+            <input type="text" id="toilet-start-input" placeholder="例: 101A" autocomplete="off" autocorrect="off" />
+            <div class="ac-dropdown" id="toilet-start-dropdown"></div>
+          </div>
+          <div class="room-badge" id="toilet-start-badge"></div>
+
+          <label class="checkbox-row">
+            <input type="checkbox" id="chk-elevator-toilet" checked>
+            エレベーターを使用する
+          </label>
+
+          <button class="btn btn-primary"   onclick="findNearestToilet()">検索</button>
+          <button class="btn btn-secondary" onclick="clearPath()">クリア</button>
+
+          <div id="toilet-result-box"></div>
+        </div>
+      </div>
+
       <!-- ===== TAB: 情報 ===== -->
       <div id="tab-info" class="tab-panel">
         <div class="panel">
@@ -536,16 +815,53 @@
         </div>
         <div class="panel">
           <h2>エッジの種類</h2>
-          <div class="legend-item"><div class="legend-dot" style="background:#FFB347"></div><span>階段</span></div>
-          <div class="legend-item"><div class="legend-dot" style="background:#00CED1"></div><span>エスカレーター</span></div>
-          <div class="legend-item"><div class="legend-dot" style="background:#DA70D6"></div><span>EV（エレベーター）</span></div>
+          <div class="legend-item"><div class="legend-dot" style="background:#FFB347;color:#FFB347"></div><span>階段</span></div>
+          <div class="legend-item"><div class="legend-dot" style="background:#00CED1;color:#00CED1"></div><span>エスカレーター</span></div>
+          <div class="legend-item"><div class="legend-dot" style="background:#DA70D6;color:#DA70D6"></div><span>EV（エレベーター）</span></div>
         </div>
         <div class="panel">
           <h2>グラフ統計</h2>
-          <div class="stat-row"><span>ノード数</span><span id="stat-nodes">-</span></div>
-          <div class="stat-row"><span>エッジ数</span><span id="stat-edges">-</span></div>
-          <div class="stat-row"><span>建物数</span> <span id="stat-buildings">-</span></div>
-          <div class="stat-row"><span>教室数</span> <span id="stat-rooms">-</span></div>
+          <div class="stat-row"><span>ノード数</span><span id="stat-nodes">—</span></div>
+          <div class="stat-row"><span>エッジ数</span><span id="stat-edges">—</span></div>
+          <div class="stat-row"><span>建物数</span> <span id="stat-buildings">—</span></div>
+          <div class="stat-row"><span>教室数</span> <span id="stat-rooms">—</span></div>
+        </div>
+      </div>
+
+      <!-- ===== TAB: 調整 ===== -->
+      <div id="tab-adjust" class="tab-panel">
+        <div class="panel">
+          <h2>建物の位置・高さ調整</h2>
+          <p style="font-size:0.72rem;color:var(--text-muted);margin-bottom:12px;line-height:1.6;">
+            アンカーが1点以下の建物の回転・高さを手動で調整します。<br>
+            2点アンカーがある建物は回転は自動計算されますが、高さオフセットは有効です。
+          </p>
+
+          <label>対象の建物</label>
+          <select id="adjust-building" onchange="onAdjustBuildingChange()">
+            <option value="">— 建物を選択 —</option>
+          </select>
+
+          <div id="adjust-controls" style="display:none">
+            <div class="adjust-row">
+              <label>回転角</label>
+              <input type="range" id="adj-rot-range" min="-180" max="180" step="0.5" value="0"
+                     oninput="syncAdjust('rot',this.value)">
+              <input type="number" id="adj-rot-num" min="-180" max="180" step="0.5" value="0"
+                     oninput="syncAdjust('rot',this.value)">
+              <span class="adjust-unit">°</span>
+            </div>
+            <div class="adjust-row">
+              <label>高さ補正</label>
+              <input type="range" id="adj-tz-range" min="-20" max="20" step="0.1" value="0"
+                     oninput="syncAdjust('tz',this.value)">
+              <input type="number" id="adj-tz-num" min="-20" max="20" step="0.1" value="0"
+                     oninput="syncAdjust('tz',this.value)">
+              <span class="adjust-unit">m</span>
+            </div>
+            <button class="btn btn-primary" onclick="applyBuildingConfig()" style="margin-top:4px;">適用して再描画</button>
+            <div id="adjust-result" style="margin-top:8px;font-size:0.76rem;display:none;"></div>
+          </div>
         </div>
       </div>
 
@@ -555,6 +871,7 @@
   <!-- ========== 3D MAP ========== -->
   <div id="map-container">
     <div id="map"></div>
+    <button id="top-view-btn" onclick="setTopView()">俯瞰 ↑</button>
     <div class="map-hint">
       <span class="hint-desktop">左ドラッグ: 回転 ／ スクロール: ズーム ／ 右ドラッグ: 移動</span>
       <span class="hint-mobile">1本指: 回転 ／ ピンチ: ズーム</span>
@@ -567,13 +884,15 @@
 // ============================================================
 //  Globals
 // ============================================================
+const Z_SCALE   = 3.0;  // 高さ方向の倍率（viewer.htmlと共通）
 let graphData   = null;
 let currentPath = null;
 let startEdge   = null;
 let destEdge    = null;
 let filterBuilding = 0;
-let acStart = null;
-let acGoal  = null;
+let acStart       = null;
+let acGoal        = null;
+let acToiletStart = null;
 
 // フロアカラーパレット (1F〜8F)
 const FLOOR_COLORS = [
@@ -590,6 +909,8 @@ function floorColor(f) {
 (async () => {
   const res = await fetch("/api/graph");
   graphData = await res.json();
+  graphData.nodes.forEach(n => { n.z *= Z_SCALE; });
+  graphData.edges.forEach(e => { e.z0 *= Z_SCALE; e.z1 *= Z_SCALE; });
   buildLegend();
   updateStats();
   renderMap();
@@ -602,6 +923,10 @@ function floorColor(f) {
   acGoal = new RoomAutocomplete({
     inputId: "goal-room-input", dropdownId: "goal-room-dropdown",
     badgeId: "goal-room-badge", buildingId: "goal-building",
+  });
+  acToiletStart = new RoomAutocomplete({
+    inputId: "toilet-start-input", dropdownId: "toilet-start-dropdown",
+    badgeId: "toilet-start-badge", buildingId: "toilet-start-building",
   });
 
   initSheet();
@@ -636,14 +961,12 @@ function initSheet() {
   const sidebar = document.getElementById("sidebar");
   const mapEl   = document.getElementById("map-container");
 
-  // Tap map backdrop to close
   mapEl.addEventListener("pointerdown", (e) => {
     if (isMobile() && mapEl.classList.contains("sheet-open-backdrop")) {
       closeSheet();
     }
   });
 
-  // Drag handle — touch
   let dragStartY = 0;
   let sheetOpenAtStart = false;
 
@@ -654,18 +977,16 @@ function initSheet() {
   }, { passive: false });
 
   handle.addEventListener("touchmove", (e) => {
-    e.preventDefault(); // prevent page scroll
+    e.preventDefault();
   }, { passive: false });
 
   handle.addEventListener("touchend", (e) => {
     const dy = e.changedTouches[0].clientY - dragStartY;
-    // swipe up (dy < -20) → open, swipe down (dy > 20) → close, small tap → toggle
     if (dy < -20) openSheet();
     else if (dy > 20) closeSheet();
     else toggleSheet(!sheetOpenAtStart);
   });
 
-  // Tap on tab-bar drag handle area also toggles
   handle.addEventListener("click", () => {
     if (isMobile()) toggleSheet(!sidebar.classList.contains("sheet-open"));
   });
@@ -675,13 +996,13 @@ function initSheet() {
 //  Tab switching
 // ============================================================
 function switchTab(name) {
-  const names = ["room", "node", "info"];
+  const names = ["room", "node", "toilet", "info", "adjust"];
   document.querySelectorAll(".tab").forEach((t, i) =>
     t.classList.toggle("active", names[i] === name));
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
   document.getElementById("tab-" + name).classList.add("active");
 
-  // On mobile: open the sheet when a tab is tapped
+  if (name === "adjust") loadBuildingConfigPanel();
   if (isMobile()) openSheet();
 }
 
@@ -695,7 +1016,8 @@ function buildLegend() {
   floors.forEach(f => {
     const div = document.createElement("div");
     div.className = "legend-item";
-    div.innerHTML = `<div class="legend-dot" style="background:${floorColor(f)}"></div><span>${f}F</span>`;
+    const color = floorColor(f);
+    div.innerHTML = `<div class="legend-dot" style="background:${color};color:${color}"></div><span>${f}F</span>`;
     container.appendChild(div);
   });
 }
@@ -723,7 +1045,6 @@ class RoomAutocomplete {
     this.input.addEventListener("blur",    () => setTimeout(() => this._hide(), 200));
     this.input.addEventListener("keydown", (e) => this._onKeydown(e));
 
-    // On mobile: scroll sheet to keep input visible when keyboard opens
     this.input.addEventListener("focus", () => {
       if (isMobile()) {
         openSheet();
@@ -758,8 +1079,7 @@ class RoomAutocomplete {
     this.roomList.forEach((r, i) => {
       const div = document.createElement("div");
       div.className = "room-option";
-      div.innerHTML = `<span>${r.room}</span><span class="room-meta">B${r.building} / ${r.floor}F</span>`;
-      // Use pointerdown instead of mousedown for better mobile support
+      div.innerHTML = `<span>${r.room}</span><span class="room-meta">B${r.building}·${r.floor}F</span>`;
       div.addEventListener("pointerdown", (e) => { e.preventDefault(); this._select(i); });
       this.dropdown.appendChild(div);
     });
@@ -799,6 +1119,19 @@ class RoomAutocomplete {
 }
 
 // ============================================================
+//  APIから返った経路データのz値にZ_SCALEを適用
+// ============================================================
+function scalePathZ(data) {
+  if (!data || data.error) return data;
+  (data.path_coords || []).forEach(n => { n.z *= Z_SCALE; });
+  (data.path_edges  || []).forEach(e => { e.z0 *= Z_SCALE; e.z1 *= Z_SCALE; });
+  ['start_edge','destination_edge','from_edge','toilet_edge'].forEach(k => {
+    if (data[k]) { data[k].z0 *= Z_SCALE; data[k].z1 *= Z_SCALE; }
+  });
+  return data;
+}
+
+// ============================================================
 //  Navigate: 教室 → 教室
 // ============================================================
 async function navigateToRoom() {
@@ -821,7 +1154,7 @@ async function navigateToRoom() {
     `&start_room=${encodeURIComponent(sRoom)}&start_building=${sBuilding}` +
     `&use_elevator=${useElevatorRoom}`;
 
-  const data = await fetch(url).then(r => r.json());
+  const data = scalePathZ(await fetch(url).then(r => r.json()));
 
   if (data.error) {
     showResult(box, "error", data.error);
@@ -851,7 +1184,7 @@ async function findPathByNode() {
   box.style.display = "none";
 
   const useElevatorNode = document.getElementById("chk-elevator-node").checked ? "1" : "0";
-  const data = await fetch(`/api/shortest_path?start=${start}&goal=${goal}&use_elevator=${useElevatorNode}`).then(r => r.json());
+  const data = scalePathZ(await fetch(`/api/shortest_path?start=${start}&goal=${goal}&use_elevator=${useElevatorNode}`).then(r => r.json()));
 
   if (data.error) {
     showResult(box, "error", data.error);
@@ -868,11 +1201,50 @@ async function findPathByNode() {
   renderMap();
 }
 
+// ============================================================
+//  最寄りトイレ検索
+// ============================================================
+async function findNearestToilet() {
+  const box = document.getElementById("toilet-result-box");
+  box.style.display = "none";
+
+  if (!acToiletStart.selected) {
+    showResult(box, "error", "現在地の教室を選択してください"); return;
+  }
+
+  const { room, building } = acToiletStart.selected;
+  const type        = document.getElementById("toilet-type").value;
+  const useElevator = document.getElementById("chk-elevator-toilet").checked ? "1" : "0";
+
+  const url = `/api/nearest_toilet` +
+    `?from_room=${encodeURIComponent(room)}&from_building=${building}` +
+    `&type=${type}&use_elevator=${useElevator}`;
+
+  const data = scalePathZ(await fetch(url).then(r => r.json()));
+
+  if (data.error) {
+    showResult(box, "error", data.error);
+    currentPath = null; startEdge = null; destEdge = null;
+  } else {
+    currentPath = data;
+    startEdge   = data.from_edge    || null;
+    destEdge    = data.toilet_edge  || null;
+    const totalLen = data.path_edges.reduce((s, e) => s + (e.length || 0), 0);
+    showResult(box, "success",
+      `<b>出発:</b> ${room}（Building ${building}）<br>` +
+      `<b>最寄り:</b> ${data.toilet_label}（Building ${data.toilet_building} / ${data.toilet_floor}F）<br>` +
+      `<b>距離:</b> ${totalLen.toFixed(1)} m`
+    );
+  }
+  renderMap();
+}
+
 function clearPath() {
   currentPath = null; startEdge = null; destEdge = null;
-  acStart?.reset(); acGoal?.reset();
-  document.getElementById("room-result-box").style.display = "none";
-  document.getElementById("result-box").style.display = "none";
+  acStart?.reset(); acGoal?.reset(); acToiletStart?.reset();
+  document.getElementById("room-result-box").style.display   = "none";
+  document.getElementById("result-box").style.display        = "none";
+  document.getElementById("toilet-result-box").style.display = "none";
   renderMap();
 }
 
@@ -907,22 +1279,18 @@ function buildBuildingBoxTraces(nodes) {
     const y0 = Math.min(...ys) - padXY, y1 = Math.max(...ys) + padXY;
     const z0 = Math.min(...zs) - 0.5,   z1 = Math.max(...zs) + 0.5;
 
-    // 8頂点
     const vx = [x0,x1,x1,x0, x0,x1,x1,x0];
     const vy = [y0,y0,y1,y1, y0,y0,y1,y1];
     const vz = [z0,z0,z0,z0, z1,z1,z1,z1];
-    // 12三角形 (6面 × 2)
     const fi = [0,0, 4,4, 0,0, 2,2, 0,0, 1,1];
     const fj = [1,2, 5,6, 1,5, 3,7, 3,7, 2,6];
     const fk = [2,3, 6,7, 5,4, 7,6, 7,4, 6,5];
 
-    // 半透明面
     traces.push({
       type:"mesh3d", x:vx, y:vy, z:vz, i:fi, j:fj, k:fk,
       color, opacity:0.06, hoverinfo:"none", showlegend:false,
     });
 
-    // ワイヤーフレーム (12辺)
     const ex = [x0,x1,null, x1,x1,null, x1,x0,null, x0,x0,null,
                 x0,x1,null, x1,x1,null, x1,x0,null, x0,x0,null,
                 x0,x0,null, x1,x1,null, x1,x1,null, x0,x0,null];
@@ -937,7 +1305,6 @@ function buildBuildingBoxTraces(nodes) {
       line:{color, width:1.5}, hoverinfo:"none", showlegend:false,
     });
 
-    // 建物ラベル (上部中央)
     traces.push({
       type:"scatter3d", mode:"text",
       x:[(x0+x1)/2], y:[(y0+y1)/2], z:[z1+0.4],
@@ -953,7 +1320,6 @@ function buildBuildingBoxTraces(nodes) {
 //  案2: フロア床面
 // ============================================================
 function buildFloorPlaneTraces(nodes) {
-  // 建物ごとのx/y全体範囲を先に計算 → 全フロア床面を同じ広さに揃える
   const bldgBounds = {};
   nodes.forEach(n => {
     const b = n.building;
@@ -974,14 +1340,12 @@ function buildFloorPlaneTraces(nodes) {
     const color = floorColor(floor);
     const zVal = ns.reduce((s, n) => s + n.z, 0) / ns.length;
 
-    // 建物全体のx/y範囲を使う
     const bxs = bldgBounds[building].xs, bys = bldgBounds[building].ys;
     const rangeXY = Math.max(Math.max(...bxs) - Math.min(...bxs), Math.max(...bys) - Math.min(...bys));
     const padXY = Math.max(rangeXY * 0.04, 0.5);
     const x0 = Math.min(...bxs) - padXY, x1 = Math.max(...bxs) + padXY;
     const y0 = Math.min(...bys) - padXY, y1 = Math.max(...bys) + padXY;
 
-    // 床面
     traces.push({
       type:"mesh3d",
       x:[x0,x1,x1,x0], y:[y0,y0,y1,y1],
@@ -992,7 +1356,6 @@ function buildFloorPlaneTraces(nodes) {
       showlegend:false,
     });
 
-    // 階数ラベル (隅)
     traces.push({
       type:"scatter3d", mode:"text",
       x:[x1], y:[y0], z:[zVal],
@@ -1018,9 +1381,10 @@ function sameEdge(a, b) {
 }
 
 function renderMap() {
-  const nodes = (filterBuilding
+  const indoorNodes = (filterBuilding
     ? graphData.nodes.filter(n => n.building === filterBuilding)
     : graphData.nodes).filter(n => n.building !== 0);
+  const nodes   = indoorNodes;
   const nodeIds = new Set(nodes.map(n => n.id));
   const edges   = filterBuilding
     ? graphData.edges.filter(e => nodeIds.has(e.from) && nodeIds.has(e.to)) : graphData.edges;
@@ -1028,15 +1392,36 @@ function renderMap() {
   const traces = [];
   traces.push(...buildFloorPlaneTraces(nodes));
   traces.push(...buildBuildingBoxTraces(nodes));
+
+  // --- 屋外ノード・エッジ (building=0) ---
+  if (!filterBuilding) {
+    const outdoorNodes = graphData.nodes.filter(n => n.building === 0);
+    const outdoorNodeIds = new Set(outdoorNodes.map(n => n.id));
+    const outdoorEdges = graphData.edges.filter(e =>
+      outdoorNodeIds.has(e.from) || outdoorNodeIds.has(e.to));
+    if (outdoorEdges.length) {
+      const ox=[],oy=[],oz=[];
+      outdoorEdges.forEach(e=>{ox.push(e.x0,e.x1,null);oy.push(e.y0,e.y1,null);oz.push(e.z0,e.z1,null);});
+      traces.push({ type:"scatter3d", mode:"lines", x:ox, y:oy, z:oz,
+        line:{color:"#5AFF5A", width:3, dash:"dot"}, hoverinfo:"none",
+        name:"屋外通路", showlegend:true });
+    }
+    if (outdoorNodes.length) {
+      traces.push({ type:"scatter3d", mode:"markers",
+        x:outdoorNodes.map(n=>n.x), y:outdoorNodes.map(n=>n.y), z:outdoorNodes.map(n=>n.z),
+        marker:{size:7, color:"#5AFF5A", opacity:0.9, symbol:"square",
+                line:{color:"#fff", width:1}},
+        text:outdoorNodes.map(n=>n.label), hovertemplate:"%{text}<extra></extra>",
+        name:"屋外ノード", showlegend:true });
+    }
+  }
   const pathEdgeSet = buildPathEdgeSet();
   const pathNodeSet = new Set(currentPath ? currentPath.path : []);
 
-  // 1. エッジ (type別色分け: 1=通路/フロア色, 2=階段/#FFB347, 3=エスカレーター/#00CED1, 4=EV/#DA70D6)
   const normalEdges = edges.filter(e =>
     !pathEdgeSet.has(`${e.from}-${e.to}`) && !pathEdgeSet.has(`${e.to}-${e.from}`) &&
     !sameEdge(e, destEdge) && !sameEdge(e, startEdge));
 
-  // type 1: 通路 — フロアごとに色分け
   const edgesByFloor = {};
   normalEdges.filter(e => String(e.type) === "1").forEach(e => {
     (edgesByFloor[e.floor] = edgesByFloor[e.floor] || []).push(e);
@@ -1049,8 +1434,7 @@ function renderMap() {
       line:{color, width:3}, hoverinfo:"none", name:`${f}F 通路`, showlegend:false });
   });
 
-  // type 2/3/4: 階段・エスカレーター・EV — 固定色
-  [["2","#FFB347","階段"], ["3","#00CED1","エスカレーター"], ["4","#DA70D6","EV"]].forEach(([t, color, label]) => {
+  [["2","#FFB347","階段"], ["3","#00CED1","エスカレーター"], ["4","#DA70D6","EV"], ["5","#00FF88","上りESC"], ["6","#FF4500","下りESC"]].forEach(([t, color, label]) => {
     const typeEdges = normalEdges.filter(e => String(e.type) === t);
     if (!typeEdges.length) return;
     const ex=[],ey=[],ez=[];
@@ -1059,7 +1443,6 @@ function renderMap() {
       line:{color, width:5}, hoverinfo:"none", name:label, showlegend:false });
   });
 
-  // 2. ノード (フロアごとに色分け、type=2は出入口として強調)
   const byFloor = {};
   nodes.forEach(n => { (byFloor[n.floor] = byFloor[n.floor] || []).push(n); });
   Object.entries(byFloor).forEach(([f, fNodes]) => {
@@ -1082,7 +1465,6 @@ function renderMap() {
     }
   });
 
-  // 3. Path edges (yellow)
   if (currentPath?.path_edges.length) {
     const px=[],py=[],pz=[];
     currentPath.path_edges.forEach(e=>{px.push(e.x0,e.x1,null);py.push(e.y0,e.y1,null);pz.push(e.z0,e.z1,null);});
@@ -1090,7 +1472,6 @@ function renderMap() {
       line:{color:"#ffd700",width:6}, hoverinfo:"none", name:"最短経路" });
   }
 
-  // 4. Start edge (green)
   if (startEdge) {
     traces.push({ type:"scatter3d", mode:"lines",
       x:[startEdge.x0,startEdge.x1], y:[startEdge.y0,startEdge.y1], z:[startEdge.z0,startEdge.z1],
@@ -1099,7 +1480,6 @@ function renderMap() {
       name:`出発: ${acStart?.selected?.room||startEdge.name}` });
   }
 
-  // 5. Dest edge (orange)
   if (destEdge) {
     traces.push({ type:"scatter3d", mode:"lines",
       x:[destEdge.x0,destEdge.x1], y:[destEdge.y0,destEdge.y1], z:[destEdge.z0,destEdge.z1],
@@ -1108,7 +1488,6 @@ function renderMap() {
       name:`目的地: ${acGoal?.selected?.room||destEdge.name}` });
   }
 
-  // 6. Path nodes (diamonds)
   if (currentPath?.path_coords.length) {
     const pn = currentPath.path_coords;
     traces.push({ type:"scatter3d", mode:"markers+text",
@@ -1120,18 +1499,18 @@ function renderMap() {
   }
 
   const layout = {
-    paper_bgcolor:"#0d1117", plot_bgcolor:"#0d1117",
+    paper_bgcolor:"#07111d", plot_bgcolor:"#07111d",
     margin:{l:0,r:0,t:0,b:0},
     scene:{
-      bgcolor:"#0d1117",
+      bgcolor:"#07111d",
       xaxis:axisStyle("X"), yaxis:{...axisStyle("Y"), autorange:"reversed"}, zaxis:axisStyle("階"),
       camera:{eye:{x:1.8,y:1.8,z:1.4}},
       aspectmode:"data",
     },
     legend:{
       x:.01, y:.99,
-      bgcolor:"rgba(22,27,34,.8)", bordercolor:"#30363d", borderwidth:1,
-      font:{color:"#e6edf3",size:11},
+      bgcolor:"rgba(10,20,34,.85)", bordercolor:"#1e3450", borderwidth:1,
+      font:{color:"#d4e8f8",size:11},
     },
     uirevision:"keep",
   };
@@ -1140,17 +1519,105 @@ function renderMap() {
 
 function axisStyle(title) {
   return {
-    title:{text:title,font:{color:"#8b949e",size:11}},
-    gridcolor:"#21262d", linecolor:"#30363d",
-    tickcolor:"#8b949e", tickfont:{color:"#8b949e",size:10},
-    backgroundcolor:"#0d1117", showbackground:true, zerolinecolor:"#30363d",
+    title:{text:title,font:{color:"#3a5878",size:11}},
+    gridcolor:"#122030", linecolor:"#1e3450",
+    tickcolor:"#3a5878", tickfont:{color:"#3a5878",size:9},
+    backgroundcolor:"#07111d", showbackground:true, zerolinecolor:"#1e3450",
   };
 }
 
-// Resize Plotly when sheet opens/closes on mobile (sheet changes map viewport)
 document.getElementById("sidebar").addEventListener("transitionend", () => {
   Plotly.Plots.resize(document.getElementById("map"));
 });
+
+// ============================================================
+//  俯瞰ビュー
+// ============================================================
+function setTopView() {
+  Plotly.relayout("map", {
+    "scene.camera": {
+      eye:    { x: 0, y: 0, z: 2.5 },
+      up:     { x: 0, y: 1, z: 0 },
+      center: { x: 0, y: 0, z: 0 },
+    }
+  });
+}
+
+// ============================================================
+//  建物調整パネル
+// ============================================================
+let _adjConfig = {};
+
+async function loadBuildingConfigPanel() {
+  const res = await fetch("/api/building_config");
+  _adjConfig = await res.json();
+  const sel = document.getElementById("adjust-building");
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— 建物を選択 —</option>';
+  Object.keys(_adjConfig).sort((a,b)=>+a-+b).forEach(b => {
+    const opt = document.createElement("option");
+    opt.value = b;
+    opt.textContent = `Building ${b}`;
+    sel.appendChild(opt);
+  });
+  if (prev && _adjConfig[prev]) sel.value = prev;
+  onAdjustBuildingChange();
+}
+
+function onAdjustBuildingChange() {
+  const bId = document.getElementById("adjust-building").value;
+  const ctrl = document.getElementById("adjust-controls");
+  if (!bId || !_adjConfig[bId]) { ctrl.style.display = "none"; return; }
+  ctrl.style.display = "block";
+  const cfg = _adjConfig[bId];
+  const rot = (cfg.rot_deg ?? 0).toFixed(1);
+  const tz  = (cfg.tz_offset ?? 0).toFixed(1);
+  document.getElementById("adj-rot-range").value = rot;
+  document.getElementById("adj-rot-num").value   = rot;
+  document.getElementById("adj-tz-range").value  = tz;
+  document.getElementById("adj-tz-num").value    = tz;
+  document.getElementById("adjust-result").style.display = "none";
+}
+
+function syncAdjust(type, val) {
+  const v = parseFloat(val) || 0;
+  if (type === "rot") {
+    document.getElementById("adj-rot-range").value = v;
+    document.getElementById("adj-rot-num").value   = v;
+  } else {
+    document.getElementById("adj-tz-range").value = v;
+    document.getElementById("adj-tz-num").value   = v;
+  }
+}
+
+async function applyBuildingConfig() {
+  const bId = document.getElementById("adjust-building").value;
+  if (!bId) return;
+  const rot = parseFloat(document.getElementById("adj-rot-num").value) || 0;
+  const tz  = parseFloat(document.getElementById("adj-tz-num").value)  || 0;
+  const res = await fetch(`/api/building_config/${bId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rot_deg: rot, tz_offset: tz }),
+  });
+  const data = await res.json();
+  const box = document.getElementById("adjust-result");
+  if (data.ok) {
+    box.style.cssText = "display:block;color:#88f0cc;";
+    box.textContent = `✓ Building ${bId} を更新しました`;
+    _adjConfig[bId] = { ...(_adjConfig[bId]||{}), rot_deg: rot, tz_offset: tz };
+    // グラフデータを再取得して再描画
+    const gres = await fetch("/api/graph");
+    graphData = await gres.json();
+    graphData.nodes.forEach(n => { n.z *= Z_SCALE; });
+    graphData.edges.forEach(e => { e.z0 *= Z_SCALE; e.z1 *= Z_SCALE; });
+    updateStats();
+    renderMap();
+  } else {
+    box.style.cssText = "display:block;color:#f08098;";
+    box.textContent = "エラーが発生しました";
+  }
+}
 </script>
 </body>
 </html>

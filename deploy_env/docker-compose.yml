@@ -1,0 +1,28 @@
+services:
+  python:
+    image: iki_project_2026_python
+    build: ./python/
+    container_name: 'iki_project_2026_python'
+    volumes:
+      - ../:/project/
+    command: gunicorn -w 3 -b 0.0.0.0:8000 app:app
+  nginx:
+    image: iki_project_2026_nginx
+    build: ./nginx/
+    container_name: 'iki_project_2026_nginx'
+    ports:
+      - 8080:80
+      - 4430:443
+    volumes:
+      - ./nginx/ssl/:/etc/nginx/certs/
+      - ../:/project/
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    depends_on:
+      - nginx
+    

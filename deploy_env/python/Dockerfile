@@ -6,7 +6,7 @@ ENV TERM=xterm-256color
 
 RUN echo "alias ls='ls --color=auto'" >> /root/.bashrc && \
     echo "alias grep='grep --color=auto'" >> /root/.bashrc && \
-    echo "export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '" >> /root/.bashrc
+    echo "export PS1='\[\e[1;32m\][PRODUCTION] \u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '" >> /root/.bashrc
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     vim \
@@ -19,4 +19,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 RUN pip install -r requirements.txt
 
-WORKDIR /project/programs
+WORKDIR /project/programs/3D_Graph
