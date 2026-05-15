@@ -262,6 +262,40 @@ def build_graph(nodes_df, edges_df, use_elevator=True):
     return G
 
 
+# ------------------------------------------------------------------ #
+#  Cache Mechanism
+# ------------------------------------------------------------------ #
+_cached_nodes_df = None
+_cached_edges_df = None
+_cached_graph_with_ev = None
+_cached_graph_without_ev = None
+
+def get_cached_data():
+    global _cached_nodes_df, _cached_edges_df
+    if _cached_nodes_df is None or _cached_edges_df is None:
+        _cached_nodes_df, _cached_edges_df = load_data()
+    return _cached_nodes_df, _cached_edges_df
+
+def get_cached_graph(use_elevator=True):
+    global _cached_graph_with_ev, _cached_graph_without_ev
+    nodes_df, edges_df = get_cached_data()
+    if use_elevator:
+        if _cached_graph_with_ev is None:
+            _cached_graph_with_ev = build_graph(nodes_df, edges_df, use_elevator=True)
+        return _cached_graph_with_ev
+    else:
+        if _cached_graph_without_ev is None:
+            _cached_graph_without_ev = build_graph(nodes_df, edges_df, use_elevator=False)
+        return _cached_graph_without_ev
+
+def clear_cache():
+    global _cached_nodes_df, _cached_edges_df, _cached_graph_with_ev, _cached_graph_without_ev
+    _cached_nodes_df = None
+    _cached_edges_df = None
+    _cached_graph_with_ev = None
+    _cached_graph_without_ev = None
+
+
 def _edge_to_dict(row, nodes_df):
     """edgeの行を座標付きdictに変換するヘルパー"""
     from_node = nodes_df[nodes_df["id"] == int(row["from"])].iloc[0]
@@ -316,7 +350,7 @@ def viewer():
 @app.route("/3d/")
 @app.route("/3d")
 def index():
-    nodes_df, edges_df = load_data()
+    nodes_df, edges_df = get_cached_data()
     node_ids  = sorted(nodes_df["id"].tolist())
     buildings = sorted(nodes_df["building"].unique().tolist())
     return render_template("index.html", node_ids=node_ids, buildings=buildings)
@@ -324,7 +358,7 @@ def index():
 
 @app.route("/api/graph")
 def api_graph():
-    nodes_df, edges_df = load_data()
+    nodes_df, edges_df = get_cached_data()
 
     nodes = []
     for _, row in nodes_df.iterrows():
@@ -368,7 +402,7 @@ def api_rooms():
     building_filter = request.args.get("building", type=int)
     query           = request.args.get("q", "").strip().lower()
 
-    _, edges_df = load_data()
+    _, edges_df = get_cached_data()
 
     rooms = []
     seen  = set()  # 重複排除 (room + building)
@@ -413,7 +447,7 @@ def api_all():
         "buildings": [ 1, 2, ... ]
       }
     """
-    nodes_df, edges_df = load_data()
+    nodes_df, edges_df = get_cached_data()
 
     rooms = []
     seen = set()
@@ -495,8 +529,8 @@ def api_navigate_to_room():
         return jsonify({"error": "start_room（＋start_building）または start を指定してください"}), 400
 
     use_elevator = request.args.get("use_elevator", "1") != "0"
-    nodes_df, edges_df = load_data()
-    G = build_graph(nodes_df, edges_df, use_elevator=use_elevator)
+    nodes_df, edges_df = get_cached_data()
+    G = get_cached_graph(use_elevator=use_elevator)
 
     # --- 目的教室のエッジを検索 ---
     dest_edges = _find_edges_for_room(edges_df, room_name, building)
@@ -591,8 +625,8 @@ def api_route():
     if not to_room and to_node_id is None:
         return jsonify({"error": "to_room（＋to_building）または to_node を指定してください"}), 400
 
-    nodes_df, edges_df = load_data()
-    G = build_graph(nodes_df, edges_df, use_elevator=use_elevator)
+    nodes_df, edges_df = get_cached_data()
+    G = get_cached_graph(use_elevator=use_elevator)
 
     # --- 出発候補ノード ---
     if from_room:
@@ -697,8 +731,8 @@ def api_nearest_toilet():
 
     targets = _TOILET_TYPE_MAP.get(toilet_type, _TOILET_TYPE_MAP["ALL"])
 
-    nodes_df, edges_df = load_data()
-    G = build_graph(nodes_df, edges_df, use_elevator=use_elevator)
+    nodes_df, edges_df = get_cached_data()
+    G = get_cached_graph(use_elevator=use_elevator)
 
     # 出発候補
     if from_room:
@@ -784,8 +818,8 @@ def api_shortest_path():
         return jsonify({"error": "start と goal のノードIDを指定してください"}), 400
 
     use_elevator = request.args.get("use_elevator", "1") != "0"
-    nodes_df, edges_df = load_data()
-    G = build_graph(nodes_df, edges_df, use_elevator=use_elevator)
+    nodes_df, edges_df = get_cached_data()
+    G = get_cached_graph(use_elevator=use_elevator)
 
     if start not in G.nodes:
         return jsonify({"error": f"ノード {start} が存在しません"}), 404
@@ -810,7 +844,7 @@ def api_shortest_path():
 def api_building_config_get():
     """全建物の rot_deg / tz_offset を返す"""
     config = _load_transform_config()
-    nodes_df, _ = load_data()
+    nodes_df, _ = get_cached_data()
     buildings = sorted(
         nodes_df[nodes_df["building"].astype(int) != 0]["building"]
         .dropna().astype(int).unique().tolist()
@@ -840,6 +874,7 @@ def api_building_config_post(building_id):
     config[str(building_id)] = cfg
     with open(BUILDINGS_JSON, "w") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
+    clear_cache()
     return jsonify({"ok": True, "building": building_id, "config": cfg})
 
 
