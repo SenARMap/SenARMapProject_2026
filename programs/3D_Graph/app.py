@@ -199,6 +199,35 @@ def load_data():
                     ge_raw[col] = default
             all_edges.append(ge_raw)
 
+    # anchors.csvから、グローバルノードとローカルノードを繋ぐエッジを生成
+    anchor_path = os.path.join(DATA_DIR, "anchors.csv")
+    if os.path.exists(anchor_path):
+        anchors_df = pd.read_csv(anchor_path)
+        anchors_df.columns = anchors_df.columns.str.strip()
+        if not anchors_df.empty:
+            anchor_edges = []
+            for idx, row in anchors_df.iterrows():
+                bldg_id = int(row["building"])
+                l_id = int(row["local_node_id"])
+                g_id = int(row["global_node_id"])
+                
+                local_global_id = bldg_id * ID_OFFSET + l_id
+                outdoor_global_id = g_id + GLOBAL_NODE_OFFSET
+                
+                anchor_edges.append({
+                    "id": 8000000 + idx,
+                    "from": local_global_id,
+                    "to": outdoor_global_id,
+                    "building": 0,
+                    "floor": 1,
+                    "weight": 1.0,
+                    "length": 0.0,
+                    "type": 1,
+                    "name": ""
+                })
+            if anchor_edges:
+                all_edges.append(pd.DataFrame(anchor_edges))
+
     if not all_nodes:
         return pd.DataFrame(), pd.DataFrame()
 
@@ -384,7 +413,10 @@ def api_graph():
     valid_edges = edges_df.dropna(subset=["id", "from", "to", "building", "floor", "weight", "length"])
     edges = [_edge_to_dict(row, nodes_df) for _, row in valid_edges.iterrows()]
 
-    return jsonify({"nodes": nodes, "edges": edges, "building_colors": BUILDING_COLORS})
+    config = _load_transform_config()
+    config.update(_calc_transforms_from_anchors())
+
+    return jsonify({"nodes": nodes, "edges": edges, "building_colors": BUILDING_COLORS, "config": config})
 
 
 # ------------------------------------------------------------------ #
