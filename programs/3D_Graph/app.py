@@ -253,8 +253,7 @@ _DIRECTED_EDGE_TYPES = {"5", "6"}  # 上りエスカレータ(5)・下りエス�
 def build_graph(nodes_df, edges_df, use_elevator=True):
     G = nx.DiGraph()
     for _, row in nodes_df.iterrows():
-        G.add_node(
-            int(row["id"]),
+        node_attrs = dict(
             x=float(row["x"]),
             y=float(row["y"]),
             z=float(row["z"]),
@@ -262,6 +261,11 @@ def build_graph(nodes_df, edges_df, use_elevator=True):
             floor=int(row["floor"]),
             node_type=int(row["type"]),
         )
+        if "lat" in row and pd.notna(row["lat"]):
+            node_attrs["lat"] = float(row["lat"])
+        if "lng" in row and pd.notna(row["lng"]):
+            node_attrs["lng"] = float(row["lng"])
+        G.add_node(int(row["id"]), **node_attrs)
     for _, row in edges_df.iterrows():
         edge_type = str(row["type"]).strip()
         if not use_elevator and edge_type == "4":
@@ -349,7 +353,12 @@ def _path_result(G, path, length):
     path_coords = []
     for node_id in path:
         n = G.nodes[node_id]
-        path_coords.append({"id": node_id, "x": n["x"], "y": n["y"], "z": n["z"]})
+        coord_dict = {"id": node_id, "x": n["x"], "y": n["y"], "z": n["z"]}
+        if "lat" in n:
+            coord_dict["lat"] = n["lat"]
+        if "lng" in n:
+            coord_dict["lng"] = n["lng"]
+        path_coords.append(coord_dict)
 
     path_edges = []
     for i in range(len(path) - 1):
@@ -398,7 +407,7 @@ def api_graph():
             color = OUTDOOR_COLOR
         else:
             color = BUILDING_COLORS[(bldg - 1) % len(BUILDING_COLORS)]
-        nodes.append({
+        node_dict = {
             "id":       int(row["id"]),
             "x":        float(row["x"]),
             "y":        float(row["y"]),
@@ -408,7 +417,12 @@ def api_graph():
             "type":     int(row["type"]),
             "color":    color,
             "label":    f"Node {int(row['id'])}<br>{'屋外' if bldg == 0 else f'Building {bldg}'} / Floor {int(row['floor'])}",
-        })
+        }
+        if "lat" in row and pd.notna(row["lat"]):
+            node_dict["lat"] = float(row["lat"])
+        if "lng" in row and pd.notna(row["lng"]):
+            node_dict["lng"] = float(row["lng"])
+        nodes.append(node_dict)
 
     valid_edges = edges_df.dropna(subset=["id", "from", "to", "building", "floor", "weight", "length"])
     edges = [_edge_to_dict(row, nodes_df) for _, row in valid_edges.iterrows()]
@@ -505,16 +519,21 @@ def api_all():
             })
     rooms.sort(key=lambda r: (r["building"], r["room"]))
 
-    nodes = [
-        {
+    nodes = []
+    for _, row in nodes_df.iterrows():
+        if any(pd.isna(row[c]) for c in ["id", "building", "floor", "type"]):
+            continue
+        nd = {
             "id":       int(row["id"]),
             "building": int(row["building"]),
             "floor":    int(row["floor"]),
             "type":     int(row["type"]),
         }
-        for _, row in nodes_df.iterrows()
-        if not any(pd.isna(row[c]) for c in ["id", "building", "floor", "type"])
-    ]
+        if "lat" in row and pd.notna(row["lat"]):
+            nd["lat"] = float(row["lat"])
+        if "lng" in row and pd.notna(row["lng"]):
+            nd["lng"] = float(row["lng"])
+        nodes.append(nd)
     nodes.sort(key=lambda n: n["id"])
 
     buildings = sorted(nodes_df["building"].dropna().astype(int).unique().tolist())

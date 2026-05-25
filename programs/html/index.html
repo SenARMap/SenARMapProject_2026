@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>カスタムルート描画マップ</title>
+  <style>
+    /* 地図のサイズ指定（必須） */
+    #map { height: 500px; width: 100%; }
+    
+    /* ボタン周りの余白 */
+    .controls { margin-bottom: 15px; }
+    button, input { padding: 8px; margin-right: 10px; margin-bottom: 10px; cursor: pointer; }
+    input { cursor: text; }
+  </style>
+</head>
+<body>
+
+  <!-- API連携用のコントロール -->
+  <div class="controls">
+    <input type="number" id="startNode" placeholder="出発ノードID (例: 100001)">
+    <input type="number" id="goalNode" placeholder="目的ノードID (例: 100005)">
+    <button onclick="searchRoute()">ルートを検索・描画</button>
+    <button onclick="startTracking()">現在地追跡開始</button>
+    <button onclick="stopTracking()">現在地追跡停止</button>
+  </div>
+
+  <!-- 地図を表示するエリア -->
+  <div id="map"></div>
+
+  <script>
+    // app.pyのURLに合わせてベースURLを変更してください
+    const API_BASE = "http://localhost:5001";
+    let map;
+    let currentRouteLine = null;
+    let currentLocationMarker = null;
+
+    // 地図の初期化処理
+    function initMap() {
+      map = new google.maps.Map(document.getElementById("map"), {
+        zoom: 15,
+        center: { lat: 35.682500, lng: 139.772000 } // 初期表示の中心点
+      });
+    }
+
+    // フォームから入力値を取得してAPIを呼び出す
+    function searchRoute() {
+      const startId = document.getElementById("startNode").value;
+      const goalId = document.getElementById("goalNode").value;
+      
+      if (!startId || !goalId) {
+        alert("出発ノードIDと目的ノードIDを入力してください。");
+        return;
+      }
+      
+      fetchAndDrawRoute(startId, goalId);
+    }
+
+    // APIを呼び出してルートを取得・描画する関数
+    async function fetchAndDrawRoute(startId, goalId) {
+      try {
+        // app.py のルーティングAPIをコール
+        const url = `${API_BASE}/api/route?from_node=${startId}&to_node=${goalId}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.error) {
+          alert("エラー: " + data.error);
+          return;
+        }
+
+        // path_coords から緯度経度（lat, lng）が存在するものを抽出
+        const pathCoordinates = data.path_coords
+          .filter(node => node.lat !== undefined && node.lng !== undefined)
+          .map(node => ({ lat: node.lat, lng: node.lng }));
+
+        if (pathCoordinates.length === 0) {
+          alert("取得した経路に緯度経度(lat, lng)が含まれていません。");
+          return;
+        }
+
+        drawPathOnMap(pathCoordinates);
+      } catch (error) {
+        console.error("APIリクエストエラー:", error);
+        alert("APIの呼び出しに失敗しました。app.pyが起動しているか、またはCORS制約がないか確認してください。");
+      }
+    }
+
+    function drawPathOnMap(pathCoordinates) {
+      // ① すでに線が描画されていれば、地図から消去する
+      if (currentRouteLine !== null) {
+        currentRouteLine.setMap(null);
+      }
+
+      // ② ポリライン（線）のオブジェクトを作成
+      currentRouteLine = new google.maps.Polyline({
+        path: pathCoordinates,
+        geodesic: true,
+        strokeColor: "#0000FF", // 線の色（青）
+        strokeOpacity: 0.8,
+        strokeWeight: 6
+      });
+
+      // ③ 地図に新しい線を描画
+      currentRouteLine.setMap(map);
+
+      // ④ ズームと中心の自動調整
+      const bounds = new google.maps.LatLngBounds();
+
+      // ルートを構成するすべての座標を「範囲（bounds）」に追加
+      pathCoordinates.forEach(coord => {
+        bounds.extend(coord);
+      });
+
+      // ルート全体が収まるように地図を動かす（上下左右に50pxの余白を持たせる）
+      map.fitBounds(bounds, 50);
+    }
+
+    let watchId = null; // 追跡処理のIDを保持
+
+    function startTracking() {
+      if (navigator.geolocation) {
+        // 位置が変わるたびに自動で第1引数の関数が実行される
+        watchId = navigator.geolocation.watchPosition(
+          function(position) {
+            const pos = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            };
+
+            if (currentLocationMarker === null) {
+              // 1. 最初はピンを作成して地図に置く
+              currentLocationMarker = new google.maps.Marker({
+                position: pos,
+                map: map,
+                title: "現在地",
+                icon: {
+                  path: google.maps.SymbolPath.CIRCLE,
+                  scale: 8,
+                  fillColor: "#4285F4",
+                  fillOpacity: 1,
+                  strokeColor: "white",
+                  strokeWeight: 2
+                }
+              });
+              // 初回のみ、地図の中心を現在地に合わせる
+              map.setCenter(pos);
+            } else {
+              // 2. 2回目以降は、ピンの「位置（position）」だけを更新する
+              currentLocationMarker.setPosition(pos);
+            }
+          },
+          function(error) {
+            console.warn("位置情報の取得エラー: ", error.message);
+          },
+          {
+            enableHighAccuracy: true, // スマホの正確なGPSチップを強制的に使う
+            maximumAge: 0,            // 古いキャッシュデータは使わない
+            timeout: 5000             // 5秒以内に取得できなければエラーにする
+          }
+        );
+      } else {
+        alert("お使いのブラウザは位置情報に対応していません。");
+      }
+    }
+
+    // （オプション）追跡を停止してスマホのバッテリー消費を抑える関数
+    function stopTracking() {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+    }
+  </script>
+
+  <!-- Google Maps APIの読み込み（YOUR_API_KEYを実際のAPIキーに書き換えてください） -->
+  <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBlSPFj8D8xdQLDC9oGx2nLpSiXk7w9dUw&callback=initMap">
+  </script>
+</body>
+</html>
