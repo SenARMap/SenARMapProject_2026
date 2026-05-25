@@ -9,3 +9,13 @@ services:
     volumes:
       - ../:/project/
     command: tail -f /dev/null
+  nginx:
+    image: iki_project_2026_nginx
+    build: ./nginx/
+    container_name: 'iki_project_2026_nginx'
+    ports:
+      - 8080:80
+      - 4430:443
+    volumes:
+      - ./nginx/ssl/:/etc/nginx/certs/
+      - ../:/project/
