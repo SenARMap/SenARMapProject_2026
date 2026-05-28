@@ -29,17 +29,20 @@
 
   <script>
     // app.pyのURLに合わせてベースURLを変更してください
-    const API_BASE = "http://localhost:5001";
+    const API_BASE = "http://localhost:8080";
     let map;
     let currentRouteLine = null;
     let currentLocationMarker = null;
 
     // 地図の初期化処理
     function initMap() {
-      map = new google.maps.Map(document.getElementById("map"), {
-        zoom: 15,
-        center: { lat: 35.682500, lng: 139.772000 } // 初期表示の中心点
-      });
+        map = new google.maps.Map(document.getElementById("map"), {
+            // ① 初期表示のズームレベル（数値が大きいほど拡大）
+            zoom: 17, 
+            
+            // ② 初期表示の中心点（緯度・経度）
+            center: { lat: 35.61035, lng: 139.55466 } 
+        });
     }
 
     // フォームから入力値を取得してAPIを呼び出す
@@ -86,33 +89,44 @@
     }
 
     function drawPathOnMap(pathCoordinates) {
-      // ① すでに線が描画されていれば、地図から消去する
-      if (currentRouteLine !== null) {
+    // ① すでに線が描画されていれば、地図から消去する
+    if (currentRouteLine !== null) {
         currentRouteLine.setMap(null);
-      }
+    }
 
-      // ② ポリライン（線）のオブジェクトを作成
-      currentRouteLine = new google.maps.Polyline({
+    // ② 矢印アイコンの定義
+    const arrowSymbol = {
+        path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, // 塗りつぶされた矢印
+        scale: 3,               // 矢印の大きさ
+        strokeColor: "#FFFFFF", // 矢印のフチの色（白にすると目立ちます）
+        strokeWeight: 1.5,
+        fillColor: "#0000FF",   // 矢印の中の色（線と同じ青）
+        fillOpacity: 1
+    };
+
+    // ③ ポリライン（線）のオブジェクトを作成
+    currentRouteLine = new google.maps.Polyline({
         path: pathCoordinates,
         geodesic: true,
         strokeColor: "#0000FF", // 線の色（青）
-        strokeOpacity: 0.8,
-        strokeWeight: 6
-      });
+        strokeOpacity: 0.6,     // 矢印を目立たせるため、線の透明度を少し下げる
+        strokeWeight: 5,        // 線の太さ
+        icons: [{
+        icon: arrowSymbol,
+        offset: "10px",       // 最初の矢印のスタート位置
+        repeat: "60px"        // 60ピクセル間隔で矢印を繰り返し配置
+        }]
+    });
 
-      // ③ 地図に新しい線を描画
-      currentRouteLine.setMap(map);
+    // ④ 地図に新しい線を描画
+    currentRouteLine.setMap(map);
 
-      // ④ ズームと中心の自動調整
-      const bounds = new google.maps.LatLngBounds();
-
-      // ルートを構成するすべての座標を「範囲（bounds）」に追加
-      pathCoordinates.forEach(coord => {
+    // ⑤ ズームと中心の自動調整
+    const bounds = new google.maps.LatLngBounds();
+    pathCoordinates.forEach(coord => {
         bounds.extend(coord);
-      });
-
-      // ルート全体が収まるように地図を動かす（上下左右に50pxの余白を持たせる）
-      map.fitBounds(bounds, 50);
+    });
+    map.fitBounds(bounds, 50);
     }
 
     let watchId = null; // 追跡処理のIDを保持
