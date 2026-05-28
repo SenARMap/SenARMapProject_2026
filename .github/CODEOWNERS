@@ -1,1 +1,5 @@
-* @SenARMap
+* @SenARMapOrg/Program_Admin
+/programs/ @SenARMapOrg/Backend_Team
+/programs/html/ @SenARMapOrg/Frontend_Team
+/data/ @SenARMapOrg/CSVMake_Team
+/programs/Website/ @SenARMapOrg/WebDesigner_Team
