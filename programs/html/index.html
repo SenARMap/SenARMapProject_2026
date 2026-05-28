@@ -2,45 +2,105 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>カスタムルート描画マップ</title>
   <style>
-    /* 地図のサイズ指定（必須） */
-    #map { height: 500px; width: 100%; }
-    
-    /* ボタン周りの余白 */
-    .controls { margin-bottom: 15px; }
-    button, input { padding: 8px; margin-right: 10px; margin-bottom: 10px; cursor: pointer; }
-    input { cursor: text; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    #map { width: 100%; height: calc(100vh - 130px); }
+    .controls {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      padding: 12px; background: white;
+      box-shadow: 0 -2px 8px rgba(0,0,0,0.15);
+      display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    input[type="number"] {
+      flex: 1; min-width: 120px; height: 44px;
+      font-size: 16px; padding: 0 10px;
+      border: 1px solid #ccc; border-radius: 6px;
+    }
+    button {
+      height: 44px; padding: 0 16px; font-size: 15px;
+      border: none; border-radius: 6px;
+      background: #4285F4; color: white; cursor: pointer;
+    }
   </style>
 </head>
 <body>
 
-  <!-- API連携用のコントロール -->
-  <div class="controls">
-    <input type="number" id="startNode" placeholder="出発ノードID (例: 100001)">
-    <input type="number" id="goalNode" placeholder="目的ノードID (例: 100005)">
-    <button onclick="searchRoute()">ルートを検索・描画</button>
-    <button onclick="startTracking()">現在地追跡開始</button>
-    <button onclick="stopTracking()">現在地追跡停止</button>
-  </div>
-
-  <!-- 地図を表示するエリア -->
   <div id="map"></div>
+
+  <div class="controls">
+    <input type="number" id="startNode" placeholder="出発ノードID (例: 9000001)">
+    <input type="number" id="goalNode" placeholder="目的ノードID (例: 9000015)">
+    <button onclick="searchRoute()">検索</button>
+    <button onclick="startTracking()">追跡開始</button>
+    <button onclick="stopTracking()">追跡停止</button>
+  </div>
 
   <script>
     // app.pyのURLに合わせてベースURLを変更してください
-    //const API_BASE = "http://localhost:5001";
-    const API_BASE = "http://localhost:8080";
+    const API_BASE = "";
     let map;
-    let currentRouteLine = null;
+    let activePolylines = [];
     let currentLocationMarker = null;
 
-    // 地図の初期化処理
     function initMap() {
       map = new google.maps.Map(document.getElementById("map"), {
-        zoom: 15,
-        center: { lat: 35.682500, lng: 139.772000 } // 初期表示の中心点
+        zoom: 17,
+        center: { lat: 35.6108, lng: 139.5539 }
       });
+    }
+
+    function clearRoute() {
+      activePolylines.forEach(p => p.setMap(null));
+      activePolylines = [];
+    }
+
+    function haversineDistance(a, b) {
+      const R = 6371000;
+      const φ1 = a.lat * Math.PI / 180, φ2 = b.lat * Math.PI / 180;
+      const Δφ = (b.lat - a.lat) * Math.PI / 180;
+      const Δλ = (b.lng - a.lng) * Math.PI / 180;
+      const x = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+    }
+
+    const MAX_DASHED_M = 500;
+
+    function buildSegments(pathCoords) {
+      const solidSegments = [];
+      const dashedConnectors = [];
+      let current = [];
+      let lastOutdoor = null;
+      let inIndoor = false;
+
+      for (const node of pathCoords) {
+        const b = node.building;
+        const isOutdoor = b === 0 || b === "0" || b === null || b === undefined;
+
+        if (isOutdoor) {
+          const pt = { lat: node.lat, lng: node.lng };
+          if (inIndoor) {
+            if (lastOutdoor && haversineDistance(lastOutdoor, pt) <= MAX_DASHED_M) {
+              dashedConnectors.push([lastOutdoor, pt]);
+            }
+            inIndoor = false;
+            current = [pt];
+          } else {
+            current.push(pt);
+          }
+          lastOutdoor = pt;
+        } else {
+          if (!inIndoor) {
+            if (current.length > 0) solidSegments.push([...current]);
+            current = [];
+            inIndoor = true;
+          }
+        }
+      }
+      if (current.length > 0) solidSegments.push(current);
+      return { solidSegments, dashedConnectors };
     }
 
     // フォームから入力値を取得してAPIを呼び出す
@@ -56,64 +116,61 @@
       fetchAndDrawRoute(startId, goalId);
     }
 
-    // APIを呼び出してルートを取得・描画する関数
     async function fetchAndDrawRoute(startId, goalId) {
       try {
-        // app.py のルーティングAPIをコール
         const url = `${API_BASE}/api/route?from_node=${startId}&to_node=${goalId}`;
         const response = await fetch(url);
         const data = await response.json();
-
-        if (data.error) {
-          alert("エラー: " + data.error);
-          return;
-        }
-
-        // path_coords から緯度経度（lat, lng）が存在するものを抽出
-        const pathCoordinates = data.path_coords
-          .filter(node => node.lat !== undefined && node.lng !== undefined)
-          .map(node => ({ lat: node.lat, lng: node.lng }));
-
-        if (pathCoordinates.length === 0) {
-          alert("取得した経路に緯度経度(lat, lng)が含まれていません。");
-          return;
-        }
-
-        drawPathOnMap(pathCoordinates);
+        if (data.error) { alert("エラー: " + data.error); return; }
+        drawPathOnMap(data.path_coords);
+        // TODO: 将来ここに屋内SVG切り替えを追加
       } catch (error) {
         console.error("APIリクエストエラー:", error);
         alert("APIの呼び出しに失敗しました。app.pyが起動しているか、またはCORS制約がないか確認してください。");
       }
     }
 
-    function drawPathOnMap(pathCoordinates) {
-      // ① すでに線が描画されていれば、地図から消去する
-      if (currentRouteLine !== null) {
-        currentRouteLine.setMap(null);
-      }
-
-      // ② ポリライン（線）のオブジェクトを作成
-      currentRouteLine = new google.maps.Polyline({
-        path: pathCoordinates,
-        geodesic: true,
-        strokeColor: "#0000FF", // 線の色（青）
-        strokeOpacity: 0.8,
-        strokeWeight: 6
-      });
-
-      // ③ 地図に新しい線を描画
-      currentRouteLine.setMap(map);
-
-      // ④ ズームと中心の自動調整
+    function drawPathOnMap(pathCoords) {
+      clearRoute();
+      const { solidSegments, dashedConnectors } = buildSegments(pathCoords);
       const bounds = new google.maps.LatLngBounds();
 
-      // ルートを構成するすべての座標を「範囲（bounds）」に追加
-      pathCoordinates.forEach(coord => {
-        bounds.extend(coord);
+      solidSegments.forEach(seg => {
+        const poly = new google.maps.Polyline({
+          path: seg, geodesic: true,
+          strokeColor: "#0000FF", strokeOpacity: 0.8, strokeWeight: 6
+        });
+        poly.setMap(map);
+        activePolylines.push(poly);
+        seg.forEach(pt => bounds.extend(pt));
       });
 
-      // ルート全体が収まるように地図を動かす（上下左右に50pxの余白を持たせる）
-      map.fitBounds(bounds, 50);
+      const dotIcon = {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 7,
+        fillColor: "#FF0000",
+        fillOpacity: 1,
+        strokeColor: "#FF0000",
+        strokeWeight: 0
+      };
+
+      dashedConnectors.forEach(conn => {
+        const poly = new google.maps.Polyline({
+          path: conn, strokeOpacity: 0,
+          icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3, strokeColor: '#888888' },
+                    offset: '0', repeat: '12px' }]
+        });
+        poly.setMap(map);
+        activePolylines.push(poly);
+        conn.forEach(pt => bounds.extend(pt));
+
+        [conn[0], conn[conn.length - 1]].forEach(pt => {
+          const dot = new google.maps.Marker({ position: pt, map: map, icon: dotIcon });
+          activePolylines.push(dot);
+        });
+      });
+
+      if (!bounds.isEmpty()) map.fitBounds(bounds, 50);
     }
 
     let watchId = null; // 追跡処理のIDを保持
@@ -175,7 +232,7 @@
 
   <!-- Google Maps APIの読み込み（YOUR_API_KEYを実際のAPIキーに書き換えてください） -->
   <script async defer
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBlSPFj8D8xdQLDC9oGx2nLpSiXk7w9dUw&callback=initMap">
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA1Kn8L0tmLQm1jaSGkVS_db2LOAFyKHVc&callback=initMap">
   </script>
 </body>
 </html>

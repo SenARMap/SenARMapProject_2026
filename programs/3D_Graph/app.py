@@ -353,7 +353,8 @@ def _path_result(G, path, length):
     path_coords = []
     for node_id in path:
         n = G.nodes[node_id]
-        coord_dict = {"id": node_id, "x": n["x"], "y": n["y"], "z": n["z"]}
+        coord_dict = {"id": node_id, "x": n["x"], "y": n["y"], "z": n["z"],
+                      "building": n["building"], "floor": n["floor"]}
         if "lat" in n:
             coord_dict["lat"] = n["lat"]
         if "lng" in n:
