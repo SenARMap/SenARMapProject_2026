@@ -1263,24 +1263,107 @@ function applyFilter() {
 }
 
 // ============================================================
+//  座標変換・バウンディングボックス計算
+// ============================================================
+function getLocalCoords(x, y, cfg) {
+  const theta = (cfg?.rot_deg || 0) * Math.PI / 180;
+  const tx = cfg?.tx || 0;
+  const ty = cfg?.ty || 0;
+  const dx = x - tx;
+  const dy = y - ty;
+  const cos = Math.cos(theta), sin = Math.sin(theta);
+  const lx = cos * dx + sin * dy;
+  const ly = -sin * dx + cos * dy;
+  return { lx, ly };
+}
+
+function getGlobalCoords(lx, ly, cfg) {
+  const theta = (cfg?.rot_deg || 0) * Math.PI / 180;
+  const tx = cfg?.tx || 0;
+  const ty = cfg?.ty || 0;
+  const cos = Math.cos(theta), sin = Math.sin(theta);
+  const x = cos * lx - sin * ly + tx;
+  const y = sin * lx + cos * ly + ty;
+  return { x, y };
+}
+
+function computeBuildingBounds(nodes) {
+  const byBuilding = {};
+  nodes.forEach(n => {
+    (byBuilding[n.building] = byBuilding[n.building] || []).push(n);
+  });
+
+  const bounds = {};
+  Object.entries(byBuilding).forEach(([b, bNodes]) => {
+    const cfg = graphData.config?.[b] || {};
+    
+    const localNodes = bNodes.map(n => {
+      const { lx, ly } = getLocalCoords(n.x, n.y, cfg);
+      return { ...n, lx, ly };
+    });
+
+    const lxs = localNodes.map(n => n.lx);
+    const lys = localNodes.map(n => n.ly);
+    const zs  = localNodes.map(n => n.z);
+    
+    const rangeXY = Math.max(Math.max(...lxs) - Math.min(...lxs), Math.max(...lys) - Math.min(...lys));
+    const padXY = Math.max(rangeXY * 0.04, 1);
+
+    let minLx = Math.min(...lxs);
+    let maxLx = Math.max(...lxs);
+    let minLy = Math.min(...lys);
+    let maxLy = Math.max(...lys);
+
+    const doorways = localNodes.filter(n => String(n.type) === "2");
+    
+    let lx0 = minLx - padXY;
+    let lx1 = maxLx + padXY;
+    let ly0 = minLy - padXY;
+    let ly1 = maxLy + padXY;
+
+    if (doorways.length > 0) {
+      const doorMinLx = Math.min(...doorways.map(n => n.lx));
+      const doorMaxLx = Math.max(...doorways.map(n => n.lx));
+      const doorMinLy = Math.min(...doorways.map(n => n.ly));
+      const doorMaxLy = Math.max(...doorways.map(n => n.ly));
+      
+      const EPS = 0.001;
+      if (doorMinLx <= minLx + EPS) lx0 = doorMinLx;
+      if (doorMaxLx >= maxLx - EPS) lx1 = doorMaxLx;
+      if (doorMinLy <= minLy + EPS) ly0 = doorMinLy;
+      if (doorMaxLy >= maxLy - EPS) ly1 = doorMaxLy;
+    }
+
+    const c0 = getGlobalCoords(lx0, ly0, cfg);
+    const c1 = getGlobalCoords(lx1, ly0, cfg);
+    const c2 = getGlobalCoords(lx1, ly1, cfg);
+    const c3 = getGlobalCoords(lx0, ly1, cfg);
+    const center = getGlobalCoords((lx0+lx1)/2, (ly0+ly1)/2, cfg);
+    
+    bounds[b] = { c0, c1, c2, c3, center, zs };
+  });
+  
+  return bounds;
+}
+
+// ============================================================
 //  案1: 建物バウンディングボックス
 // ============================================================
-function buildBuildingBoxTraces(nodes) {
+function buildBuildingBoxTraces(nodes, bounds) {
+  const traces = [];
   const byBuilding = {};
   nodes.forEach(n => { (byBuilding[n.building] = byBuilding[n.building] || []).push(n); });
 
-  const traces = [];
   Object.entries(byBuilding).forEach(([b, bNodes]) => {
     const color = graphData.building_colors[(parseInt(b) - 1) % graphData.building_colors.length];
-    const xs = bNodes.map(n => n.x), ys = bNodes.map(n => n.y), zs = bNodes.map(n => n.z);
-    const rangeXY = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
-    const padXY = Math.max(rangeXY * 0.04, 1);
-    const x0 = Math.min(...xs) - padXY, x1 = Math.max(...xs) + padXY;
-    const y0 = Math.min(...ys) - padXY, y1 = Math.max(...ys) + padXY;
-    const z0 = Math.min(...zs) - 0.5,   z1 = Math.max(...zs) + 0.5;
+    const bData = bounds[b];
+    if (!bData) return;
+    const { c0, c1, c2, c3, center, zs } = bData;
 
-    const vx = [x0,x1,x1,x0, x0,x1,x1,x0];
-    const vy = [y0,y0,y1,y1, y0,y0,y1,y1];
+    const z0 = Math.min(...zs) - 0.5, z1 = Math.max(...zs) + 0.5;
+
+    const vx = [c0.x, c1.x, c2.x, c3.x,  c0.x, c1.x, c2.x, c3.x];
+    const vy = [c0.y, c1.y, c2.y, c3.y,  c0.y, c1.y, c2.y, c3.y];
     const vz = [z0,z0,z0,z0, z1,z1,z1,z1];
     const fi = [0,0, 4,4, 0,0, 2,2, 0,0, 1,1];
     const fj = [1,2, 5,6, 1,5, 3,7, 3,7, 2,6];
@@ -1291,12 +1374,12 @@ function buildBuildingBoxTraces(nodes) {
       color, opacity:0.06, hoverinfo:"none", showlegend:false,
     });
 
-    const ex = [x0,x1,null, x1,x1,null, x1,x0,null, x0,x0,null,
-                x0,x1,null, x1,x1,null, x1,x0,null, x0,x0,null,
-                x0,x0,null, x1,x1,null, x1,x1,null, x0,x0,null];
-    const ey = [y0,y0,null, y0,y1,null, y1,y1,null, y1,y0,null,
-                y0,y0,null, y0,y1,null, y1,y1,null, y1,y0,null,
-                y0,y0,null, y0,y0,null, y1,y1,null, y1,y1,null];
+    const ex = [c0.x, c1.x, null, c1.x, c2.x, null, c2.x, c3.x, null, c3.x, c0.x, null,
+                c0.x, c1.x, null, c1.x, c2.x, null, c2.x, c3.x, null, c3.x, c0.x, null,
+                c0.x, c0.x, null, c1.x, c1.x, null, c2.x, c2.x, null, c3.x, c3.x, null];
+    const ey = [c0.y, c1.y, null, c1.y, c2.y, null, c2.y, c3.y, null, c3.y, c0.y, null,
+                c0.y, c1.y, null, c1.y, c2.y, null, c2.y, c3.y, null, c3.y, c0.y, null,
+                c0.y, c0.y, null, c1.y, c1.y, null, c2.y, c2.y, null, c3.y, c3.y, null];
     const ez = [z0,z0,null, z0,z0,null, z0,z0,null, z0,z0,null,
                 z1,z1,null, z1,z1,null, z1,z1,null, z1,z1,null,
                 z0,z1,null, z0,z1,null, z0,z1,null, z0,z1,null];
@@ -1307,7 +1390,7 @@ function buildBuildingBoxTraces(nodes) {
 
     traces.push({
       type:"scatter3d", mode:"text",
-      x:[(x0+x1)/2], y:[(y0+y1)/2], z:[z1+0.4],
+      x:[center.x], y:[center.y], z:[z1+0.4],
       text:[`B${b}`],
       textfont:{color, size:14, family:"Arial Black"},
       hoverinfo:"none", showlegend:false,
@@ -1319,15 +1402,7 @@ function buildBuildingBoxTraces(nodes) {
 // ============================================================
 //  案2: フロア床面
 // ============================================================
-function buildFloorPlaneTraces(nodes) {
-  const bldgBounds = {};
-  nodes.forEach(n => {
-    const b = n.building;
-    if (!bldgBounds[b]) bldgBounds[b] = { xs:[], ys:[] };
-    bldgBounds[b].xs.push(n.x);
-    bldgBounds[b].ys.push(n.y);
-  });
-
+function buildFloorPlaneTraces(nodes, bounds) {
   const byKey = {};
   nodes.forEach(n => {
     const k = `${n.building}_${n.floor}`;
@@ -1340,15 +1415,13 @@ function buildFloorPlaneTraces(nodes) {
     const color = floorColor(floor);
     const zVal = ns.reduce((s, n) => s + n.z, 0) / ns.length;
 
-    const bxs = bldgBounds[building].xs, bys = bldgBounds[building].ys;
-    const rangeXY = Math.max(Math.max(...bxs) - Math.min(...bxs), Math.max(...bys) - Math.min(...bys));
-    const padXY = Math.max(rangeXY * 0.04, 0.5);
-    const x0 = Math.min(...bxs) - padXY, x1 = Math.max(...bxs) + padXY;
-    const y0 = Math.min(...bys) - padXY, y1 = Math.max(...bys) + padXY;
+    const bData = bounds[building];
+    if (!bData) return;
+    const { c0, c1, c2, c3 } = bData;
 
     traces.push({
       type:"mesh3d",
-      x:[x0,x1,x1,x0], y:[y0,y0,y1,y1],
+      x:[c0.x, c1.x, c2.x, c3.x], y:[c0.y, c1.y, c2.y, c3.y],
       z:[zVal,zVal,zVal,zVal],
       i:[0,0], j:[1,2], k:[2,3],
       color, opacity:0.15,
@@ -1358,7 +1431,7 @@ function buildFloorPlaneTraces(nodes) {
 
     traces.push({
       type:"scatter3d", mode:"text",
-      x:[x1], y:[y0], z:[zVal],
+      x:[c1.x], y:[c0.y], z:[zVal],
       text:[`${floor}F`],
       textfont:{color, size:9},
       hoverinfo:"none", showlegend:false,
@@ -1390,8 +1463,9 @@ function renderMap() {
     ? graphData.edges.filter(e => nodeIds.has(e.from) && nodeIds.has(e.to)) : graphData.edges;
 
   const traces = [];
-  traces.push(...buildFloorPlaneTraces(nodes));
-  traces.push(...buildBuildingBoxTraces(nodes));
+  const bounds = computeBuildingBounds(nodes);
+  traces.push(...buildFloorPlaneTraces(nodes, bounds));
+  traces.push(...buildBuildingBoxTraces(nodes, bounds));
 
   // --- 屋外ノード・エッジ (building=0) ---
   if (!filterBuilding) {

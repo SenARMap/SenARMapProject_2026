@@ -199,6 +199,35 @@ def load_data():
                     ge_raw[col] = default
             all_edges.append(ge_raw)
 
+    # anchors.csvから、グローバルノードとローカルノードを繋ぐエッジを生成
+    anchor_path = os.path.join(DATA_DIR, "anchors.csv")
+    if os.path.exists(anchor_path):
+        anchors_df = pd.read_csv(anchor_path)
+        anchors_df.columns = anchors_df.columns.str.strip()
+        if not anchors_df.empty:
+            anchor_edges = []
+            for idx, row in anchors_df.iterrows():
+                bldg_id = int(row["building"])
+                l_id = int(row["local_node_id"])
+                g_id = int(row["global_node_id"])
+                
+                local_global_id = bldg_id * ID_OFFSET + l_id
+                outdoor_global_id = g_id + GLOBAL_NODE_OFFSET
+                
+                anchor_edges.append({
+                    "id": 8000000 + idx,
+                    "from": local_global_id,
+                    "to": outdoor_global_id,
+                    "building": 0,
+                    "floor": 1,
+                    "weight": 1.0,
+                    "length": 0.0,
+                    "type": 1,
+                    "name": ""
+                })
+            if anchor_edges:
+                all_edges.append(pd.DataFrame(anchor_edges))
+
     if not all_nodes:
         return pd.DataFrame(), pd.DataFrame()
 
@@ -224,8 +253,7 @@ _DIRECTED_EDGE_TYPES = {"5", "6"}  # 上りエスカレータ(5)・下りエス�
 def build_graph(nodes_df, edges_df, use_elevator=True):
     G = nx.DiGraph()
     for _, row in nodes_df.iterrows():
-        G.add_node(
-            int(row["id"]),
+        node_attrs = dict(
             x=float(row["x"]),
             y=float(row["y"]),
             z=float(row["z"]),
@@ -233,6 +261,11 @@ def build_graph(nodes_df, edges_df, use_elevator=True):
             floor=int(row["floor"]),
             node_type=int(row["type"]),
         )
+        if "lat" in row and pd.notna(row["lat"]):
+            node_attrs["lat"] = float(row["lat"])
+        if "lng" in row and pd.notna(row["lng"]):
+            node_attrs["lng"] = float(row["lng"])
+        G.add_node(int(row["id"]), **node_attrs)
     for _, row in edges_df.iterrows():
         edge_type = str(row["type"]).strip()
         if not use_elevator and edge_type == "4":
@@ -243,7 +276,7 @@ def build_graph(nodes_df, edges_df, use_elevator=True):
             name=str(row["name"]),
             building=int(row["building"]),
             floor=int(row["floor"]),
-            weight=float(row["weight"]),
+            weight=float(row["weight"]) * float(row["length"]),
             length=float(row["length"]),
             edge_type=edge_type,
         )
@@ -260,6 +293,40 @@ def build_graph(nodes_df, edges_df, use_elevator=True):
             if edge_type not in _DIRECTED_EDGE_TYPES:
                 G.add_edge(v, u, **edge_attrs)
     return G
+
+
+# ------------------------------------------------------------------ #
+#  Cache Mechanism
+# ------------------------------------------------------------------ #
+_cached_nodes_df = None
+_cached_edges_df = None
+_cached_graph_with_ev = None
+_cached_graph_without_ev = None
+
+def get_cached_data():
+    global _cached_nodes_df, _cached_edges_df
+    if _cached_nodes_df is None or _cached_edges_df is None:
+        _cached_nodes_df, _cached_edges_df = load_data()
+    return _cached_nodes_df, _cached_edges_df
+
+def get_cached_graph(use_elevator=True):
+    global _cached_graph_with_ev, _cached_graph_without_ev
+    nodes_df, edges_df = get_cached_data()
+    if use_elevator:
+        if _cached_graph_with_ev is None:
+            _cached_graph_with_ev = build_graph(nodes_df, edges_df, use_elevator=True)
+        return _cached_graph_with_ev
+    else:
+        if _cached_graph_without_ev is None:
+            _cached_graph_without_ev = build_graph(nodes_df, edges_df, use_elevator=False)
+        return _cached_graph_without_ev
+
+def clear_cache():
+    global _cached_nodes_df, _cached_edges_df, _cached_graph_with_ev, _cached_graph_without_ev
+    _cached_nodes_df = None
+    _cached_edges_df = None
+    _cached_graph_with_ev = None
+    _cached_graph_without_ev = None
 
 
 def _edge_to_dict(row, nodes_df):
@@ -286,7 +353,12 @@ def _path_result(G, path, length):
     path_coords = []
     for node_id in path:
         n = G.nodes[node_id]
-        path_coords.append({"id": node_id, "x": n["x"], "y": n["y"], "z": n["z"]})
+        coord_dict = {"id": node_id, "x": n["x"], "y": n["y"], "z": n["z"]}
+        if "lat" in n:
+            coord_dict["lat"] = n["lat"]
+        if "lng" in n:
+            coord_dict["lng"] = n["lng"]
+        path_coords.append(coord_dict)
 
     path_edges = []
     for i in range(len(path) - 1):
@@ -316,7 +388,7 @@ def viewer():
 @app.route("/3d/")
 @app.route("/3d")
 def index():
-    nodes_df, edges_df = load_data()
+    nodes_df, edges_df = get_cached_data()
     node_ids  = sorted(nodes_df["id"].tolist())
     buildings = sorted(nodes_df["building"].unique().tolist())
     return render_template("index.html", node_ids=node_ids, buildings=buildings)
@@ -324,7 +396,7 @@ def index():
 
 @app.route("/api/graph")
 def api_graph():
-    nodes_df, edges_df = load_data()
+    nodes_df, edges_df = get_cached_data()
 
     nodes = []
     for _, row in nodes_df.iterrows():
@@ -335,7 +407,7 @@ def api_graph():
             color = OUTDOOR_COLOR
         else:
             color = BUILDING_COLORS[(bldg - 1) % len(BUILDING_COLORS)]
-        nodes.append({
+        node_dict = {
             "id":       int(row["id"]),
             "x":        float(row["x"]),
             "y":        float(row["y"]),
@@ -345,12 +417,20 @@ def api_graph():
             "type":     int(row["type"]),
             "color":    color,
             "label":    f"Node {int(row['id'])}<br>{'屋外' if bldg == 0 else f'Building {bldg}'} / Floor {int(row['floor'])}",
-        })
+        }
+        if "lat" in row and pd.notna(row["lat"]):
+            node_dict["lat"] = float(row["lat"])
+        if "lng" in row and pd.notna(row["lng"]):
+            node_dict["lng"] = float(row["lng"])
+        nodes.append(node_dict)
 
     valid_edges = edges_df.dropna(subset=["id", "from", "to", "building", "floor", "weight", "length"])
     edges = [_edge_to_dict(row, nodes_df) for _, row in valid_edges.iterrows()]
 
-    return jsonify({"nodes": nodes, "edges": edges, "building_colors": BUILDING_COLORS})
+    config = _load_transform_config()
+    config.update(_calc_transforms_from_anchors())
+
+    return jsonify({"nodes": nodes, "edges": edges, "building_colors": BUILDING_COLORS, "config": config})
 
 
 # ------------------------------------------------------------------ #
@@ -368,7 +448,7 @@ def api_rooms():
     building_filter = request.args.get("building", type=int)
     query           = request.args.get("q", "").strip().lower()
 
-    _, edges_df = load_data()
+    _, edges_df = get_cached_data()
 
     rooms = []
     seen  = set()  # 重複排除 (room + building)
@@ -413,7 +493,7 @@ def api_all():
         "buildings": [ 1, 2, ... ]
       }
     """
-    nodes_df, edges_df = load_data()
+    nodes_df, edges_df = get_cached_data()
 
     rooms = []
     seen = set()
@@ -439,16 +519,21 @@ def api_all():
             })
     rooms.sort(key=lambda r: (r["building"], r["room"]))
 
-    nodes = [
-        {
+    nodes = []
+    for _, row in nodes_df.iterrows():
+        if any(pd.isna(row[c]) for c in ["id", "building", "floor", "type"]):
+            continue
+        nd = {
             "id":       int(row["id"]),
             "building": int(row["building"]),
             "floor":    int(row["floor"]),
             "type":     int(row["type"]),
         }
-        for _, row in nodes_df.iterrows()
-        if not any(pd.isna(row[c]) for c in ["id", "building", "floor", "type"])
-    ]
+        if "lat" in row and pd.notna(row["lat"]):
+            nd["lat"] = float(row["lat"])
+        if "lng" in row and pd.notna(row["lng"]):
+            nd["lng"] = float(row["lng"])
+        nodes.append(nd)
     nodes.sort(key=lambda n: n["id"])
 
     buildings = sorted(nodes_df["building"].dropna().astype(int).unique().tolist())
@@ -495,8 +580,8 @@ def api_navigate_to_room():
         return jsonify({"error": "start_room（＋start_building）または start を指定してください"}), 400
 
     use_elevator = request.args.get("use_elevator", "1") != "0"
-    nodes_df, edges_df = load_data()
-    G = build_graph(nodes_df, edges_df, use_elevator=use_elevator)
+    nodes_df, edges_df = get_cached_data()
+    G = get_cached_graph(use_elevator=use_elevator)
 
     # --- 目的教室のエッジを検索 ---
     dest_edges = _find_edges_for_room(edges_df, room_name, building)
@@ -533,8 +618,7 @@ def api_navigate_to_room():
                 if g_node not in G.nodes:
                     continue
                 try:
-                    p = nx.dijkstra_path(G, s_node, g_node, weight="weight")
-                    l = nx.dijkstra_path_length(G, s_node, g_node, weight="weight")
+                    l, p = nx.bidirectional_dijkstra(G, s_node, g_node, weight="weight")
                     if l < best_length:
                         best_length     = l
                         best_path       = p
@@ -591,8 +675,8 @@ def api_route():
     if not to_room and to_node_id is None:
         return jsonify({"error": "to_room（＋to_building）または to_node を指定してください"}), 400
 
-    nodes_df, edges_df = load_data()
-    G = build_graph(nodes_df, edges_df, use_elevator=use_elevator)
+    nodes_df, edges_df = get_cached_data()
+    G = get_cached_graph(use_elevator=use_elevator)
 
     # --- 出発候補ノード ---
     if from_room:
@@ -637,8 +721,7 @@ def api_route():
             if s_node == d_node:
                 continue
             try:
-                p = nx.dijkstra_path(G, s_node, d_node, weight="weight")
-                l = nx.dijkstra_path_length(G, s_node, d_node, weight="weight")
+                l, p = nx.bidirectional_dijkstra(G, s_node, d_node, weight="weight")
                 if l < best_length:
                     best_length, best_path = l, p
                     best_start_edge, best_dest_edge = s_row, d_row
@@ -697,8 +780,8 @@ def api_nearest_toilet():
 
     targets = _TOILET_TYPE_MAP.get(toilet_type, _TOILET_TYPE_MAP["ALL"])
 
-    nodes_df, edges_df = load_data()
-    G = build_graph(nodes_df, edges_df, use_elevator=use_elevator)
+    nodes_df, edges_df = get_cached_data()
+    G = get_cached_graph(use_elevator=use_elevator)
 
     # 出発候補
     if from_room:
@@ -744,8 +827,7 @@ def api_nearest_toilet():
             if s_node == d_node:
                 continue
             try:
-                p = nx.dijkstra_path(G, s_node, d_node, weight="weight")
-                l = nx.dijkstra_path_length(G, s_node, d_node, weight="weight")
+                l, p = nx.bidirectional_dijkstra(G, s_node, d_node, weight="weight")
                 if l < best_length:
                     best_length, best_path = l, p
                     best_start_row, best_toilet_row = s_row, d_row
@@ -784,8 +866,8 @@ def api_shortest_path():
         return jsonify({"error": "start と goal のノードIDを指定してください"}), 400
 
     use_elevator = request.args.get("use_elevator", "1") != "0"
-    nodes_df, edges_df = load_data()
-    G = build_graph(nodes_df, edges_df, use_elevator=use_elevator)
+    nodes_df, edges_df = get_cached_data()
+    G = get_cached_graph(use_elevator=use_elevator)
 
     if start not in G.nodes:
         return jsonify({"error": f"ノード {start} が存在しません"}), 404
@@ -793,8 +875,7 @@ def api_shortest_path():
         return jsonify({"error": f"ノード {goal} が存在しません"}), 404
 
     try:
-        path   = nx.dijkstra_path(G, start, goal, weight="weight")
-        length = nx.dijkstra_path_length(G, start, goal, weight="weight")
+        length, path = nx.bidirectional_dijkstra(G, start, goal, weight="weight")
         return jsonify(_path_result(G, path, length))
     except nx.NetworkXNoPath:
         return jsonify({"error": f"ノード {start} から {goal} への経路が見つかりません"}), 404
@@ -810,7 +891,7 @@ def api_shortest_path():
 def api_building_config_get():
     """全建物の rot_deg / tz_offset を返す"""
     config = _load_transform_config()
-    nodes_df, _ = load_data()
+    nodes_df, _ = get_cached_data()
     buildings = sorted(
         nodes_df[nodes_df["building"].astype(int) != 0]["building"]
         .dropna().astype(int).unique().tolist()
@@ -840,6 +921,7 @@ def api_building_config_post(building_id):
     config[str(building_id)] = cfg
     with open(BUILDINGS_JSON, "w") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
+    clear_cache()
     return jsonify({"ok": True, "building": building_id, "config": cfg})
 
 
