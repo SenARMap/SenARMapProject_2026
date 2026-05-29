@@ -24,13 +24,42 @@
       border: none; border-radius: 6px;
       background: #4285F4; color: white; cursor: pointer;
     }
+    #svg-view {
+      display: none;
+      width: 100%; height: calc(100vh - 130px);
+      position: relative; background: #f0f0f0; overflow: auto;
+    }
+    #svg-container { width: 100%; height: 100%; }
+    #floor-btns {
+      position: absolute; top: 8px; left: 8px;
+      display: flex; gap: 4px; z-index: 10;
+    }
+    #floor-btns button { background: #555; height: 36px; padding: 0 12px; font-size: 13px; }
+    #floor-btns button.active { background: #4285F4; }
+    #building-btns { display: none; width: 100%; }
+    #building-btns button { background: #E65100; }
+    #building-btns button.active { background: #4285F4; }
   </style>
 </head>
 <body>
 
   <div id="map"></div>
 
+  <div id="svg-view">
+    <div id="floor-btns">
+      <button onclick="setActiveFloor(this); showSvg('/svg/10_1F.svg')">1階</button>
+      <button onclick="setActiveFloor(this)">2階</button>
+      <button onclick="setActiveFloor(this)">3階</button>
+      <button onclick="setActiveFloor(this)">4階</button>
+      <button onclick="setActiveFloor(this)">5階</button>
+    </div>
+    <div id="svg-container"></div>
+  </div>
+
   <div class="controls">
+    <div id="building-btns">
+      <button onclick="showMap()">全体マップ</button>
+    </div>
     <input type="number" id="startNode" placeholder="出発ノードID (例: 9000001)">
     <input type="number" id="goalNode" placeholder="目的ノードID (例: 9000015)">
     <button onclick="searchRoute()">検索</button>
@@ -44,6 +73,7 @@
     let map;
     let activePolylines = [];
     let currentLocationMarker = null;
+    let currentPathCoords = null;
 
     function initMap() {
       map = new google.maps.Map(document.getElementById("map"), {
@@ -67,6 +97,18 @@
     }
 
     const MAX_DASHED_M = 500;
+
+    const BUILDINGS = [
+      {
+        id: 10, name: "10号館",
+        svgPath: "/svg/10_1F.svg",
+        entrances: [
+          { lat: 35.6112,  lng: 139.55413 },
+          { lat: 35.61092, lng: 139.55514 }
+        ]
+      }
+    ];
+    const NEARBY_M = 80;
 
     function buildSegments(pathCoords) {
       const solidSegments = [];
@@ -122,8 +164,11 @@
         const response = await fetch(url);
         const data = await response.json();
         if (data.error) { alert("エラー: " + data.error); return; }
+        currentPathCoords = data.path_coords;
         drawPathOnMap(data.path_coords);
-        // TODO: 将来ここに屋内SVG切り替えを追加
+        if (document.getElementById("svg-view").style.display !== "none") {
+          drawIndoorRoute(data.path_coords);
+        }
       } catch (error) {
         console.error("APIリクエストエラー:", error);
         alert("APIの呼び出しに失敗しました。app.pyが起動しているか、またはCORS制約がないか確認してください。");
@@ -199,6 +244,7 @@
             } else {
               currentLocationMarker.setPosition(pos);
             }
+            checkNearbyBuildings(pos);
           },
           function(error) {
             const msgs = {
@@ -224,6 +270,90 @@
         currentLocationMarker.setMap(null);
         currentLocationMarker = null;
       }
+    }
+
+    function checkNearbyBuildings(pos) {
+      const nearby = BUILDINGS.filter(b =>
+        b.entrances.some(e => haversineDistance(pos, e) <= NEARBY_M)
+      );
+      const bar = document.getElementById("building-btns");
+      while (bar.children.length > 1) bar.removeChild(bar.lastChild);
+      if (nearby.length > 0) {
+        bar.style.display = "block";
+        setActiveBuildingBtn(bar.children[0]);
+        nearby.forEach(b => {
+          const btn = document.createElement("button");
+          btn.textContent = b.name;
+          btn.onclick = () => {
+          setActiveBuildingBtn(btn);
+          setActiveFloor(document.querySelector('#floor-btns button'));
+          showSvg(b.svgPath);
+        };
+          bar.appendChild(btn);
+        });
+      } else {
+        bar.style.display = "none";
+      }
+    }
+
+    function setActiveBuildingBtn(btn) {
+      document.querySelectorAll('#building-btns button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+
+    function setActiveFloor(btn) {
+      document.querySelectorAll('#floor-btns button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+
+    async function showSvg(svgPath) {
+      document.getElementById("map").style.display = "none";
+      document.getElementById("svg-view").style.display = "block";
+      const container = document.getElementById("svg-container");
+      const res = await fetch(svgPath);
+      container.innerHTML = await res.text();
+      const svgEl = container.querySelector('svg');
+      if (svgEl) {
+        svgEl.style.width = "100%";
+        svgEl.style.height = "100%";
+        const overlay = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        overlay.id = 'route-overlay';
+        svgEl.appendChild(overlay);
+      }
+      if (currentPathCoords) drawIndoorRoute(currentPathCoords);
+    }
+
+    function drawIndoorRoute(pathCoords) {
+      const overlay = document.getElementById('route-overlay');
+      if (!overlay) return;
+      overlay.innerHTML = '';
+      const nodes = pathCoords.filter(n =>
+        n.building === 10 && n.floor === 1 &&
+        n.svg_x !== undefined && n.svg_y !== undefined
+      );
+      if (nodes.length === 0) return;
+      if (nodes.length >= 2) {
+        const pl = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+        pl.setAttribute('points', nodes.map(n => `${n.svg_x},${n.svg_y}`).join(' '));
+        pl.setAttribute('stroke', '#0000FF');
+        pl.setAttribute('stroke-width', '10');
+        pl.setAttribute('fill', 'none');
+        pl.setAttribute('stroke-opacity', '0.8');
+        overlay.appendChild(pl);
+      }
+      nodes.forEach(n => {
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('cx', n.svg_x); c.setAttribute('cy', n.svg_y);
+        c.setAttribute('r', '14'); c.setAttribute('fill', '#FF0000');
+        c.setAttribute('fill-opacity', '0.9');
+        overlay.appendChild(c);
+      });
+    }
+
+    function showMap() {
+      document.getElementById("svg-view").style.display = "none";
+      document.getElementById("map").style.display = "block";
+      setActiveBuildingBtn(document.querySelector('#building-btns button'));
     }
   </script>
 
