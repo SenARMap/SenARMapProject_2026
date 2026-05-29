@@ -12,6 +12,7 @@
     button, input { padding: 8px; margin-right: 10px; margin-bottom: 10px; cursor: pointer; }
     input { cursor: text; }
   </style>
+  <script src="script/config.js"></script>
 </head>
 <body>
 
@@ -187,8 +188,17 @@
   </script>
 
   <!-- Google Maps APIの読み込み（YOUR_API_KEYを実際のAPIキーに書き換えてください） -->
-  <script async defer
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBlSPFj8D8xdQLDC9oGx2nLpSiXk7w9dUw&callback=initMap">
+  <script>
+    // JavaScriptを使って動的にGoogle Mapsのスクリプトタグを生成する
+    const mapScript = document.createElement('script');
+    
+    // ここはJavaScriptの世界なので ${...} が正しくAPIキーに変換されます
+    mapScript.src = `https://maps.googleapis.com/maps/api/js?key=${CONFIG.GOOGLE_MAPS_API_KEY}&callback=initMap`;
+    mapScript.async = true;
+    mapScript.defer = true;
+    
+    // 組み立てたタグをHTML（<body>の最後）に挿入して読み込みを開始する
+    document.body.appendChild(mapScript);
   </script>
 </body>
 </html>
