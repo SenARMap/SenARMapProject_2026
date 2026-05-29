@@ -34,7 +34,7 @@
     <input type="number" id="startNode" placeholder="出発ノードID (例: 9000001)">
     <input type="number" id="goalNode" placeholder="目的ノードID (例: 9000015)">
     <button onclick="searchRoute()">検索</button>
-    <button onclick="startTracking()">追跡開始</button>
+    <button onclick="startTracking()">現在位置の取得</button>
     <button onclick="stopTracking()">追跡停止</button>
   </div>
 
@@ -173,20 +173,15 @@
       if (!bounds.isEmpty()) map.fitBounds(bounds, 50);
     }
 
-    let watchId = null; // 追跡処理のIDを保持
-
     function startTracking() {
       if (navigator.geolocation) {
-        // 位置が変わるたびに自動で第1引数の関数が実行される
-        watchId = navigator.geolocation.watchPosition(
+        navigator.geolocation.getCurrentPosition(
           function(position) {
             const pos = {
               lat: position.coords.latitude,
               lng: position.coords.longitude
             };
-
             if (currentLocationMarker === null) {
-              // 1. 最初はピンを作成して地図に置く
               currentLocationMarker = new google.maps.Marker({
                 position: pos,
                 map: map,
@@ -194,26 +189,29 @@
                 icon: {
                   path: google.maps.SymbolPath.CIRCLE,
                   scale: 8,
-                  fillColor: "#4285F4",
+                  fillColor: "#00AA00",
                   fillOpacity: 1,
                   strokeColor: "white",
                   strokeWeight: 2
                 }
               });
-              // 初回のみ、地図の中心を現在地に合わせる
               map.setCenter(pos);
             } else {
-              // 2. 2回目以降は、ピンの「位置（position）」だけを更新する
               currentLocationMarker.setPosition(pos);
             }
           },
           function(error) {
-            console.warn("位置情報の取得エラー: ", error.message);
+            const msgs = {
+              1: "位置情報の使用が拒否されました。ブラウザの設定で許可してください。",
+              2: "現在地を取得できませんでした。",
+              3: "位置情報の取得がタイムアウトしました。"
+            };
+            alert(msgs[error.code] || "位置情報エラー: " + error.message);
           },
           {
-            enableHighAccuracy: true, // スマホの正確なGPSチップを強制的に使う
-            maximumAge: 0,            // 古いキャッシュデータは使わない
-            timeout: 5000             // 5秒以内に取得できなければエラーにする
+            enableHighAccuracy: false,
+            maximumAge: 60000,
+            timeout: 30000
           }
         );
       } else {
@@ -221,11 +219,10 @@
       }
     }
 
-    // （オプション）追跡を停止してスマホのバッテリー消費を抑える関数
     function stopTracking() {
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
-        watchId = null;
+      if (currentLocationMarker !== null) {
+        currentLocationMarker.setMap(null);
+        currentLocationMarker = null;
       }
     }
   </script>
