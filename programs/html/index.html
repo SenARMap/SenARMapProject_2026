@@ -40,6 +40,7 @@
     #building-btns button { background: #E65100; }
     #building-btns button.active { background: #4285F4; }
   </style>
+  <script src="script/config.js"></script>
 </head>
 <body>
 
@@ -69,6 +70,7 @@
 
   <script>
     // app.pyのURLに合わせてベースURLを変更してください
+
     const API_BASE = "";
     let map;
     let activePolylines = [];
@@ -76,10 +78,13 @@
     let currentPathCoords = null;
 
     function initMap() {
-      map = new google.maps.Map(document.getElementById("map"), {
-        zoom: 17,
-        center: { lat: 35.6108, lng: 139.5539 }
-      });
+        map = new google.maps.Map(document.getElementById("map"), {
+            // ① 初期表示のズームレベル（数値が大きいほど拡大）
+            zoom: 17, 
+            
+            // ② 初期表示の中心点（緯度・経度）
+            center: { lat: 35.61035, lng: 139.55466 } 
+        });
     }
 
     function clearRoute() {
@@ -358,8 +363,17 @@
   </script>
 
   <!-- Google Maps APIの読み込み（YOUR_API_KEYを実際のAPIキーに書き換えてください） -->
-  <script async defer
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA1Kn8L0tmLQm1jaSGkVS_db2LOAFyKHVc&callback=initMap">
+  <script>
+    // JavaScriptを使って動的にGoogle Mapsのスクリプトタグを生成する
+    const mapScript = document.createElement('script');
+    
+    // ここはJavaScriptの世界なので ${...} が正しくAPIキーに変換されます
+    mapScript.src = `https://maps.googleapis.com/maps/api/js?key=${CONFIG.GOOGLE_MAPS_API_KEY}&callback=initMap`;
+    mapScript.async = true;
+    mapScript.defer = true;
+    
+    // 組み立てたタグをHTML（<body>の最後）に挿入して読み込みを開始する
+    document.body.appendChild(mapScript);
   </script>
 </body>
 </html>

@@ -279,7 +279,7 @@ def build_graph(nodes_df, edges_df, use_elevator=True):
             name=str(row["name"]),
             building=int(row["building"]),
             floor=int(row["floor"]),
-            weight=float(row["weight"]),
+            weight=float(row["weight"]) * float(row["length"]),
             length=float(row["length"]),
             edge_type=edge_type,
         )
@@ -625,8 +625,7 @@ def api_navigate_to_room():
                 if g_node not in G.nodes:
                     continue
                 try:
-                    p = nx.dijkstra_path(G, s_node, g_node, weight="weight")
-                    l = nx.dijkstra_path_length(G, s_node, g_node, weight="weight")
+                    l, p = nx.bidirectional_dijkstra(G, s_node, g_node, weight="weight")
                     if l < best_length:
                         best_length     = l
                         best_path       = p
@@ -729,8 +728,7 @@ def api_route():
             if s_node == d_node:
                 continue
             try:
-                p = nx.dijkstra_path(G, s_node, d_node, weight="weight")
-                l = nx.dijkstra_path_length(G, s_node, d_node, weight="weight")
+                l, p = nx.bidirectional_dijkstra(G, s_node, d_node, weight="weight")
                 if l < best_length:
                     best_length, best_path = l, p
                     best_start_edge, best_dest_edge = s_row, d_row
@@ -836,8 +834,7 @@ def api_nearest_toilet():
             if s_node == d_node:
                 continue
             try:
-                p = nx.dijkstra_path(G, s_node, d_node, weight="weight")
-                l = nx.dijkstra_path_length(G, s_node, d_node, weight="weight")
+                l, p = nx.bidirectional_dijkstra(G, s_node, d_node, weight="weight")
                 if l < best_length:
                     best_length, best_path = l, p
                     best_start_row, best_toilet_row = s_row, d_row
@@ -885,8 +882,7 @@ def api_shortest_path():
         return jsonify({"error": f"ノード {goal} が存在しません"}), 404
 
     try:
-        path   = nx.dijkstra_path(G, start, goal, weight="weight")
-        length = nx.dijkstra_path_length(G, start, goal, weight="weight")
+        length, path = nx.bidirectional_dijkstra(G, start, goal, weight="weight")
         return jsonify(_path_result(G, path, length))
     except nx.NetworkXNoPath:
         return jsonify({"error": f"ノード {start} から {goal} への経路が見つかりません"}), 404

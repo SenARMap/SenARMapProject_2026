@@ -210,4 +210,7 @@ pyrightconfig.json
 *.crt
 *.key
 
+# WebFrontend API
+config.js
+
 # End of https://www.toptal.com/developers/gitignore/api/macos,python
