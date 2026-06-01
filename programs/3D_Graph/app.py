@@ -265,6 +265,9 @@ def build_graph(nodes_df, edges_df, use_elevator=True):
             node_attrs["lat"] = float(row["lat"])
         if "lng" in row and pd.notna(row["lng"]):
             node_attrs["lng"] = float(row["lng"])
+        if "svg_x" in row and pd.notna(row["svg_x"]):
+            node_attrs["svg_x"] = float(row["svg_x"])
+            node_attrs["svg_y"] = float(row["svg_y"])
         G.add_node(int(row["id"]), **node_attrs)
     for _, row in edges_df.iterrows():
         edge_type = str(row["type"]).strip()
@@ -353,11 +356,15 @@ def _path_result(G, path, length):
     path_coords = []
     for node_id in path:
         n = G.nodes[node_id]
-        coord_dict = {"id": node_id, "x": n["x"], "y": n["y"], "z": n["z"]}
+        coord_dict = {"id": node_id, "x": n["x"], "y": n["y"], "z": n["z"],
+                      "building": n["building"], "floor": n["floor"]}
         if "lat" in n:
             coord_dict["lat"] = n["lat"]
         if "lng" in n:
             coord_dict["lng"] = n["lng"]
+        if "svg_x" in n and n["svg_x"] == n["svg_x"]:  # NaN check
+            coord_dict["svg_x"] = n["svg_x"]
+            coord_dict["svg_y"] = n["svg_y"]
         path_coords.append(coord_dict)
 
     path_edges = []
