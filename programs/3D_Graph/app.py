@@ -15,6 +15,8 @@ BUILDINGS_JSON  = os.path.join(DATA_DIR, "buildings.json")
 CONNECT_EDGE_CSV = os.path.join(DATA_DIR, "connect_edge.csv")
 GLOBAL_NODE_CSV  = os.path.join(DATA_DIR, "global_node.csv")
 GLOBAL_EDGE_CSV  = os.path.join(DATA_DIR, "global_edge.csv")
+EDGE_IMAGE_CSV   = os.path.join(DATA_DIR, "edge_image.csv")
+CDN_BASE         = "https://cdn.iku-navi.net"
 
 # グローバルID = building_id * ID_OFFSET + ローカルID
 ID_OFFSET          = 100_000
@@ -930,6 +932,28 @@ def api_building_config_post(building_id):
         json.dump(config, f, indent=2, ensure_ascii=False)
     clear_cache()
     return jsonify({"ok": True, "building": building_id, "config": cfg})
+
+
+@app.route("/api/edge_images")
+def api_edge_images():
+    """
+    エッジ画像マップを返す。
+    返却形式: { "1000001_1000002": "https://cdn.iku-navi.net/1000001_to_1000002.jpg", ... }
+    """
+    if not os.path.exists(EDGE_IMAGE_CSV):
+        return jsonify({})
+    df = pd.read_csv(EDGE_IMAGE_CSV)
+    df.columns = df.columns.str.strip()
+    result = {}
+    for _, row in df.iterrows():
+        f, t = int(row["from"]), int(row["to"])
+        if f == 0 and t == 0:
+            continue
+        name = str(row["image_name"]).strip()
+        if not name or name == "nan":
+            continue
+        result[f"{f}_{t}"] = f"{CDN_BASE}/{name}"
+    return jsonify(result)
 
 
 if __name__ == "__main__":
