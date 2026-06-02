@@ -2,378 +2,923 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>カスタムルート描画マップ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>構内ナビ</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; overflow: hidden; }
-    #map { width: 100%; height: calc(100vh - 130px); }
-    .controls {
-      position: fixed; bottom: 0; left: 0; right: 0;
-      padding: 12px; background: white;
-      box-shadow: 0 -2px 8px rgba(0,0,0,0.15);
-      display: flex; flex-wrap: wrap; gap: 8px;
+    html { height: 100%; }
+    body {
+      height: 100%; overflow: hidden;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      display: flex; flex-direction: column;
     }
-    input[type="number"] {
-      flex: 1; min-width: 120px; height: 44px;
-      font-size: 16px; padding: 0 10px;
-      border: 1px solid #ccc; border-radius: 6px;
+
+    #app { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+
+    /* ===== AR Area (bottom half — reserved for camera/AR overlay) ===== */
+    #ar-area { flex: 1; background: #0a0a0a; position: relative; overflow: hidden; }
+
+    /* ===== Search Panel ===== */
+    #search-panel {
+      background: white;
+      padding: 8px 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      flex-shrink: 0;
+      z-index: 100;
     }
-    button {
-      height: 44px; padding: 0 16px; font-size: 15px;
-      border: none; border-radius: 6px;
-      background: #4285F4; color: white; cursor: pointer;
+    .search-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+    .search-tab {
+      flex: 1; height: 34px;
+      border: 1.5px solid #CBD5E1; border-radius: 17px;
+      background: white; font-size: 13px; font-weight: 600;
+      color: #64748B; cursor: pointer; transition: all 0.2s;
     }
-    #svg-view {
+    .search-tab.active { background: #3B82F6; border-color: #3B82F6; color: white; }
+
+    /* Route row: label + building select + autocomplete input */
+    .route-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .route-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #64748B;
+      width: 28px;
+      flex-shrink: 0;
+      text-align: center;
+    }
+    .building-select {
+      height: 38px;
+      padding: 0 3px;
+      border: 1.5px solid #E2E8F0;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #1E293B;
+      background: white;
+      width: 76px;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .building-select:focus { outline: none; border-color: #3B82F6; }
+
+    /* Custom autocomplete */
+    .ac-wrap { flex: 1; position: relative; }
+    .ac-wrap input {
+      width: 100%;
+      height: 38px;
+      padding: 0 12px;
+      border: 1.5px solid #E2E8F0;
+      border-radius: 8px;
+      font-size: 15px;
+      color: #1E293B;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .ac-wrap input:focus { border-color: #3B82F6; }
+    .suggestions {
       display: none;
-      width: 100%; height: calc(100vh - 130px);
-      position: relative; background: #f0f0f0; overflow: auto;
+      position: absolute;
+      top: calc(100% + 3px);
+      left: 0; right: 0;
+      background: white;
+      border: 1.5px solid #E2E8F0;
+      border-radius: 8px;
+      max-height: 180px;
+      overflow-y: auto;
+      z-index: 200;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    .suggestions .item {
+      padding: 9px 12px;
+      font-size: 14px;
+      color: #1E293B;
+      cursor: pointer;
+      border-bottom: 1px solid #F1F5F9;
+    }
+    .suggestions .item:last-child { border-bottom: none; }
+    .suggestions .item:active { background: #EFF6FF; color: #1D4ED8; }
+
+    /* Bottom row: elevator toggle + search button */
+    .bottom-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .ev-label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+      color: #475569;
+      white-space: nowrap;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .ev-label input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: #3B82F6;
+      cursor: pointer;
+    }
+    #btn-search {
+      flex: 1;
+      height: 40px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+      color: white;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* GPS row + accuracy warning */
+    .gps-wrapper {
+      border: 1.5px solid #BFDBFE; border-radius: 8px;
+      margin-bottom: 6px; overflow: hidden;
+    }
+    .gps-row {
+      display: flex; gap: 8px; align-items: center;
+      padding: 8px 12px; background: #EFF6FF;
+    }
+    .gps-row span { flex: 1; font-size: 13px; color: #1E40AF; word-break: break-all; }
+    .btn-gps {
+      height: 32px; padding: 0 14px; border: none; border-radius: 6px;
+      background: #3B82F6; color: white; font-size: 13px;
+      font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    }
+    #accuracy-warn {
+      display: none;
+      padding: 6px 12px; font-size: 12px; line-height: 1.6;
+    }
+    #accuracy-warn.warn-low  { background: #FFFBEB; color: #78350F; }
+    #accuracy-warn.warn-high { background: #FEF2F2; color: #7F1D1D; }
+
+    /* ===== Map / SVG Area ===== */
+    #map-area { flex: 1; position: relative; overflow: hidden; min-height: 0; }
+    #map { width: 100%; height: 100%; }
+
+    #svg-area {
+      display: none; width: 100%; height: 100%;
+      position: absolute; inset: 0; background: #F8FAFC; overflow: hidden;
     }
     #svg-container { width: 100%; height: 100%; }
-    #floor-btns {
-      position: absolute; top: 8px; left: 8px;
-      display: flex; gap: 4px; z-index: 10;
+    #svg-container svg { width: 100%; height: 100%; }
+
+    /* Error state — fills container so layout never collapses */
+    .err-box {
+      width: 100%; height: 100%; min-height: 180px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 10px; padding: 24px; text-align: center;
+      color: #94A3B8;
     }
-    #floor-btns button { background: #555; height: 36px; padding: 0 12px; font-size: 13px; }
-    #floor-btns button.active { background: #4285F4; }
-    #building-btns { display: none; width: 100%; }
-    #building-btns button { background: #E65100; }
-    #building-btns button.active { background: #4285F4; }
+    .err-box .err-icon  { font-size: 52px; line-height: 1; }
+    .err-box .err-title { font-size: 15px; font-weight: 700; color: #64748B; }
+    .err-box .err-desc  { font-size: 13px; line-height: 1.7; }
+    .err-box .err-hint  {
+      font-size: 12px; color: #64748B;
+      background: #F1F5F9; padding: 8px 16px; border-radius: 8px; margin-top: 4px;
+    }
+
+    #floor-badge {
+      position: absolute; top: 10px; left: 10px; z-index: 10;
+      background: white; border-radius: 20px; padding: 6px 14px;
+      font-size: 13px; font-weight: 700; color: #1E293B;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    }
+
+    /* ===== Navigation Bar ===== */
+    #nav-bar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 14px; background: white;
+      box-shadow: 0 -2px 8px rgba(0,0,0,0.10);
+      flex-shrink: 0; min-height: 64px;
+    }
+    .nav-arrow {
+      width: 46px; height: 46px; border-radius: 50%;
+      border: 2px solid #E2E8F0; background: white;
+      font-size: 18px; cursor: pointer; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: #475569; -webkit-tap-highlight-color: transparent;
+    }
+    .nav-arrow:not(:disabled):active { background: #F1F5F9; transform: scale(0.92); }
+    .nav-arrow:disabled { color: #CBD5E1; border-color: #F1F5F9; cursor: not-allowed; }
+
+    #step-info { flex: 1; text-align: center; min-width: 0; }
+    #step-label {
+      font-size: 15px; font-weight: 700; color: #1E293B;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #step-count { font-size: 12px; color: #94A3B8; margin-top: 2px; }
+
+    /* ===== Loading ===== */
+    #loading {
+      display: none; position: fixed; inset: 0; z-index: 500;
+      background: rgba(15,23,42,0.45);
+      align-items: center; justify-content: center;
+    }
+    #loading.show { display: flex; }
+    #loading-box {
+      background: white; border-radius: 16px; padding: 22px 36px;
+      font-size: 16px; font-weight: 600; color: #1E293B;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
   </style>
   <script src="script/config.js"></script>
 </head>
 <body>
+<div id="app">
 
-  <div id="map"></div>
-
-  <div id="svg-view">
-    <div id="floor-btns">
-      <button onclick="setActiveFloor(this); showSvg('/svg/10_1F.svg')">1階</button>
-      <button onclick="setActiveFloor(this)">2階</button>
-      <button onclick="setActiveFloor(this)">3階</button>
-      <button onclick="setActiveFloor(this)">4階</button>
-      <button onclick="setActiveFloor(this)">5階</button>
+  <!-- Search Panel -->
+  <div id="search-panel">
+    <div class="search-tabs">
+      <button class="search-tab active" id="tab-room" onclick="setMode('room')">教室 → 教室</button>
+      <button class="search-tab"        id="tab-gps"  onclick="setMode('gps')">現在地 → 教室</button>
     </div>
-    <div id="svg-container"></div>
+
+    <div id="panel-room">
+      <div class="route-row">
+        <span class="route-label">出発</span>
+        <select class="building-select" id="from-bldg">
+          <option value="">全</option>
+        </select>
+        <div class="ac-wrap">
+          <input id="from-input" placeholder="教室名" autocomplete="off">
+          <div class="suggestions" id="from-sugg"></div>
+        </div>
+      </div>
+      <div class="route-row">
+        <span class="route-label">目的</span>
+        <select class="building-select" id="to-bldg">
+          <option value="">全</option>
+        </select>
+        <div class="ac-wrap">
+          <input id="to-input" placeholder="教室名" autocomplete="off">
+          <div class="suggestions" id="to-sugg"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="panel-gps" style="display:none">
+      <div class="gps-wrapper">
+        <div class="gps-row">
+          <span id="gps-text">GPS未取得 — 右のボタンで現在地を取得</span>
+          <button class="btn-gps" onclick="captureGPS()">取得</button>
+        </div>
+        <div id="accuracy-warn"></div>
+      </div>
+      <div class="route-row">
+        <span class="route-label">目的</span>
+        <select class="building-select" id="gps-to-bldg">
+          <option value="">全</option>
+        </select>
+        <div class="ac-wrap">
+          <input id="to-input-gps" placeholder="教室名" autocomplete="off">
+          <div class="suggestions" id="gps-to-sugg"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bottom-row">
+      <label class="ev-label">
+        <input type="checkbox" id="use-elevator" checked>
+        エレベーター使用
+      </label>
+      <button id="btn-search" onclick="doSearch()">ルート検索</button>
+    </div>
   </div>
 
-  <div class="controls">
-    <div id="building-btns">
-      <button onclick="showMap()">全体マップ</button>
+  <!-- Map / SVG -->
+  <div id="map-area">
+    <div id="map"></div>
+    <div id="svg-area">
+      <div id="floor-badge"></div>
+      <div id="svg-container"></div>
     </div>
-    <input type="number" id="startNode" placeholder="出発ノードID (例: 9000001)">
-    <input type="number" id="goalNode" placeholder="目的ノードID (例: 9000015)">
-    <button onclick="searchRoute()">検索</button>
-    <button onclick="startTracking()">現在位置の取得</button>
-    <button onclick="stopTracking()">追跡停止</button>
   </div>
 
-  <script>
-    // app.pyのURLに合わせてベースURLを変更してください
+  <!-- Navigation Bar -->
+  <div id="nav-bar">
+    <button class="nav-arrow" id="prev-btn" onclick="prevStep()" disabled>&#9664;</button>
+    <div id="step-info">
+      <div id="step-label">ルートを検索してください</div>
+      <div id="step-count"></div>
+    </div>
+    <button class="nav-arrow" id="next-btn" onclick="nextStep()" disabled>&#9654;</button>
+  </div>
 
-    const API_BASE = "";
-    let map;
-    let activePolylines = [];
-    let currentLocationMarker = null;
-    let currentPathCoords = null;
+</div>
 
-    function initMap() {
-        map = new google.maps.Map(document.getElementById("map"), {
-            // ① 初期表示のズームレベル（数値が大きいほど拡大）
-            zoom: 17, 
-            
-            // ② 初期表示の中心点（緯度・経度）
-            center: { lat: 35.61035, lng: 139.55466 } 
-        });
-    }
+<!-- AR Area — reserved for camera/AR overlay -->
+<div id="ar-area"></div>
 
-    function clearRoute() {
-      activePolylines.forEach(p => p.setMap(null));
-      activePolylines = [];
-    }
+<div id="loading"><div id="loading-box">検索中...</div></div>
 
-    function haversineDistance(a, b) {
-      const R = 6371000;
-      const φ1 = a.lat * Math.PI / 180, φ2 = b.lat * Math.PI / 180;
-      const Δφ = (b.lat - a.lat) * Math.PI / 180;
-      const Δλ = (b.lng - a.lng) * Math.PI / 180;
-      const x = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
-      return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
-    }
+<script>
+// ================================================================
+// State
+// ================================================================
+const API_BASE = "";
 
-    const MAX_DASHED_M = 500;
+let map;
+let searchMode = "room";
+let gpsCoords  = null;
+let allNodes   = [];
+let allRooms   = [];        // [{room, building}, ...]
+let roomsByBuilding = {};   // {"10": ["101A", ...], ...}
 
-    const BUILDINGS = [
-      {
-        id: 10, name: "10号館",
-        svgPath: "/svg/10_1F.svg",
-        entrances: [
-          { lat: 35.6112,  lng: 139.55413 },
-          { lat: 35.61092, lng: 139.55514 }
-        ]
-      }
-    ];
-    const NEARBY_M = 80;
+let pathCoords  = [];
+let currentStep = 0;
+let currentView = "map";
 
-    function buildSegments(pathCoords) {
-      const solidSegments = [];
-      const dashedConnectors = [];
-      let current = [];
-      let lastOutdoor = null;
-      let inIndoor = false;
+let outdoorPolylines = [];
+let stepMarker       = null;
+let gpsMarker        = null;
+let gpsCircle        = null;
 
-      for (const node of pathCoords) {
-        const b = node.building;
-        const isOutdoor = b === 0 || b === "0" || b === null || b === undefined;
+let svgBuilding    = null;
+let svgFloor       = null;
+let svgOverlay     = null;
+let svgOrigViewBox = null;
 
-        if (isOutdoor) {
-          const pt = { lat: node.lat, lng: node.lng };
-          if (inIndoor) {
-            if (lastOutdoor && haversineDistance(lastOutdoor, pt) <= MAX_DASHED_M) {
-              dashedConnectors.push([lastOutdoor, pt]);
-            }
-            inIndoor = false;
-            current = [pt];
-          } else {
-            current.push(pt);
-          }
-          lastOutdoor = pt;
-        } else {
-          if (!inIndoor) {
-            if (current.length > 0) solidSegments.push([...current]);
-            current = [];
-            inIndoor = true;
-          }
-        }
-      }
-      if (current.length > 0) solidSegments.push(current);
-      return { solidSegments, dashedConnectors };
-    }
+// ================================================================
+// Google Maps init
+// ================================================================
+function initMap() {
+  map = new google.maps.Map(document.getElementById("map"), {
+    zoom: 17,
+    center: { lat: 35.61035, lng: 139.55466 },
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: false,
+    rotateControl: true,
+  });
+  loadAllData();
+}
 
-    // フォームから入力値を取得してAPIを呼び出す
-    function searchRoute() {
-      const startId = document.getElementById("startNode").value;
-      const goalId = document.getElementById("goalNode").value;
-      
-      if (!startId || !goalId) {
-        alert("出発ノードIDと目的ノードIDを入力してください。");
-        return;
-      }
-      
-      fetchAndDrawRoute(startId, goalId);
-    }
+// ================================================================
+// Data loading
+// ================================================================
+async function loadAllData() {
+  try {
+    const res  = await fetch(`${API_BASE}/api/all`);
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    allNodes = data.nodes || [];
+    initRoomData(data.rooms || []);
+  } catch {
+    console.warn("API unavailable — room autocomplete disabled");
+  }
+}
 
-    async function fetchAndDrawRoute(startId, goalId) {
-      try {
-        const url = `${API_BASE}/api/route?from_node=${startId}&to_node=${goalId}`;
-        const response = await fetch(url);
-        const data = await response.json();
-        if (data.error) { alert("エラー: " + data.error); return; }
-        currentPathCoords = data.path_coords;
-        drawPathOnMap(data.path_coords);
-        if (document.getElementById("svg-view").style.display !== "none") {
-          drawIndoorRoute(data.path_coords);
-        }
-      } catch (error) {
-        console.error("APIリクエストエラー:", error);
-        alert("APIの呼び出しに失敗しました。app.pyが起動しているか、またはCORS制約がないか確認してください。");
-      }
-    }
+function initRoomData(rooms) {
+  allRooms = rooms.map(r => ({ room: r.room, building: r.building }));
+  roomsByBuilding = {};
+  rooms.forEach(r => {
+    const key = String(r.building);
+    if (!roomsByBuilding[key]) roomsByBuilding[key] = [];
+    roomsByBuilding[key].push(r.room);
+  });
 
-    function drawPathOnMap(pathCoords) {
-      clearRoute();
-      const { solidSegments, dashedConnectors } = buildSegments(pathCoords);
-      const bounds = new google.maps.LatLngBounds();
+  // Populate building selects
+  const buildings = Object.keys(roomsByBuilding).sort((a, b) => Number(a) - Number(b));
+  ["from-bldg", "to-bldg", "gps-to-bldg"].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    buildings.forEach(b => {
+      const opt = document.createElement("option");
+      opt.value = b;
+      opt.textContent = `${b}号館`;
+      sel.appendChild(opt);
+    });
+  });
 
-      solidSegments.forEach(seg => {
-        const poly = new google.maps.Polyline({
-          path: seg, geodesic: true,
-          strokeColor: "#0000FF", strokeOpacity: 0.8, strokeWeight: 6
-        });
-        poly.setMap(map);
-        activePolylines.push(poly);
-        seg.forEach(pt => bounds.extend(pt));
+  // Setup autocompletes
+  setupAutocomplete("from-input",   "from-sugg",   "from-bldg");
+  setupAutocomplete("to-input",     "to-sugg",     "to-bldg");
+  setupAutocomplete("to-input-gps", "gps-to-sugg", "gps-to-bldg");
+
+  // Re-filter suggestions when building select changes
+  [["from-bldg", "from-input"], ["to-bldg", "to-input"], ["gps-to-bldg", "to-input-gps"]].forEach(([bId, iId]) => {
+    const sel = document.getElementById(bId);
+    if (sel) sel.addEventListener("change", () => {
+      document.getElementById(iId)?.dispatchEvent(new Event("input"));
+    });
+  });
+}
+
+// ================================================================
+// Custom autocomplete
+// ================================================================
+function setupAutocomplete(inputId, suggId, bldgSelectId) {
+  const input = document.getElementById(inputId);
+  const sugg  = document.getElementById(suggId);
+  const bldg  = document.getElementById(bldgSelectId);
+  if (!input || !sugg) return;
+
+  function getMatches(q) {
+    const selectedBldg = bldg ? bldg.value : "";
+    const query = q.trim().toLowerCase();
+    let candidates = selectedBldg
+      ? allRooms.filter(r => String(r.building) === selectedBldg)
+      : allRooms;
+    if (query) candidates = candidates.filter(r => r.room.toLowerCase().includes(query));
+    return candidates.slice(0, 20);
+  }
+
+  function renderSugg(matches) {
+    const selectedBldg = bldg ? bldg.value : "";
+    sugg.innerHTML = "";
+    if (!matches.length) { sugg.style.display = "none"; return; }
+    matches.forEach(r => {
+      const item = document.createElement("div");
+      item.className = "item";
+      item.textContent = selectedBldg ? r.room : `${r.building}号館 ${r.room}`;
+      item.addEventListener("mousedown", e => {
+        e.preventDefault(); // prevent blur firing before click registers
+        input.value = r.room;
+        if (bldg && !bldg.value) bldg.value = String(r.building);
+        sugg.style.display = "none";
       });
+      sugg.appendChild(item);
+    });
+    sugg.style.display = "block";
+  }
 
-      const dotIcon = {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 7,
-        fillColor: "#FF0000",
-        fillOpacity: 1,
-        strokeColor: "#FF0000",
-        strokeWeight: 0
-      };
+  input.addEventListener("input", () => {
+    if (input.value.length === 0) { sugg.style.display = "none"; return; }
+    renderSugg(getMatches(input.value));
+  });
 
-      dashedConnectors.forEach(conn => {
-        const poly = new google.maps.Polyline({
-          path: conn, strokeOpacity: 0,
-          icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3, strokeColor: '#888888' },
-                    offset: '0', repeat: '12px' }]
-        });
-        poly.setMap(map);
-        activePolylines.push(poly);
-        conn.forEach(pt => bounds.extend(pt));
+  input.addEventListener("focus", () => {
+    if (input.value.length >= 1) renderSugg(getMatches(input.value));
+  });
 
-        [conn[0], conn[conn.length - 1]].forEach(pt => {
-          const dot = new google.maps.Marker({ position: pt, map: map, icon: dotIcon });
-          activePolylines.push(dot);
-        });
+  input.addEventListener("blur", () => {
+    sugg.style.display = "none";
+  });
+}
+
+// ================================================================
+// Room resolution
+// ================================================================
+function resolveRoom(inputId, bldgSelectId) {
+  const inputEl = document.getElementById(inputId);
+  const bldgEl  = document.getElementById(bldgSelectId);
+  if (!inputEl) return null;
+  const roomQuery = inputEl.value.trim();
+  const bldgVal   = bldgEl ? bldgEl.value : "";
+  if (!roomQuery) return null;
+  let matches;
+  if (bldgVal) {
+    matches = allRooms.filter(r => String(r.building) === bldgVal && r.room === roomQuery);
+  } else {
+    matches = allRooms.filter(r => r.room === roomQuery);
+  }
+  if (matches.length === 0) return null;
+  if (matches.length > 1)   return "ambiguous";
+  return matches[0];
+}
+
+// ================================================================
+// Search mode toggle
+// ================================================================
+function setMode(mode) {
+  searchMode = mode;
+  document.getElementById("panel-room").style.display = mode === "room" ? "block" : "none";
+  document.getElementById("panel-gps").style.display  = mode === "gps"  ? "block" : "none";
+  document.getElementById("tab-room").classList.toggle("active", mode === "room");
+  document.getElementById("tab-gps").classList.toggle("active",  mode === "gps");
+}
+
+// ================================================================
+// GPS
+// ================================================================
+function captureGPS() {
+  if (!navigator.geolocation) { alert("位置情報に対応していません。"); return; }
+  document.getElementById("gps-text").textContent = "取得中...";
+  hideAccuracyWarn();
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      gpsCoords = { lat, lng };
+      document.getElementById("gps-text").textContent =
+        `${lat.toFixed(5)}, ${lng.toFixed(5)}  ±${Math.round(accuracy)}m`;
+      showAccuracyWarn(accuracy);
+      renderGpsOnMap(lat, lng, accuracy);
+    },
+    () => {
+      document.getElementById("gps-text").textContent = "取得失敗";
+      alert("位置情報を取得できませんでした。\nGPSが有効か確認してください。");
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+  );
+}
+
+function renderGpsOnMap(lat, lng, accuracy) {
+  if (gpsMarker) gpsMarker.setMap(null);
+  gpsMarker = new google.maps.Marker({
+    position: { lat, lng }, map,
+    title: "現在地",
+    icon: {
+      path: google.maps.SymbolPath.CIRCLE, scale: 9,
+      fillColor: "#4285F4", fillOpacity: 1,
+      strokeColor: "white", strokeWeight: 2.5,
+    },
+    zIndex: 5,
+  });
+
+  if (gpsCircle) gpsCircle.setMap(null);
+  gpsCircle = new google.maps.Circle({
+    center: { lat, lng }, radius: accuracy, map,
+    fillColor: "#4285F4", fillOpacity: 0.08,
+    strokeColor: "#4285F4", strokeOpacity: 0.3, strokeWeight: 1.5,
+  });
+
+  switchView("map");
+  map.panTo({ lat, lng });
+}
+
+function showAccuracyWarn(accuracy) {
+  const el = document.getElementById("accuracy-warn");
+  if (accuracy <= 30) { hideAccuracyWarn(); return; }
+  el.style.display = "block";
+  el.className = "warn-low";
+  el.innerHTML =
+    `GPS精度が低下しています（±${Math.round(accuracy)}m）。屋内の可能性があります。<br>` +
+    `近くの<b>部屋番号の案内板</b>を確認して教室名で検索してください。`;
+}
+
+function hideAccuracyWarn() {
+  const el = document.getElementById("accuracy-warn");
+  el.style.display = "none";
+  el.className = "";
+}
+
+function findNearestNode(lat, lng) {
+  const outdoor = allNodes.filter(n => n.building === 0 && n.lat != null && n.lng != null);
+  if (!outdoor.length) return null;
+  let best = null, bestD = Infinity;
+  outdoor.forEach(n => {
+    const d = haversine({ lat, lng }, { lat: n.lat, lng: n.lng });
+    if (d < bestD) { bestD = d; best = n; }
+  });
+  return best;
+}
+
+function haversine(a, b) {
+  const R = 6371000;
+  const dφ = (b.lat - a.lat) * Math.PI / 180;
+  const dλ = (b.lng - a.lng) * Math.PI / 180;
+  const φ1 = a.lat * Math.PI / 180, φ2 = b.lat * Math.PI / 180;
+  const s  = Math.sin(dφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(dλ/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
+
+// ================================================================
+// Route heading — orient Google Maps so "where you should go" is up.
+// ================================================================
+function calcRouteHeading(step) {
+  const cur = pathCoords[step];
+  if (!cur || cur.lat == null) return null;
+  for (let i = step + 1; i < pathCoords.length; i++) {
+    const n = pathCoords[i];
+    if (n.lat != null && n.lng != null) return bearingDeg(cur.lat, cur.lng, n.lat, n.lng);
+  }
+  for (let i = step - 1; i >= 0; i--) {
+    const n = pathCoords[i];
+    if (n.lat != null && n.lng != null) return bearingDeg(n.lat, n.lng, cur.lat, cur.lng);
+  }
+  return null;
+}
+
+function bearingDeg(lat1, lng1, lat2, lng2) {
+  const phi1 = lat1 * Math.PI / 180, phi2 = lat2 * Math.PI / 180;
+  const dl   = (lng2 - lng1) * Math.PI / 180;
+  const y = Math.sin(dl) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dl);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+// ================================================================
+// Search
+// ================================================================
+async function doSearch() {
+  const params = new URLSearchParams();
+  params.set("use_elevator", document.getElementById("use-elevator").checked ? "1" : "0");
+
+  if (searchMode === "room") {
+    const fromInfo = resolveRoom("from-input", "from-bldg");
+    const toInfo   = resolveRoom("to-input",   "to-bldg");
+    if (!fromInfo)              { alert("出発教室を入力してください。"); return; }
+    if (fromInfo === "ambiguous") { alert("出発教室が複数の号館に存在します。号館を指定してください。"); return; }
+    if (!toInfo)                { alert("目的教室を入力してください。"); return; }
+    if (toInfo   === "ambiguous") { alert("目的教室が複数の号館に存在します。号館を指定してください。"); return; }
+    params.set("from_room",     fromInfo.room);
+    params.set("from_building", fromInfo.building);
+    params.set("to_room",       toInfo.room);
+    params.set("to_building",   toInfo.building);
+
+  } else {
+    if (!gpsCoords) { alert("GPS位置を先に取得してください。"); return; }
+    const toInfo = resolveRoom("to-input-gps", "gps-to-bldg");
+    if (!toInfo)              { alert("目的教室を入力してください。"); return; }
+    if (toInfo === "ambiguous") { alert("目的教室が複数の号館に存在します。号館を指定してください。"); return; }
+    const nearest = findNearestNode(gpsCoords.lat, gpsCoords.lng);
+    if (!nearest) { alert("近くの出発ノードが見つかりません。"); return; }
+    params.set("from_node",   nearest.id);
+    params.set("to_room",     toInfo.room);
+    params.set("to_building", toInfo.building);
+  }
+
+  setLoading(true);
+  try {
+    const res = await fetch(`${API_BASE}/api/route?${params}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) { alert("エラー: " + data.error); return; }
+    initRoute(data.path_coords);
+  } catch {
+    document.getElementById("step-label").textContent = "サーバーに接続できません";
+    document.getElementById("step-count").textContent = "app.py が起動しているか確認してください";
+  } finally {
+    setLoading(false);
+  }
+}
+
+function setLoading(on) {
+  document.getElementById("loading").classList.toggle("show", on);
+}
+
+// ================================================================
+// Route init
+// ================================================================
+function initRoute(coords) {
+  pathCoords  = coords;
+  currentStep = 0;
+  svgBuilding = null;
+  svgFloor    = null;
+  svgOverlay  = null;
+  clearMapOverlays();
+  drawFullOutdoorRoute(coords);
+  goToStep(0);
+}
+
+function clearMapOverlays() {
+  outdoorPolylines.forEach(p => p.setMap(null));
+  outdoorPolylines = [];
+  if (stepMarker) { stepMarker.setMap(null); stepMarker = null; }
+}
+
+function drawFullOutdoorRoute(coords) {
+  // Draw route polylines only; fitBounds omitted to prevent zoom mismatch.
+  let seg = [];
+  const flush = () => {
+    if (seg.length >= 2) {
+      const poly = new google.maps.Polyline({
+        path: seg.map(n => ({ lat: n.lat, lng: n.lng })),
+        strokeColor: "#3B82F6", strokeOpacity: 0.75,
+        strokeWeight: 5, geodesic: true, map,
       });
-
-      if (!bounds.isEmpty()) map.fitBounds(bounds, 50);
+      outdoorPolylines.push(poly);
     }
+    seg = [];
+  };
+  coords.forEach(n => {
+    if (n.building === 0 && n.lat != null) seg.push(n);
+    else flush();
+  });
+  flush();
+}
 
-    function startTracking() {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          function(position) {
-            const pos = {
-              lat: position.coords.latitude,
-              lng: position.coords.longitude
-            };
-            if (currentLocationMarker === null) {
-              currentLocationMarker = new google.maps.Marker({
-                position: pos,
-                map: map,
-                title: "現在地",
-                icon: {
-                  path: google.maps.SymbolPath.CIRCLE,
-                  scale: 8,
-                  fillColor: "#00AA00",
-                  fillOpacity: 1,
-                  strokeColor: "white",
-                  strokeWeight: 2
-                }
-              });
-              map.setCenter(pos);
-            } else {
-              currentLocationMarker.setPosition(pos);
-            }
-            checkNearbyBuildings(pos);
-          },
-          function(error) {
-            const msgs = {
-              1: "位置情報の使用が拒否されました。ブラウザの設定で許可してください。",
-              2: "現在地を取得できませんでした。",
-              3: "位置情報の取得がタイムアウトしました。"
-            };
-            alert(msgs[error.code] || "位置情報エラー: " + error.message);
-          },
-          {
-            enableHighAccuracy: false,
-            maximumAge: 60000,
-            timeout: 30000
-          }
-        );
-      } else {
-        alert("お使いのブラウザは位置情報に対応していません。");
-      }
+// ================================================================
+// Step navigation
+// ================================================================
+async function goToStep(step) {
+  currentStep = step;
+  const node  = pathCoords[step];
+  updateNavBar(node, step, pathCoords.length);
+  if (!node) return;
+
+  if (node.building === 0 && node.lat != null) {
+    switchView("map");
+    moveMapTo(node, step);
+  } else if (node.building !== 0) {
+    switchView("svg");
+    if (node.building !== svgBuilding || node.floor !== svgFloor) {
+      svgBuilding = node.building;
+      svgFloor    = node.floor;
+      await loadSvg(node.building, node.floor);
+      drawSvgBaseRoute(node.building, node.floor);
     }
+    renderSvgStep(step);
+  }
+}
 
-    function stopTracking() {
-      if (currentLocationMarker !== null) {
-        currentLocationMarker.setMap(null);
-        currentLocationMarker = null;
-      }
+function prevStep() { if (currentStep > 0) goToStep(currentStep - 1); }
+function nextStep() { if (currentStep < pathCoords.length - 1) goToStep(currentStep + 1); }
+
+function updateNavBar(node, step, total) {
+  let label = "—";
+  if (node) label = node.building === 0 ? "屋外を移動中" : `${node.building}号館 ${node.floor}階`;
+  document.getElementById("step-label").textContent = label;
+  document.getElementById("step-count").textContent = total ? `${step + 1} / ${total}` : "";
+  document.getElementById("prev-btn").disabled = step <= 0;
+  document.getElementById("next-btn").disabled = step >= total - 1;
+}
+
+// ================================================================
+// View switching
+// ================================================================
+function switchView(view) {
+  currentView = view;
+  document.getElementById("map").style.display      = view === "map" ? "block" : "none";
+  document.getElementById("svg-area").style.display = view === "svg" ? "block" : "none";
+  if (view === "map" && map) google.maps.event.trigger(map, "resize");
+}
+
+// ================================================================
+// Google Maps — step marker + route-direction heading
+// ================================================================
+function moveMapTo(node, step) {
+  const pos = { lat: node.lat, lng: node.lng };
+  if (!stepMarker) {
+    stepMarker = new google.maps.Marker({
+      position: pos, map,
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE, scale: 10,
+        fillColor: "#EF4444", fillOpacity: 1,
+        strokeColor: "white", strokeWeight: 2,
+      },
+      zIndex: 10,
+    });
+  } else {
+    stepMarker.setPosition(pos);
+  }
+  const heading = calcRouteHeading(step);
+  if (heading != null) map.setHeading(heading);
+  map.setCenter(pos);
+  map.setZoom(17);
+}
+
+// ================================================================
+// SVG — load floor plan
+// ================================================================
+async function loadSvg(building, floor) {
+  document.getElementById("floor-badge").textContent = `${building}号館 ${floor}階`;
+  const container = document.getElementById("svg-container");
+  svgOverlay = null;
+
+  let text;
+  try {
+    const res = await fetch(`/svg/${building}_${floor}F.svg`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    text = await res.text();
+  } catch {
+    container.innerHTML = `
+      <div class="err-box">
+        <div class="err-icon">Map</div>
+        <div class="err-title">${building}号館 ${floor}階のマップが見つかりません</div>
+        <div class="err-desc">このフロアのSVGデータはまだ登録されていません。</div>
+        <div class="err-hint">◀ ▶ で他のステップに進んでください</div>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = text;
+  const svgEl = container.querySelector("svg");
+  if (!svgEl) return;
+
+  svgOrigViewBox = { width: svgEl.viewBox.baseVal.width, height: svgEl.viewBox.baseVal.height };
+  svgEl.style.width  = "100%";
+  svgEl.style.height = "100%";
+
+  svgOverlay = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  svgOverlay.id = "route-overlay";
+  svgEl.appendChild(svgOverlay);
+}
+
+// ================================================================
+// SVG — base route (gray)
+// ================================================================
+function drawSvgBaseRoute(building, floor) {
+  if (!svgOverlay) return;
+  svgOverlay.innerHTML = "";
+
+  const nodes = pathCoords.filter(n =>
+    n.building === building && n.floor === floor && n.svg_x != null
+  );
+  if (nodes.length < 2) return;
+
+  const pl = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  pl.setAttribute("points",          nodes.map(n => `${n.svg_x},${n.svg_y}`).join(" "));
+  pl.setAttribute("stroke",          "#CBD5E1");
+  pl.setAttribute("stroke-width",    "14");
+  pl.setAttribute("fill",            "none");
+  pl.setAttribute("stroke-linecap",  "round");
+  pl.setAttribute("stroke-linejoin", "round");
+  svgOverlay.appendChild(pl);
+}
+
+// ================================================================
+// SVG — current step highlight + direction arrow
+// ================================================================
+function renderSvgStep(step) {
+  if (!svgOverlay) return;
+  svgOverlay.querySelectorAll(".dyn").forEach(el => el.remove());
+
+  const curNode = pathCoords[step];
+  if (!curNode || curNode.building !== svgBuilding || curNode.floor !== svgFloor) return;
+
+  const floorNodes  = pathCoords.filter(n =>
+    n.building === svgBuilding && n.floor === svgFloor && n.svg_x != null
+  );
+  const curFloorIdx = floorNodes.findIndex(n => n.id === curNode.id);
+  if (curFloorIdx < 0) return;
+
+  // Completed segment (blue)
+  if (curFloorIdx > 0) {
+    const done = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    done.classList.add("dyn");
+    done.setAttribute("points",          floorNodes.slice(0, curFloorIdx + 1).map(n => `${n.svg_x},${n.svg_y}`).join(" "));
+    done.setAttribute("stroke",          "#3B82F6");
+    done.setAttribute("stroke-width",    "14");
+    done.setAttribute("fill",            "none");
+    done.setAttribute("stroke-linecap",  "round");
+    done.setAttribute("stroke-linejoin", "round");
+    svgOverlay.appendChild(done);
+  }
+
+  // Past / future dots
+  floorNodes.forEach((n, idx) => {
+    if (idx === curFloorIdx) return;
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.classList.add("dyn");
+    c.setAttribute("cx", n.svg_x); c.setAttribute("cy", n.svg_y);
+    if (idx < curFloorIdx) {
+      c.setAttribute("r", "10"); c.setAttribute("fill", "#3B82F6"); c.setAttribute("fill-opacity", "0.85");
+    } else {
+      c.setAttribute("r", "8");  c.setAttribute("fill", "#94A3B8"); c.setAttribute("fill-opacity", "0.75");
     }
+    svgOverlay.appendChild(c);
+  });
 
-    function checkNearbyBuildings(pos) {
-      const nearby = BUILDINGS.filter(b =>
-        b.entrances.some(e => haversineDistance(pos, e) <= NEARBY_M)
-      );
-      const bar = document.getElementById("building-btns");
-      while (bar.children.length > 1) bar.removeChild(bar.lastChild);
-      if (nearby.length > 0) {
-        bar.style.display = "block";
-        setActiveBuildingBtn(bar.children[0]);
-        nearby.forEach(b => {
-          const btn = document.createElement("button");
-          btn.textContent = b.name;
-          btn.onclick = () => {
-          setActiveBuildingBtn(btn);
-          setActiveFloor(document.querySelector('#floor-btns button'));
-          showSvg(b.svgPath);
-        };
-          bar.appendChild(btn);
-        });
-      } else {
-        bar.style.display = "none";
-      }
-    }
+  // Direction angle: vector from previous node to current (or current to next if first)
+  const prevNode = curFloorIdx > 0 ? floorNodes[curFloorIdx - 1] : null;
+  const nextNode = curFloorIdx < floorNodes.length - 1 ? floorNodes[curFloorIdx + 1] : null;
+  let angle = 0;
+  if (prevNode) {
+    angle = Math.atan2(curNode.svg_y - prevNode.svg_y, curNode.svg_x - prevNode.svg_x) * 180 / Math.PI;
+  } else if (nextNode) {
+    angle = Math.atan2(nextNode.svg_y - curNode.svg_y, nextNode.svg_x - curNode.svg_x) * 180 / Math.PI;
+  }
 
-    function setActiveBuildingBtn(btn) {
-      document.querySelectorAll('#building-btns button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-    }
+  // White halo
+  const halo = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  halo.classList.add("dyn");
+  halo.setAttribute("cx", curNode.svg_x); halo.setAttribute("cy", curNode.svg_y);
+  halo.setAttribute("r", "32"); halo.setAttribute("fill", "white"); halo.setAttribute("fill-opacity", "0.88");
+  svgOverlay.appendChild(halo);
 
-    function setActiveFloor(btn) {
-      document.querySelectorAll('#floor-btns button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-    }
+  // Navigation arrow: isoceles triangle pointing UP (0,-36), rotated to travel direction
+  // rotate(angle + 90): atan2 measures from +X axis; arrow points in -Y direction
+  const arrow = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+  arrow.classList.add("dyn");
+  arrow.setAttribute("points", "0,-36 -18,20 0,8 18,20");
+  arrow.setAttribute("fill",   "#EF4444");
+  arrow.setAttribute("stroke", "white");
+  arrow.setAttribute("stroke-width", "3");
+  arrow.setAttribute("stroke-linejoin", "round");
+  arrow.setAttribute("transform", `translate(${curNode.svg_x},${curNode.svg_y}) rotate(${angle + 90})`);
+  svgOverlay.appendChild(arrow);
 
-    async function showSvg(svgPath) {
-      document.getElementById("map").style.display = "none";
-      document.getElementById("svg-view").style.display = "block";
-      const container = document.getElementById("svg-container");
-      const res = await fetch(svgPath);
-      container.innerHTML = await res.text();
-      const svgEl = container.querySelector('svg');
-      if (svgEl) {
-        svgEl.style.width = "100%";
-        svgEl.style.height = "100%";
-        const overlay = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        overlay.id = 'route-overlay';
-        svgEl.appendChild(overlay);
-      }
-      if (currentPathCoords) drawIndoorRoute(currentPathCoords);
-    }
+  if (svgOrigViewBox) panSvgTo(curNode.svg_x, curNode.svg_y);
+}
 
-    function drawIndoorRoute(pathCoords) {
-      const overlay = document.getElementById('route-overlay');
-      if (!overlay) return;
-      overlay.innerHTML = '';
-      const nodes = pathCoords.filter(n =>
-        n.building === 10 && n.floor === 1 &&
-        n.svg_x !== undefined && n.svg_y !== undefined
-      );
-      if (nodes.length === 0) return;
-      if (nodes.length >= 2) {
-        const pl = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-        pl.setAttribute('points', nodes.map(n => `${n.svg_x},${n.svg_y}`).join(' '));
-        pl.setAttribute('stroke', '#0000FF');
-        pl.setAttribute('stroke-width', '10');
-        pl.setAttribute('fill', 'none');
-        pl.setAttribute('stroke-opacity', '0.8');
-        overlay.appendChild(pl);
-      }
-      nodes.forEach(n => {
-        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        c.setAttribute('cx', n.svg_x); c.setAttribute('cy', n.svg_y);
-        c.setAttribute('r', '14'); c.setAttribute('fill', '#FF0000');
-        c.setAttribute('fill-opacity', '0.9');
-        overlay.appendChild(c);
-      });
-    }
+// ================================================================
+// SVG — pan viewBox to keep current node centered
+// ================================================================
+function panSvgTo(cx, cy) {
+  const svgEl = document.querySelector("#svg-container svg");
+  if (!svgEl || !svgOrigViewBox) return;
+  const W = 1100, H = 780;
+  const x = Math.max(0, Math.min(cx - W / 2, svgOrigViewBox.width  - W));
+  const y = Math.max(0, Math.min(cy - H / 2, svgOrigViewBox.height - H));
+  svgEl.setAttribute("viewBox", `${x} ${y} ${W} ${H}`);
+}
+</script>
 
-    function showMap() {
-      document.getElementById("svg-view").style.display = "none";
-      document.getElementById("map").style.display = "block";
-      setActiveBuildingBtn(document.querySelector('#building-btns button'));
-    }
-  </script>
-
-  <!-- Google Maps APIの読み込み（YOUR_API_KEYを実際のAPIキーに書き換えてください） -->
-  <script>
-    // JavaScriptを使って動的にGoogle Mapsのスクリプトタグを生成する
-    const mapScript = document.createElement('script');
-    
-    // ここはJavaScriptの世界なので ${...} が正しくAPIキーに変換されます
-    mapScript.src = `https://maps.googleapis.com/maps/api/js?key=${CONFIG.GOOGLE_MAPS_API_KEY}&callback=initMap`;
-    mapScript.async = true;
-    mapScript.defer = true;
-    
-    // 組み立てたタグをHTML（<body>の最後）に挿入して読み込みを開始する
-    document.body.appendChild(mapScript);
-  </script>
+<script>
+  const _ms = document.createElement("script");
+  _ms.src   = `https://maps.googleapis.com/maps/api/js?key=${CONFIG.GOOGLE_MAPS_API_KEY}&callback=initMap`;
+  _ms.async = true;
+  _ms.defer = true;
+  document.body.appendChild(_ms);
+</script>
 </body>
 </html>
