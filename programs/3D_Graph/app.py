@@ -15,6 +15,8 @@ BUILDINGS_JSON  = os.path.join(DATA_DIR, "buildings.json")
 CONNECT_EDGE_CSV = os.path.join(DATA_DIR, "connect_edge.csv")
 GLOBAL_NODE_CSV  = os.path.join(DATA_DIR, "global_node.csv")
 GLOBAL_EDGE_CSV  = os.path.join(DATA_DIR, "global_edge.csv")
+EDGE_IMAGE_CSV   = os.path.join(DATA_DIR, "edge_image.csv")
+CDN_BASE         = "https://cdn.iku-navi.net"
 
 # グローバルID = building_id * ID_OFFSET + ローカルID
 ID_OFFSET          = 100_000
@@ -265,6 +267,9 @@ def build_graph(nodes_df, edges_df, use_elevator=True):
             node_attrs["lat"] = float(row["lat"])
         if "lng" in row and pd.notna(row["lng"]):
             node_attrs["lng"] = float(row["lng"])
+        if "svg_x" in row and pd.notna(row["svg_x"]):
+            node_attrs["svg_x"] = float(row["svg_x"])
+            node_attrs["svg_y"] = float(row["svg_y"])
         G.add_node(int(row["id"]), **node_attrs)
     for _, row in edges_df.iterrows():
         edge_type = str(row["type"]).strip()
@@ -276,7 +281,7 @@ def build_graph(nodes_df, edges_df, use_elevator=True):
             name=str(row["name"]),
             building=int(row["building"]),
             floor=int(row["floor"]),
-            weight=float(row["weight"]),
+            weight=float(row["weight"]) * float(row["length"]),
             length=float(row["length"]),
             edge_type=edge_type,
         )
@@ -353,11 +358,15 @@ def _path_result(G, path, length):
     path_coords = []
     for node_id in path:
         n = G.nodes[node_id]
-        coord_dict = {"id": node_id, "x": n["x"], "y": n["y"], "z": n["z"]}
+        coord_dict = {"id": node_id, "x": n["x"], "y": n["y"], "z": n["z"],
+                      "building": n["building"], "floor": n["floor"]}
         if "lat" in n:
             coord_dict["lat"] = n["lat"]
         if "lng" in n:
             coord_dict["lng"] = n["lng"]
+        if "svg_x" in n and n["svg_x"] == n["svg_x"]:  # NaN check
+            coord_dict["svg_x"] = n["svg_x"]
+            coord_dict["svg_y"] = n["svg_y"]
         path_coords.append(coord_dict)
 
     path_edges = []
@@ -618,8 +627,7 @@ def api_navigate_to_room():
                 if g_node not in G.nodes:
                     continue
                 try:
-                    p = nx.dijkstra_path(G, s_node, g_node, weight="weight")
-                    l = nx.dijkstra_path_length(G, s_node, g_node, weight="weight")
+                    l, p = nx.bidirectional_dijkstra(G, s_node, g_node, weight="weight")
                     if l < best_length:
                         best_length     = l
                         best_path       = p
@@ -722,8 +730,7 @@ def api_route():
             if s_node == d_node:
                 continue
             try:
-                p = nx.dijkstra_path(G, s_node, d_node, weight="weight")
-                l = nx.dijkstra_path_length(G, s_node, d_node, weight="weight")
+                l, p = nx.bidirectional_dijkstra(G, s_node, d_node, weight="weight")
                 if l < best_length:
                     best_length, best_path = l, p
                     best_start_edge, best_dest_edge = s_row, d_row
@@ -829,8 +836,7 @@ def api_nearest_toilet():
             if s_node == d_node:
                 continue
             try:
-                p = nx.dijkstra_path(G, s_node, d_node, weight="weight")
-                l = nx.dijkstra_path_length(G, s_node, d_node, weight="weight")
+                l, p = nx.bidirectional_dijkstra(G, s_node, d_node, weight="weight")
                 if l < best_length:
                     best_length, best_path = l, p
                     best_start_row, best_toilet_row = s_row, d_row
@@ -878,8 +884,7 @@ def api_shortest_path():
         return jsonify({"error": f"ノード {goal} が存在しません"}), 404
 
     try:
-        path   = nx.dijkstra_path(G, start, goal, weight="weight")
-        length = nx.dijkstra_path_length(G, start, goal, weight="weight")
+        length, path = nx.bidirectional_dijkstra(G, start, goal, weight="weight")
         return jsonify(_path_result(G, path, length))
     except nx.NetworkXNoPath:
         return jsonify({"error": f"ノード {start} から {goal} への経路が見つかりません"}), 404
@@ -927,6 +932,28 @@ def api_building_config_post(building_id):
         json.dump(config, f, indent=2, ensure_ascii=False)
     clear_cache()
     return jsonify({"ok": True, "building": building_id, "config": cfg})
+
+
+@app.route("/api/edge_images")
+def api_edge_images():
+    """
+    エッジ画像マップを返す。
+    返却形式: { "1000001_1000002": "https://cdn.iku-navi.net/1000001_to_1000002.jpg", ... }
+    """
+    if not os.path.exists(EDGE_IMAGE_CSV):
+        return jsonify({})
+    df = pd.read_csv(EDGE_IMAGE_CSV)
+    df.columns = df.columns.str.strip()
+    result = {}
+    for _, row in df.iterrows():
+        f, t = int(row["from"]), int(row["to"])
+        if f == 0 and t == 0:
+            continue
+        name = str(row["image_name"]).strip()
+        if not name or name == "nan":
+            continue
+        result[f"{f}_{t}"] = f"{CDN_BASE}/{name}"
+    return jsonify(result)
 
 
 if __name__ == "__main__":

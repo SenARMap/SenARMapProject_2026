@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>SVG Map Step Route Demo</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            color: #2c3e50;
+        }
+
+        p {
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .map-container {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e2e8f0;
+        }
+
+        svg {
+            background-color: #fafbfc;
+            border-radius: 8px;
+            border: 1px solid #edf2f7;
+        }
+
+        /* 未完了の線のスタイル */
+        .route-line {
+            stroke: #cbd5e1;
+            stroke-width: 5;
+            stroke-linecap: round;
+            transition: stroke 0.4s ease, stroke-width 0.3s ease;
+        }
+
+        /* 完了済みの線のスタイル */
+        .route-line.active {
+            stroke: #3b82f6;
+            stroke-width: 6;
+        }
+
+        /* 点（ピン）のスタイル */
+        .route-point {
+            fill: #ffffff;
+            stroke: #94a3b8;
+            stroke-width: 4;
+            transition: stroke 0.4s ease, fill 0.4s ease, r 0.3s ease;
+        }
+
+        .route-point.active {
+            stroke: #3b82f6;
+            fill: #eff6ff;
+            r: 10;
+        }
+
+        .route-point.current {
+            stroke: #ef4444;
+            fill: #fef2f2;
+            r: 12;
+        }
+
+        /* コントロールパネル */
+        .controls {
+            margin-top: 25px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        button {
+            background-color: #ffffff;
+            color: #334155;
+            border: 1px solid #cbd5e1;
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        button:hover {
+            background-color: #f8fafc;
+            border-color: #94a3b8;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button:disabled {
+            background-color: #f1f5f9;
+            color: #94a3b8;
+            border-color: #e2e8f0;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .step-display {
+            font-size: 16px;
+            font-weight: 700;
+            color: #1e293b;
+            min-width: 120px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>SVGマップ ルート進行デモ</h1>
+    <p>「次のステップ」をクリックすると、APIから取得した座標データをもとにルートが進行し、色が変わります。</p>
+
+    <div class="map-container">
+        <svg id="mapSvg" width="600" height="400">
+            <defs>
+                <!-- 未完了（グレー）の矢印マーカー -->
+                <marker id="arrow-inactive" viewBox="0 0 10 10" refX="22" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M 0 1 L 9 5 L 0 9 z" fill="#cbd5e1" />
+                </marker>
+                
+                <!-- 完了済み（青色）の矢印マーカー -->
+                <marker id="arrow-active" viewBox="0 0 10 10" refX="22" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M 0 1 L 9 5 L 0 9 z" fill="#3b82f6" />
+                </marker>
+            </defs>
+            
+            <!-- ルートの線を描画するグループ -->
+            <g id="lineGroup"></g>
+            <!-- ルートの点（スポット）を描画するグループ -->
+            <g id="pointGroup"></g>
+        </svg>
+    </div>
+
+    <div class="controls">
+        <button id="prevBtn" onclick="prevStep()">戻る</button>
+        <span id="stepDisplay" class="step-display">Step: 0 / 0</span>
+        <button id="nextBtn" onclick="nextStep()">次のステップ</button>
+    </div>
+
+    <script>
+        // --- 1. APIから返ってくる想定のデータ構造 ---
+        // 本来はAPIのレスポンス（ルート情報、点の名前、座標）をそのまま流し込みます
+        const apiResponse = {
+            targetSvg: "mapSvg",
+            route: [
+                { id: "point1", name: "スタート地点", x: 80,  y: 320 },
+                { id: "point2", name: "チェックポイントA", x: 220, y: 160 },
+                { id: "point3", name: "チェックポイントB", x: 380, y: 260 },
+                { id: "point4", name: "ゴール地点", x: 520, y: 80 }
+            ]
+        };
+
+        const pointsData = apiResponse.route;
+        let currentStep = 0; 
+        const maxStep = pointsData.length - 1; // 必要な線の本数（区間数）
+
+        const lineGroup = document.getElementById('lineGroup');
+        const pointGroup = document.getElementById('pointGroup');
+        
+        const linesDOMs = [];
+        const pointsDOMs = [];
+
+        // --- 2. 初期描画ロジック ---
+        function initRoute() {
+            // 先に線（区間）をすべて描画
+            for (let i = 0; i < pointsData.length - 1; i++) {
+                const start = pointsData[i];
+                const end = pointsData[i + 1];
+
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', start.x);
+                line.setAttribute('y1', start.y);
+                line.setAttribute('x2', end.x);
+                line.setAttribute('y2', end.y);
+                line.classList.add('route-line');
+                // 初期状態の矢印（グレー）をセット
+                line.setAttribute('marker-end', 'url(#arrow-inactive)');
+
+                lineGroup.appendChild(line);
+                linesDOMs.push(line);
+            }
+
+            // 次に点（円）をすべて描画（線の上に重なるようにするため）
+            pointsData.forEach((pt, index) => {
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', pt.x);
+                circle.setAttribute('cy', pt.y);
+                circle.setAttribute('r', 8);
+                circle.classList.add('route-point');
+
+                pointGroup.appendChild(circle);
+                pointsDOMs.push(circle);
+            });
+        }
+
+        // --- 3. 状態更新ロジック ---
+        function updateProgress() {
+            // 線のスタイル更新
+            linesDOMs.forEach((line, index) => {
+                if (index < currentStep) {
+                    // 通過済みの区間（青）
+                    line.classList.add('active');
+                    line.setAttribute('marker-end', 'url(#arrow-active)');
+                } else {
+                    // 未到達の区間（グレー）
+                    line.classList.remove('active');
+                    line.setAttribute('marker-end', 'url(#arrow-inactive)');
+                }
+            });
+
+            // 点のスタイル更新
+            pointsDOMs.forEach((circle, index) => {
+                // クラスを一度クリア
+                circle.classList.remove('active', 'current');
+                
+                if (index === currentStep) {
+                    // 現在いるポイント（赤）
+                    circle.classList.add('current');
+                } else if (index < currentStep) {
+                    // 通過済みのポイント（青）
+                    circle.classList.add('active');
+                }
+            });
+
+            // ボタンとテキストの制御
+            document.getElementById('stepDisplay').innerText = `Step: ${currentStep} / ${maxStep}`;
+            document.getElementById('prevBtn').disabled = (currentStep === 0);
+            document.getElementById('nextBtn').disabled = (currentStep === maxStep);
+        }
+
+        // --- 4. コントロールアクション ---
+        function nextStep() {
+            if (currentStep < maxStep) {
+                currentStep++;
+                updateProgress();
+            }
+        }
+
+        function prevStep() {
+            if (currentStep > 0) {
+                currentStep--;
+                updateProgress();
+            }
+        }
+
+        // 実行
+        initRoute();
+        updateProgress();
+    </script>
+</body>
+</html>
