@@ -1119,7 +1119,7 @@ function renderSvgStep(step) {
   arrow.setAttribute("stroke", "white");
   arrow.setAttribute("stroke-width", aSW);
   arrow.setAttribute("stroke-linejoin", "round");
-  arrow.setAttribute("transform", `translate(${curNode.svg_x},${curNode.svg_y}) rotate(${angle - 90})`);
+  arrow.setAttribute("transform", `translate(${curNode.svg_x},${curNode.svg_y}) rotate(${angle + 90})`);
   svgOverlay.appendChild(arrow);
 
   if (svgOrigViewBox) panSvgTo(curNode.svg_x, curNode.svg_y);
