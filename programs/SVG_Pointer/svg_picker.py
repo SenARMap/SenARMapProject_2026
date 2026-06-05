@@ -131,6 +131,7 @@ class MainWindow(QMainWindow):
 
         self._list = QListWidget()
         self._list.setFont(QFont("Courier", 11))
+        self._list.setStyleSheet("background:white; color:black;")
         vl.addWidget(self._list, 1)
 
         for label, fn, color in [
