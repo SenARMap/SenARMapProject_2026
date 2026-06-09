@@ -1,0 +1,280 @@
+/* ================================================================
+   IKU NAVI — Landing Page
+   Design: Technical Minimal / Blueprint
+================================================================ */
+
+:root {
+  --blue:       #3B82F6;
+  --blue-dark:  #1D4ED8;
+  --blue-light: #EFF6FF;
+  --dark:       #0F172A;
+  --text:       #1E293B;
+  --muted:      #64748B;
+  --border:     #E2E8F0;
+  --bg:         #F7F8FC;
+  --white:      #FFFFFF;
+
+  --font: -apple-system, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans',
+          'Noto Sans JP', sans-serif;
+  --font-mono: 'SF Mono', 'Menlo', 'Courier New', monospace;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ================================================================
+   Base
+================================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { height: 100%; }
+
+body {
+  min-height: 100%;
+  font-family: var(--font);
+  background-color: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+
+  /* blueprint dot grid */
+  background-image: radial-gradient(circle, #C8D4E3 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* ================================================================
+   Page layout
+================================================================ */
+.page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(48px, 10vw, 96px) 20px 32px;
+  gap: clamp(40px, 7vw, 64px);
+}
+
+/* ================================================================
+   Hero
+================================================================ */
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  animation: fadeUp 0.9s var(--ease) both;
+}
+
+/* — eyebrow — */
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.eyebrow-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+  animation: pulse 2.4s ease infinite;
+}
+
+/* — logotype — */
+.logo {
+  font-size: clamp(76px, 20vw, 148px);
+  font-weight: 900;
+  letter-spacing: -0.045em;
+  line-height: 0.88;
+  position: relative;
+  padding: 10px 28px;
+
+  /* blueprint corner marks */
+}
+.logo::before,
+.logo::after {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-color: var(--blue);
+  border-style: solid;
+}
+.logo::before {
+  top: 0;
+  left: 0;
+  border-width: 2px 0 0 2px;
+}
+.logo::after {
+  bottom: 0;
+  right: 0;
+  border-width: 0 2px 2px 0;
+}
+
+.logo-iku  { color: var(--dark); }
+.logo-navi { color: var(--blue); }
+
+/* — tagline — */
+.tagline {
+  font-size: clamp(17px, 3.5vw, 22px);
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+
+.subline {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+}
+
+/* ================================================================
+   Cards
+================================================================ */
+.cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  width: 100%;
+  max-width: 640px;
+}
+
+@media (min-width: 520px) {
+  .cards { grid-template-columns: 1fr 1fr; }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 26px 24px;
+  border-radius: 18px;
+  text-decoration: none;
+  transition: transform 0.35s var(--ease), box-shadow 0.35s var(--ease);
+  animation: fadeUp 0.9s var(--ease) both;
+}
+
+.card:nth-child(1) { animation-delay: 0.12s; }
+.card:nth-child(2) { animation-delay: 0.22s; }
+
+.card:hover {
+  transform: translateY(-5px);
+}
+
+/* — nav card (blue) — */
+.card-nav {
+  background: var(--blue);
+  color: var(--white);
+  box-shadow: 0 4px 24px rgba(59, 130, 246, 0.30);
+}
+.card-nav:hover {
+  box-shadow: 0 16px 40px rgba(59, 130, 246, 0.38);
+}
+
+/* — blog card (white) — */
+.card-blog {
+  background: var(--white);
+  color: var(--text);
+  border: 1.5px solid var(--border);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+}
+.card-blog:hover {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.10);
+}
+
+/* — card internals — */
+.card-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-glyph {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.card-heading {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.card-text {
+  font-size: 13px;
+  line-height: 1.75;
+  opacity: 0.78;
+}
+
+.card-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.card-arrow {
+  display: inline-block;
+  transition: transform 0.25s var(--ease);
+}
+
+.card:hover .card-arrow {
+  transform: translate(3px, -3px);
+}
+
+/* ================================================================
+   Footer
+================================================================ */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+}
+
+.footer-brand {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.footer-sep { opacity: 0.35; }
+
+/* ================================================================
+   Animations
+================================================================ */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}

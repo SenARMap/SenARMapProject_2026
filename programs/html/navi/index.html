@@ -85,7 +85,9 @@
         font-weight: 700;
         color: #1E293B;
         letter-spacing: 0.03em;
+        text-decoration: none;
       }
+      #app-header .hdr-title:hover { color: #3B82F6; }
       #app-header .hdr-badge {
         font-size: 11px;
         color: #3B82F6;
@@ -357,6 +359,97 @@
       backdrop-filter: blur(4px);
       pointer-events: none;
     }
+    #direction-arrow {
+      display: none;
+      position: absolute;
+      left: 50%;
+      /* ↓ 矢印の縦位置: 値を大きくすると画面下（手前）に移動 / 小さくすると奥に移動 */
+      top: 80%;
+      transform: translate(-50%, -50%);
+      /* ↓ 矢印のサイズ: clamp(最小, 基準, 最大) — 基準値を変えると全体的なサイズが変わる */
+      width: clamp(130px, 50vmin, 220px);
+      height: auto;
+      opacity: 0.90;
+      pointer-events: none;
+      z-index: 10;
+      filter: drop-shadow(0 3px 10px rgba(0,0,0,0.65));
+    }
+
+    /* ================================================================
+       Completion modal
+    ================================================================ */
+    #completion-modal {
+      display: none;
+      position: fixed; inset: 0; z-index: 600;
+      align-items: center; justify-content: center;
+      padding: 20px;
+      background: rgba(15, 23, 42, 0.5);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      animation: modalFadeIn 0.25s ease both;
+    }
+    #completion-modal.show { display: flex; }
+
+    #completion-box {
+      background: white;
+      border-radius: 24px;
+      padding: 36px 32px 28px;
+      max-width: 360px;
+      width: 100%;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.22);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      text-align: center;
+      animation: modalSlideUp 0.3s cubic-bezier(0.22,1,0.36,1) both;
+    }
+
+    .modal-icon {
+      width: 60px; height: 60px;
+      border-radius: 50%;
+      background: #EFF6FF;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px;
+      margin-bottom: 4px;
+    }
+    .modal-title {
+      font-size: 20px; font-weight: 800;
+      color: #0F172A; letter-spacing: -0.02em;
+      margin-bottom: 2px;
+    }
+    .modal-desc {
+      font-size: 14px; color: #64748B;
+      line-height: 1.65; margin-bottom: 12px;
+    }
+    .modal-btn-survey {
+      width: 100%; height: 48px;
+      border: none; border-radius: 12px;
+      background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+      color: white; font-size: 15px; font-weight: 700;
+      cursor: pointer; transition: opacity 0.15s;
+      text-decoration: none;
+      display: flex; align-items: center; justify-content: center;
+      gap: 6px;
+    }
+    .modal-btn-survey:hover { opacity: 0.88; }
+    .modal-btn-continue {
+      width: 100%; height: 44px;
+      border: 1.5px solid #E2E8F0; border-radius: 12px;
+      background: white; color: #475569;
+      font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s;
+      margin-top: 4px;
+    }
+    .modal-btn-continue:hover { background: #F8FAFC; }
+
+    @keyframes modalFadeIn {
+      from { opacity: 0; } to { opacity: 1; }
+    }
+    @keyframes modalSlideUp {
+      from { opacity: 0; transform: translateY(24px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0)    scale(1); }
+    }
 
     /* ================================================================
        Loading overlay
@@ -385,7 +478,7 @@
 <div id="sidebar">
 
   <div id="app-header">
-    <span class="hdr-title">IKU NAVI</span>
+    <a href="../index.html" class="hdr-title">IKU NAVI</a>
   </div>
 
   <!-- Search Panel -->
@@ -464,6 +557,7 @@
       <div class="ph-text">AR / Camera</div>
     </div>
     <div id="ar-label">進行方向</div>
+    <img id="direction-arrow" src="" alt="方向矢印">
   </div>
 
 </div><!-- /#sidebar -->
@@ -474,6 +568,22 @@
   <div id="svg-area">
     <div id="floor-badge"></div>
     <div id="svg-container"></div>
+  </div>
+</div>
+
+<!-- ================================================================
+     Completion modal — ナビ終了時に表示
+================================================================ -->
+<div id="completion-modal">
+  <div id="completion-box">
+    <div class="modal-icon">✓</div>
+    <div class="modal-title">目的地に到着！</div>
+    <p class="modal-desc">案内はここで終了です。<br>ご利用いただきありがとうございました。</p>
+    <!-- ↓ アンケートURLをここに設定してください -->
+    <a class="modal-btn-survey" href="https://forms.example.com/survey" target="_blank" rel="noopener">
+      アンケートに答える ↗
+    </a>
+    <button class="modal-btn-continue" onclick="closeCompletionModal()">引き続きナビを使う</button>
   </div>
 </div>
 
@@ -510,6 +620,22 @@ let svgViewH       = 1000;
 
 let edgeImages  = {};
 let imgByStep = {};  // step_index → <img> DOM element
+
+// ================================================================
+// 方向矢印: 閾値設定（後から変更しやすいように定数で管理）
+// ================================================================
+// 直進と判定する折れ角の上限（絶対値）: 単位は度
+// ±STRAIGHT_THRESHOLD_DEG 以内なら直進、それ以上なら左右折とみなす。
+// 人間計測データのブレ（廊下直進でも±10〜15度は発生）を考慮すること。
+// 推奨範囲: 30（厳しめ） 〜 60（ゆるめ）
+const STRAIGHT_THRESHOLD_DEG = 45;  // ← この値を調整してください
+// ================================================================
+
+const ARROW_URL = {
+  straight: "https://cdn.iku-navi.net/Straight.png",
+  right:    "https://cdn.iku-navi.net/right.png",
+  left:     "https://cdn.iku-navi.net/left.png",
+};
 
 // ================================================================
 // Google Maps init
@@ -835,6 +961,78 @@ function updateRouteImage(step) {
     placeholder.style.display = "flex";
     label.style.display       = "none";
   }
+  updateDirectionArrow(step);
+}
+
+// ================================================================
+// 方向矢印: ターン方向の計算
+// step区間の画像(node[step] → node[step+1])を表示中に、
+// node[step+1]到着時の進む方向を計算して矢印を更新する。
+// ================================================================
+function calcTurnDirection(step) {
+  // 最後の2ステップでは次の区間がないため矢印なし
+  if (step >= pathCoords.length - 2) return null;
+
+  const prev = pathCoords[step];
+  const cur  = pathCoords[step + 1];
+  const next = pathCoords[step + 2];
+
+  // --- 屋外: 緯度経度から方位角を計算 ---
+  if (prev.lat != null && cur.lat != null && next.lat != null) {
+    const inBearing  = bearingDeg(prev.lat, prev.lng, cur.lat, cur.lng);
+    const outBearing = bearingDeg(cur.lat, cur.lng, next.lat, next.lng);
+    const turnDeg = ((outBearing - inBearing + 540) % 360) - 180;
+    if (Math.abs(turnDeg) <= STRAIGHT_THRESHOLD_DEG) return "straight";
+    return turnDeg > 0 ? "right" : "left";
+  }
+
+  // --- 屋内: SVG座標から角度を計算（Y軸は下向き正）---
+  // エスカレータ・階段の遷移ノードは svg_x/svg_y が未設定の場合がある。
+  // その場合は前後方向にスキャンして有効な座標を持つ最近傍ノードを使う。
+  // 有効なノードが見つからなければ直進とみなす（階移動は直進がほぼ確実）。
+  let prevIdx = step;
+  while (prevIdx >= 0                  && pathCoords[prevIdx].svg_x == null) prevIdx--;
+  let curIdx  = step + 1;
+  while (curIdx  < pathCoords.length   && pathCoords[curIdx].svg_x  == null) curIdx++;
+  let nextIdx = curIdx + 1;
+  while (nextIdx < pathCoords.length   && pathCoords[nextIdx].svg_x == null) nextIdx++;
+
+  if (prevIdx < 0 || curIdx >= pathCoords.length || nextIdx >= pathCoords.length) {
+    return "straight";
+  }
+
+  const p = pathCoords[prevIdx];
+  const c = pathCoords[curIdx];
+  const n = pathCoords[nextIdx];
+
+  const inAngle  = Math.atan2(c.svg_y - p.svg_y, c.svg_x - p.svg_x) * 180 / Math.PI;
+  const outAngle = Math.atan2(n.svg_y - c.svg_y, n.svg_x - c.svg_x) * 180 / Math.PI;
+  const turnDeg  = ((outAngle - inAngle + 540) % 360) - 180;
+
+  // STRAIGHT_THRESHOLD_DEG 以内なら直進、それ以上は左右折
+  if (Math.abs(turnDeg) <= STRAIGHT_THRESHOLD_DEG) return "straight";
+  return turnDeg > 0 ? "right" : "left";
+}
+
+function updateDirectionArrow(step) {
+  const arrowEl = document.getElementById("direction-arrow");
+  if (!arrowEl) return;
+
+  // 画像が存在する区間でのみ矢印を表示
+  const img = imgByStep[step];
+  if (!img || step >= pathCoords.length - 1) {
+    arrowEl.style.display = "none";
+    return;
+  }
+
+  const dir = calcTurnDirection(step);
+  if (!dir) {
+    arrowEl.style.display = "none";
+    return;
+  }
+
+  arrowEl.src = ARROW_URL[dir];
+  arrowEl.style.display = "block";
 }
 
 // ================================================================
@@ -920,10 +1118,28 @@ async function goToStep(step) {
     }
     renderSvgStep(step);
   }
+
+  // 最終ステップに到達したら完了モーダルを表示
+  if (step === pathCoords.length - 1) showCompletionModal();
 }
 
 function prevStep() { if (currentStep > 0) goToStep(currentStep - 1); }
 function nextStep() { if (currentStep < pathCoords.length - 1) goToStep(currentStep + 1); }
+
+// ================================================================
+// Completion modal
+// ================================================================
+function showCompletionModal() {
+  document.getElementById("completion-modal").classList.add("show");
+}
+function closeCompletionModal() {
+  document.getElementById("completion-modal").classList.remove("show");
+}
+
+// 背景クリックで閉じる
+document.getElementById("completion-modal").addEventListener("click", e => {
+  if (e.target === e.currentTarget) closeCompletionModal();
+});
 
 function updateNavBar(node, step, total) {
   let label = "—";
