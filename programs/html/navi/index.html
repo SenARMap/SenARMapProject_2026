@@ -254,6 +254,15 @@
       background: #3B82F6; color: white; font-size: 13px;
       font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0;
     }
+    .btn-swap {
+      display: block; width: 28px; height: 28px;
+      margin: 0 0 4px 0;
+      background: white; border: 1.5px solid #E2E8F0; border-radius: 50%;
+      font-size: 16px; line-height: 1; cursor: pointer; color: #3B82F6;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .btn-swap:hover { background: #EFF6FF; color: #3B82F6; border-color: #3B82F6; }
+
     #accuracy-warn {
       display: none;
       padding: 6px 12px; font-size: 12px; line-height: 1.6;
@@ -499,6 +508,7 @@
           <div class="suggestions" id="from-sugg"></div>
         </div>
       </div>
+      <button class="btn-swap" onclick="swapFromTo()" title="出発と目的を入れ替え">⇅</button>
       <div class="route-row">
         <span class="route-label">目的</span>
         <select class="building-select" id="to-bldg">
@@ -702,7 +712,8 @@ function initRoomData(rooms) {
   [["from-bldg", "from-input"], ["to-bldg", "to-input"], ["gps-to-bldg", "to-input-gps"]].forEach(([bId, iId]) => {
     const sel = document.getElementById(bId);
     if (sel) sel.addEventListener("change", () => {
-      document.getElementById(iId)?.dispatchEvent(new Event("input"));
+      const inp = document.getElementById(iId);
+      if (inp) { inp.value = ""; inp.dispatchEvent(new Event("input")); }
     });
   });
 }
@@ -757,6 +768,18 @@ function setupAutocomplete(inputId, suggId, bldgSelectId) {
 
 // ================================================================
 // Room resolution
+// ================================================================
+function swapFromTo() {
+  const fromBldg = document.getElementById("from-bldg");
+  const toBldg   = document.getElementById("to-bldg");
+  const fromInp  = document.getElementById("from-input");
+  const toInp    = document.getElementById("to-input");
+  [fromBldg.value, toBldg.value] = [toBldg.value, fromBldg.value];
+  [fromInp.value,  toInp.value]  = [toInp.value,  fromInp.value];
+  document.getElementById("from-sugg").style.display = "none";
+  document.getElementById("to-sugg").style.display = "none";
+}
+
 // ================================================================
 function resolveRoom(inputId, bldgSelectId) {
   const inputEl = document.getElementById(inputId);
