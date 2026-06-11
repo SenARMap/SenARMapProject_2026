@@ -5,15 +5,18 @@ import sys
 import os
 from pathlib import Path
 
+from PIL import Image
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget,
     QHBoxLayout, QVBoxLayout,
     QLabel, QTextEdit, QListWidget, QPushButton,
     QAbstractItemView, QListWidgetItem,
     QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView,
+    QGroupBox, QLineEdit, QFrame,
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont, QColor, QPainter, QKeySequence, QShortcut
+from PyQt6.QtGui import QFont, QColor, QPainter, QKeySequence, QShortcut, QIntValidator
 
 IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp',
               '.tiff', '.tif', '.webp', '.heic', '.heif'}
@@ -102,7 +105,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("画像リネーマー")
-        self.setMinimumSize(960, 660)
+        self.setMinimumSize(960, 780)
         self._build_ui()
 
     # ── UI construction ──────────────────────────────────────────────
@@ -130,6 +133,13 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(self._preview_section())
         layout.addWidget(self._rename_button())
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet("color: #ddd;")
+        layout.addWidget(sep)
+
+        layout.addWidget(self._resize_section())
 
         QShortcut(QKeySequence.StandardKey.Delete, self).activated.connect(
             self.drop_list.remove_selected
@@ -236,7 +246,141 @@ class MainWindow(QMainWindow):
         btn.clicked.connect(self._do_rename)
         return btn
 
-    # ── logic ────────────────────────────────────────────────────────
+    def _resize_section(self) -> QGroupBox:
+        box = QGroupBox("画像リスケール（ドロップした画像を一括変換）")
+        box.setFont(QFont("", 11, QFont.Weight.Bold))
+        vbox = QVBoxLayout(box)
+        vbox.setSpacing(8)
+
+        hint = QLabel(
+            "片方のみ入力 → もう一方を自動計算（縦横比維持）　両方入力 → 指定サイズに強制変換（縦横比無視）"
+        )
+        hint.setStyleSheet("color: #555; font-size: 11px; font-weight: normal;")
+        vbox.addWidget(hint)
+
+        size_row = QHBoxLayout()
+        size_row.setSpacing(12)
+
+        validator = QIntValidator(1, 99999)
+
+        size_row.addWidget(QLabel("幅:"))
+        self.width_edit = QLineEdit()
+        self.width_edit.setPlaceholderText("未指定")
+        self.width_edit.setValidator(validator)
+        self.width_edit.setFixedWidth(90)
+        self.width_edit.setStyleSheet("font-size: 13px; padding: 4px;")
+        self.width_edit.textChanged.connect(self._refresh_resize_hint)
+        size_row.addWidget(self.width_edit)
+        size_row.addWidget(QLabel("px"))
+
+        size_row.addSpacing(20)
+
+        size_row.addWidget(QLabel("高さ:"))
+        self.height_edit = QLineEdit()
+        self.height_edit.setPlaceholderText("未指定")
+        self.height_edit.setValidator(validator)
+        self.height_edit.setFixedWidth(90)
+        self.height_edit.setStyleSheet("font-size: 13px; padding: 4px;")
+        self.height_edit.textChanged.connect(self._refresh_resize_hint)
+        size_row.addWidget(self.height_edit)
+        size_row.addWidget(QLabel("px"))
+
+        size_row.addStretch()
+        vbox.addLayout(size_row)
+
+        self._resize_hint = QLabel("")
+        self._resize_hint.setStyleSheet("color: #1976D2; font-size: 11px; font-weight: normal;")
+        vbox.addWidget(self._resize_hint)
+
+        resize_btn = QPushButton("一括リスケールする")
+        resize_btn.setFont(QFont("", 13, QFont.Weight.Bold))
+        resize_btn.setMinimumHeight(52)
+        resize_btn.setStyleSheet("""
+            QPushButton {
+                background: #388E3C;
+                color: white;
+                border-radius: 8px;
+            }
+            QPushButton:hover   { background: #2E7D32; }
+            QPushButton:pressed { background: #1B5E20; }
+        """)
+        resize_btn.clicked.connect(self._do_resize)
+        vbox.addWidget(resize_btn)
+
+        return box
+
+    # ── resize hint ──────────────────────────────────────────────────
+
+    def _refresh_resize_hint(self):
+        w = self.width_edit.text().strip()
+        h = self.height_edit.text().strip()
+        if w and h:
+            self._resize_hint.setText(f"→ {w} × {h} px に強制変換（縦横比無視）")
+        elif w:
+            self._resize_hint.setText(f"→ 幅 {w} px に合わせ、高さを自動計算（縦横比維持）")
+        elif h:
+            self._resize_hint.setText(f"→ 高さ {h} px に合わせ、幅を自動計算（縦横比維持）")
+        else:
+            self._resize_hint.setText("")
+
+    # ── resize logic ─────────────────────────────────────────────────
+
+    def _do_resize(self):
+        paths = self.drop_list.paths()
+        if not paths:
+            QMessageBox.warning(self, "警告", "画像がドロップされていません。")
+            return
+
+        w_text = self.width_edit.text().strip()
+        h_text = self.height_edit.text().strip()
+        new_w = int(w_text) if w_text else None
+        new_h = int(h_text) if h_text else None
+
+        if new_w is None and new_h is None:
+            QMessageBox.warning(self, "警告", "幅または高さを入力してください。")
+            return
+
+        if new_w and new_h:
+            mode_desc = f"{new_w} × {new_h} px に強制変換（縦横比無視）"
+        elif new_w:
+            mode_desc = f"幅 {new_w} px 基準でリスケール（縦横比維持）"
+        else:
+            mode_desc = f"高さ {new_h} px 基準でリスケール（縦横比維持）"
+
+        reply = QMessageBox.question(
+            self, "確認",
+            f"{len(paths)} 件の画像を上書きリスケールします。\n\nモード: {mode_desc}\n\nよろしいですか？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        ok, errors = 0, []
+        for path in paths:
+            try:
+                img = Image.open(path)
+                orig_w, orig_h = img.size
+
+                if new_w and new_h:
+                    target = (new_w, new_h)
+                elif new_w:
+                    target = (new_w, max(1, round(orig_h * new_w / orig_w)))
+                else:
+                    target = (max(1, round(orig_w * new_h / orig_h)), new_h)
+
+                resized = img.resize(target, Image.LANCZOS)
+                resized.save(path)
+                ok += 1
+            except Exception as e:
+                errors.append(f"{os.path.basename(path)}: {e}")
+
+        if errors:
+            QMessageBox.warning(self, "完了（エラーあり）",
+                f"{ok} 件成功 / {len(errors)} 件失敗:\n\n" + "\n".join(errors))
+        else:
+            QMessageBox.information(self, "完了", f"{ok} 件の画像をリスケールしました。")
+
+    # ── rename logic ─────────────────────────────────────────────────
 
     def _names(self) -> list[str]:
         return [ln.strip() for ln in self.name_edit.toPlainText().splitlines() if ln.strip()]
