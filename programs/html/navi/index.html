@@ -393,6 +393,20 @@
       color: #94A3B8;
       letter-spacing: 0.1em;
     }
+    #ar-placeholder.arrival {
+      background: linear-gradient(160deg, #EFF6FF 0%, #F0FDF4 100%);
+      gap: 12px;
+    }
+    #ar-placeholder.arrival .arrival-icon {
+      font-size: 48px;
+      line-height: 1;
+    }
+    #ar-placeholder.arrival .arrival-title {
+      font-size: 18px; font-weight: 700; color: #1E40AF;
+    }
+    #ar-placeholder.arrival .arrival-desc {
+      font-size: 13px; color: #475569; text-align: center; line-height: 1.6;
+    }
     #ar-label {
       display: none;
       position: absolute; bottom: 10px; left: 10px;
@@ -533,11 +547,11 @@
         <button class="search-tab"        id="tab-gps"  onclick="setMode('gps')">現在地 → 教室</button>
       </div>
       <button id="search-toggle" onclick="toggleSearchPanel()" aria-label="検索パネルを開閉">
-        <span id="search-chevron">▾</span>
+        <span id="search-chevron" class="open">▾</span>
       </button>
     </div>
 
-    <div id="search-content">
+    <div id="search-content" class="open">
       <div class="search-content-inner">
 
         <div id="panel-room">
@@ -551,6 +565,7 @@
               <div class="suggestions" id="from-sugg"></div>
             </div>
           </div>
+          <button class="btn-swap" onclick="swapFromTo()" title="出発地と目的地を入れ替え">⇅</button>
           <div class="route-row">
             <span class="route-label">目的</span>
             <select class="building-select" id="to-bldg">
@@ -610,6 +625,9 @@
     <div id="ar-cache"></div><!-- prefetch済み <img> がここに積まれる -->
     <div id="ar-placeholder">
       <div class="ph-text">AR / Camera</div>
+      <div class="arrival-icon" style="display:none"></div>
+      <div class="arrival-title" style="display:none">目的地周辺に到達しました！</div>
+      <div class="arrival-desc" style="display:none">案内はここで終了です。<br>ご利用いただきありがとうございました。</div>
     </div>
     <div id="ar-label">進行方向</div>
     <img id="direction-arrow" src="" alt="方向矢印">
@@ -860,7 +878,7 @@ function setMode(mode) {
 // ================================================================
 // Search panel slide toggle (mobile only)
 // ================================================================
-let searchPanelOpen = false;
+let searchPanelOpen = true;
 
 function toggleSearchPanel() {
   searchPanelOpen = !searchPanelOpen;
@@ -1059,13 +1077,31 @@ function updateRouteImage(step) {
   Object.values(imgByStep).forEach(img => img.classList.remove("active"));
 
   const img = imgByStep[step];
-  if (img && step < pathCoords.length - 1) {
+  const isLast = step >= pathCoords.length - 1;
+  const phEl = document.getElementById("ar-placeholder");
+
+  if (img && !isLast) {
     img.classList.add("active");
     placeholder.style.display = "none";
     label.style.display       = "block";
+    phEl.classList.remove("arrival");
+    phEl.querySelectorAll(".arrival-icon,.arrival-title,.arrival-desc")
+        .forEach(el => el.style.display = "none");
+    phEl.querySelector(".ph-text").style.display = "";
+  } else if (isLast) {
+    placeholder.style.display = "flex";
+    label.style.display       = "none";
+    phEl.classList.add("arrival");
+    phEl.querySelector(".ph-text").style.display = "none";
+    phEl.querySelectorAll(".arrival-icon,.arrival-title,.arrival-desc")
+        .forEach(el => el.style.display = "");
   } else {
     placeholder.style.display = "flex";
     label.style.display       = "none";
+    phEl.classList.remove("arrival");
+    phEl.querySelectorAll(".arrival-icon,.arrival-title,.arrival-desc")
+        .forEach(el => el.style.display = "none");
+    phEl.querySelector(".ph-text").style.display = "";
   }
   updateDirectionArrow(step);
 }
@@ -1076,8 +1112,8 @@ function updateRouteImage(step) {
 // node[step+1]到着時の進む方向を計算して矢印を更新する。
 // ================================================================
 function calcTurnDirection(step) {
-  // 最後の2ステップでは次の区間がないため矢印なし
-  if (step >= pathCoords.length - 2) return null;
+  // pathCoords[step+2] が存在しない最終アプローチ区間は直進とみなす
+  if (step >= pathCoords.length - 2) return "straight";
 
   const prev = pathCoords[step];
   const cur  = pathCoords[step + 1];

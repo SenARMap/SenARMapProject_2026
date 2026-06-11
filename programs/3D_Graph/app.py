@@ -907,6 +907,7 @@ def api_edge_images():
         return jsonify({})
     df = pd.read_csv(EDGE_IMAGE_CSV)
     df.columns = df.columns.str.strip()
+    df = df.dropna(subset=["from", "to"])
     result = {}
     for _, row in df.iterrows():
         f, t = int(row["from"]), int(row["to"])
