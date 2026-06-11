@@ -25,10 +25,41 @@
     #search-panel {
       order: 1;
       background: white;
-      padding: 8px 10px;
+      padding: 0;
       box-shadow: 0 2px 6px rgba(0,0,0,0.12);
       flex-shrink: 0;
       z-index: 100;
+    }
+    #search-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+    }
+    #search-toggle {
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      border: 1.5px solid #E2E8F0; border-radius: 50%;
+      background: white;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: #64748B; font-size: 13px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #search-chevron {
+      display: inline-block;
+      transition: transform 0.3s ease;
+      line-height: 1;
+    }
+    #search-chevron.open { transform: rotate(180deg); }
+    #search-content {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.3s ease;
+    }
+    #search-content.open { grid-template-rows: 1fr; }
+    .search-content-inner {
+      overflow: hidden;
+      padding: 0 10px 8px;
     }
     #map-area {
       order: 2;
@@ -101,9 +132,13 @@
         order: 0;
         box-shadow: none;
         border-bottom: 1px solid #F1F5F9;
-        padding: 14px 16px;
+        padding: 0;
         flex-shrink: 0;
       }
+      #search-header { padding: 14px 16px 8px; }
+      #search-toggle { display: none; }
+      #search-content { display: block; }
+      .search-content-inner { overflow: visible; padding: 0 16px 14px; }
 
       #nav-bar {
         order: 0;
@@ -130,7 +165,7 @@
     /* ================================================================
        Search Panel internals
     ================================================================ */
-    .search-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+    .search-tabs { display: flex; gap: 6px; flex: 1; }
     .search-tab {
       flex: 1; height: 34px;
       border: 1.5px solid #CBD5E1; border-radius: 17px;
@@ -358,6 +393,20 @@
       color: #94A3B8;
       letter-spacing: 0.1em;
     }
+    #ar-placeholder.arrival {
+      background: linear-gradient(160deg, #EFF6FF 0%, #F0FDF4 100%);
+      gap: 12px;
+    }
+    #ar-placeholder.arrival .arrival-icon {
+      font-size: 48px;
+      line-height: 1;
+    }
+    #ar-placeholder.arrival .arrival-title {
+      font-size: 18px; font-weight: 700; color: #1E40AF;
+    }
+    #ar-placeholder.arrival .arrival-desc {
+      font-size: 13px; color: #475569; text-align: center; line-height: 1.6;
+    }
     #ar-label {
       display: none;
       position: absolute; bottom: 10px; left: 10px;
@@ -492,61 +541,72 @@
 
   <!-- Search Panel -->
   <div id="search-panel">
-    <div class="search-tabs">
-      <button class="search-tab active" id="tab-room" onclick="setMode('room')">教室 → 教室</button>
-      <button class="search-tab"        id="tab-gps"  onclick="setMode('gps')">現在地 → 教室</button>
+    <div id="search-header">
+      <div class="search-tabs">
+        <button class="search-tab active" id="tab-room" onclick="setMode('room')">教室 → 教室</button>
+        <button class="search-tab"        id="tab-gps"  onclick="setMode('gps')">現在地 → 教室</button>
+      </div>
+      <button id="search-toggle" onclick="toggleSearchPanel()" aria-label="検索パネルを開閉">
+        <span id="search-chevron" class="open">▾</span>
+      </button>
     </div>
 
-    <div id="panel-room">
-      <div class="route-row">
-        <span class="route-label">出発</span>
-        <select class="building-select" id="from-bldg">
-          <option value="">全</option>
-        </select>
-        <div class="ac-wrap">
-          <input id="from-input" placeholder="教室名" autocomplete="off">
-          <div class="suggestions" id="from-sugg"></div>
-        </div>
-      </div>
-      <button class="btn-swap" onclick="swapFromTo()" title="出発と目的を入れ替え">⇅</button>
-      <div class="route-row">
-        <span class="route-label">目的</span>
-        <select class="building-select" id="to-bldg">
-          <option value="">全</option>
-        </select>
-        <div class="ac-wrap">
-          <input id="to-input" placeholder="教室名" autocomplete="off">
-          <div class="suggestions" id="to-sugg"></div>
-        </div>
-      </div>
-    </div>
+    <div id="search-content" class="open">
+      <div class="search-content-inner">
 
-    <div id="panel-gps" style="display:none">
-      <div class="gps-wrapper">
-        <div class="gps-row">
-          <span id="gps-text">GPS未取得 — 右のボタンで現在地を取得</span>
-          <button class="btn-gps" onclick="captureGPS()">取得</button>
+        <div id="panel-room">
+          <div class="route-row">
+            <span class="route-label">出発</span>
+            <select class="building-select" id="from-bldg">
+              <option value="">全</option>
+            </select>
+            <div class="ac-wrap">
+              <input id="from-input" placeholder="教室名" autocomplete="off">
+              <div class="suggestions" id="from-sugg"></div>
+            </div>
+          </div>
+          <button class="btn-swap" onclick="swapFromTo()" title="出発地と目的地を入れ替え">⇅</button>
+          <div class="route-row">
+            <span class="route-label">目的</span>
+            <select class="building-select" id="to-bldg">
+              <option value="">全</option>
+            </select>
+            <div class="ac-wrap">
+              <input id="to-input" placeholder="教室名" autocomplete="off">
+              <div class="suggestions" id="to-sugg"></div>
+            </div>
+          </div>
         </div>
-        <div id="accuracy-warn"></div>
-      </div>
-      <div class="route-row">
-        <span class="route-label">目的</span>
-        <select class="building-select" id="gps-to-bldg">
-          <option value="">全</option>
-        </select>
-        <div class="ac-wrap">
-          <input id="to-input-gps" placeholder="教室名" autocomplete="off">
-          <div class="suggestions" id="gps-to-sugg"></div>
-        </div>
-      </div>
-    </div>
 
-    <div class="bottom-row">
-      <label class="ev-label">
-        <input type="checkbox" id="use-elevator" checked>
-        エレベーター使用
-      </label>
-      <button id="btn-search" onclick="doSearch()">ルート検索</button>
+        <div id="panel-gps" style="display:none">
+          <div class="gps-wrapper">
+            <div class="gps-row">
+              <span id="gps-text">GPS未取得 — 右のボタンで現在地を取得</span>
+              <button class="btn-gps" onclick="captureGPS()">取得</button>
+            </div>
+            <div id="accuracy-warn"></div>
+          </div>
+          <div class="route-row">
+            <span class="route-label">目的</span>
+            <select class="building-select" id="gps-to-bldg">
+              <option value="">全</option>
+            </select>
+            <div class="ac-wrap">
+              <input id="to-input-gps" placeholder="教室名" autocomplete="off">
+              <div class="suggestions" id="gps-to-sugg"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bottom-row">
+          <label class="ev-label">
+            <input type="checkbox" id="use-elevator" checked>
+            エレベーター使用
+          </label>
+          <button id="btn-search" onclick="doSearch()">ルート検索</button>
+        </div>
+
+      </div>
     </div>
   </div>
 
@@ -565,6 +625,9 @@
     <div id="ar-cache"></div><!-- prefetch済み <img> がここに積まれる -->
     <div id="ar-placeholder">
       <div class="ph-text">AR / Camera</div>
+      <div class="arrival-icon" style="display:none"></div>
+      <div class="arrival-title" style="display:none">目的地周辺に到達しました！</div>
+      <div class="arrival-desc" style="display:none">案内はここで終了です。<br>ご利用いただきありがとうございました。</div>
     </div>
     <div id="ar-label">進行方向</div>
     <img id="direction-arrow" src="" alt="方向矢印">
@@ -808,6 +871,44 @@ function setMode(mode) {
   document.getElementById("panel-gps").style.display  = mode === "gps"  ? "block" : "none";
   document.getElementById("tab-room").classList.toggle("active", mode === "room");
   document.getElementById("tab-gps").classList.toggle("active",  mode === "gps");
+  // タブ切り替え時にパネルが閉じていれば自動で開く
+  if (!searchPanelOpen && window.innerWidth < 768) toggleSearchPanel();
+}
+
+// ================================================================
+// Search panel slide toggle (mobile only)
+// ================================================================
+let searchPanelOpen = true;
+
+function toggleSearchPanel() {
+  searchPanelOpen = !searchPanelOpen;
+  const content = document.getElementById("search-content");
+  const inner   = document.querySelector(".search-content-inner");
+  const chevron = document.getElementById("search-chevron");
+
+  if (searchPanelOpen) {
+    content.classList.add("open");
+    chevron.classList.add("open");
+    // アニメーション完了後に overflow を解除してサジェストを表示可能にする
+    content.addEventListener("transitionend", () => {
+      inner.style.overflow = "";
+    }, { once: true });
+  } else {
+    inner.style.overflow = "hidden";
+    content.classList.remove("open");
+    chevron.classList.remove("open");
+  }
+}
+
+function collapseSearchPanel() {
+  if (!searchPanelOpen || window.innerWidth >= 768) return;
+  const content = document.getElementById("search-content");
+  const inner   = document.querySelector(".search-content-inner");
+  const chevron = document.getElementById("search-chevron");
+  inner.style.overflow = "hidden";
+  content.classList.remove("open");
+  chevron.classList.remove("open");
+  searchPanelOpen = false;
 }
 
 // ================================================================
@@ -976,13 +1077,31 @@ function updateRouteImage(step) {
   Object.values(imgByStep).forEach(img => img.classList.remove("active"));
 
   const img = imgByStep[step];
-  if (img && step < pathCoords.length - 1) {
+  const isLast = step >= pathCoords.length - 1;
+  const phEl = document.getElementById("ar-placeholder");
+
+  if (img && !isLast) {
     img.classList.add("active");
     placeholder.style.display = "none";
     label.style.display       = "block";
+    phEl.classList.remove("arrival");
+    phEl.querySelectorAll(".arrival-icon,.arrival-title,.arrival-desc")
+        .forEach(el => el.style.display = "none");
+    phEl.querySelector(".ph-text").style.display = "";
+  } else if (isLast) {
+    placeholder.style.display = "flex";
+    label.style.display       = "none";
+    phEl.classList.add("arrival");
+    phEl.querySelector(".ph-text").style.display = "none";
+    phEl.querySelectorAll(".arrival-icon,.arrival-title,.arrival-desc")
+        .forEach(el => el.style.display = "");
   } else {
     placeholder.style.display = "flex";
     label.style.display       = "none";
+    phEl.classList.remove("arrival");
+    phEl.querySelectorAll(".arrival-icon,.arrival-title,.arrival-desc")
+        .forEach(el => el.style.display = "none");
+    phEl.querySelector(".ph-text").style.display = "";
   }
   updateDirectionArrow(step);
 }
@@ -993,8 +1112,8 @@ function updateRouteImage(step) {
 // node[step+1]到着時の進む方向を計算して矢印を更新する。
 // ================================================================
 function calcTurnDirection(step) {
-  // 最後の2ステップでは次の区間がないため矢印なし
-  if (step >= pathCoords.length - 2) return null;
+  // pathCoords[step+2] が存在しない最終アプローチ区間は直進とみなす
+  if (step >= pathCoords.length - 2) return "straight";
 
   const prev = pathCoords[step];
   const cur  = pathCoords[step + 1];
@@ -1090,6 +1209,7 @@ function initRoute(coords) {
   clearMapOverlays();
   drawFullOutdoorRoute(coords);
   prefetchRouteImages(coords);
+  collapseSearchPanel();  // ルート確定後にパネルを収納
   goToStep(0);
 }
 
@@ -1142,8 +1262,13 @@ async function goToStep(step) {
     renderSvgStep(step);
   }
 
-  // 最終ステップに到達したら完了モーダルを表示
-  if (step === pathCoords.length - 1) showCompletionModal();
+  // 最終ステップに到達したら一定時間後に完了モーダルを表示
+  if (step === pathCoords.length - 1) {
+    clearTimeout(window._completionTimer);
+    window._completionTimer = setTimeout(showCompletionModal, 3000); // ← 秒数はここで調整（ミリ秒）
+  } else {
+    clearTimeout(window._completionTimer);
+  }
 }
 
 function prevStep() { if (currentStep > 0) goToStep(currentStep - 1); }

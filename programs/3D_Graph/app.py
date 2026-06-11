@@ -893,45 +893,8 @@ def api_shortest_path():
 
 
 # ------------------------------------------------------------------ #
-#  建物変換パラメータ API
-# ------------------------------------------------------------------ #
-
-@app.route("/api/building_config", methods=["GET"])
-def api_building_config_get():
-    """全建物の rot_deg / tz_offset を返す"""
-    config = _load_transform_config()
-    nodes_df, _ = get_cached_data()
-    buildings = sorted(
-        nodes_df[nodes_df["building"].astype(int) != 0]["building"]
-        .dropna().astype(int).unique().tolist()
-    )
-    result = {}
-    for b in buildings:
-        cfg = config.get(str(b), {})
-        result[b] = {
-            "rot_deg":   cfg.get("rot_deg",   0.0),
-            "tz_offset": cfg.get("tz_offset", 0.0),
-            "tx":        cfg.get("tx",        0.0),
-            "ty":        cfg.get("ty",        0.0),
-        }
-    return jsonify(result)
 
 
-@app.route("/api/building_config/<int:building_id>", methods=["POST"])
-def api_building_config_post(building_id):
-    """建物の rot_deg / tz_offset を buildings.json に保存する"""
-    data = request.get_json(force=True)
-    config = _load_transform_config()
-    cfg = config.get(str(building_id), {})
-    if "rot_deg"   in data:
-        cfg["rot_deg"]   = float(data["rot_deg"])
-    if "tz_offset" in data:
-        cfg["tz_offset"] = float(data["tz_offset"])
-    config[str(building_id)] = cfg
-    with open(BUILDINGS_JSON, "w") as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
-    clear_cache()
-    return jsonify({"ok": True, "building": building_id, "config": cfg})
 
 
 @app.route("/api/edge_images")
@@ -944,6 +907,7 @@ def api_edge_images():
         return jsonify({})
     df = pd.read_csv(EDGE_IMAGE_CSV)
     df.columns = df.columns.str.strip()
+    df = df.dropna(subset=["from", "to"])
     result = {}
     for _, row in df.iterrows():
         f, t = int(row["from"]), int(row["to"])
