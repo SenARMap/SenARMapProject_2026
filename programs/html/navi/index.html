@@ -287,6 +287,22 @@
     }
     #btn-search:hover { opacity: 0.9; }
 
+    .category-tabs { display: flex; gap: 6px; flex: 1; }
+    .category-tab {
+      flex: 1; height: 34px;
+      border: 1.5px solid #CBD5E1; border-radius: 17px;
+      background: white; font-size: 13px; font-weight: 600;
+      color: #64748B; cursor: pointer; transition: all 0.2s;
+    }
+    .category-tab.active { background: #3B82F6; border-color: #3B82F6; color: white; }
+    #btn-fac-search {
+      flex: 1; height: 40px; border: none; border-radius: 10px;
+      background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+      color: white; font-size: 15px; font-weight: 700;
+      cursor: pointer; transition: opacity 0.15s;
+    }
+    #btn-fac-search:hover { opacity: 0.9; }
+
     .gps-wrapper {
       border: 1.5px solid #BFDBFE; border-radius: 8px;
       margin-bottom: 6px; overflow: hidden;
@@ -316,6 +332,13 @@
     }
     #accuracy-warn.warn-low  { background: #FFFBEB; color: #78350F; }
     #accuracy-warn.warn-high { background: #FEF2F2; color: #7F1D1D; }
+
+    #fac-accuracy-warn {
+      display: none;
+      padding: 6px 12px; font-size: 12px; line-height: 1.6;
+    }
+    #fac-accuracy-warn.warn-low  { background: #FFFBEB; color: #78350F; }
+    #fac-accuracy-warn.warn-high { background: #FEF2F2; color: #7F1D1D; }
 
     /* ================================================================
        Map / SVG
@@ -555,9 +578,9 @@
   <div id="search-panel">
     <div id="search-header">
       <a id="btn-home" href="../index.html" aria-label="トップページに戻る">⌂</a>
-      <div class="search-tabs">
-        <button class="search-tab active" id="tab-room" onclick="setMode('room')">教室 → 教室</button>
-        <button class="search-tab"        id="tab-gps"  onclick="setMode('gps')">現在地(屋外) → 教室</button>
+      <div class="category-tabs">
+        <button class="category-tab active" id="cat-room"     onclick="setCategory('room')">教室</button>
+        <button class="category-tab"        id="cat-facility" onclick="setCategory('facility')">設備検索</button>
       </div>
       <button id="search-toggle" onclick="toggleSearchPanel()" aria-label="検索パネルを開閉">
         <span id="search-chevron" class="open">▾</span>
@@ -566,6 +589,13 @@
 
     <div id="search-content" class="open">
       <div class="search-content-inner">
+
+        <!-- 教室カテゴリ -->
+        <div id="cat-content-room">
+        <div class="search-tabs" style="margin-bottom:8px;">
+          <button class="search-tab active" id="tab-room" onclick="setMode('room')">教室 → 教室</button>
+          <button class="search-tab"        id="tab-gps"  onclick="setMode('gps')">現在地(屋外) → 教室</button>
+        </div>
 
         <div id="panel-room">
           <div class="route-row">
@@ -618,6 +648,61 @@
           </label>
           <button id="btn-search" onclick="doSearch()">ルート検索</button>
         </div>
+        </div><!-- /#cat-content-room -->
+
+        <!-- 設備検索カテゴリ -->
+        <div id="cat-content-facility" style="display:none">
+
+          <!-- モードタブ -->
+          <div class="search-tabs" style="margin-bottom:8px;">
+            <button class="search-tab active" id="fac-tab-room" onclick="setFacMode('room')">教室 → 設備</button>
+            <button class="search-tab"        id="fac-tab-gps"  onclick="setFacMode('gps')">現在地(屋外) → 設備</button>
+          </div>
+
+          <!-- 教室モード: 出発(教室) -->
+          <div id="panel-fac-room">
+            <div class="route-row">
+              <span class="route-label">出発</span>
+              <select class="building-select" id="fac-from-bldg"><option value="">全</option></select>
+              <div class="ac-wrap">
+                <input id="fac-from-input" placeholder="教室名" autocomplete="off">
+                <div class="suggestions" id="fac-from-sugg"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- GPSモード: 現在地取得 -->
+          <div id="panel-fac-gps" style="display:none">
+            <div class="gps-wrapper">
+              <div class="gps-row">
+                <span id="fac-gps-text">GPS未取得 — 右のボタンで現在地を取得</span>
+                <button class="btn-gps" onclick="captureFacGPS()">取得</button>
+              </div>
+              <div id="fac-accuracy-warn"></div>
+            </div>
+          </div>
+
+          <!-- 目的: 常に表示 -->
+          <div class="route-row">
+            <span class="route-label">目的</span>
+            <select class="building-select" id="fac-category">
+              <option value="toilet">トイレ</option>
+            </select>
+            <select id="fac-toilet-type" style="flex:1;height:38px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:13px;color:#1E293B;background:white;padding:0 6px;cursor:pointer;">
+              <option value="all">全て</option>
+              <option value="M">男子トイレ</option>
+              <option value="F">女子トイレ</option>
+              <option value="C">多目的トイレ</option>
+            </select>
+          </div>
+
+          <div class="bottom-row">
+            <label class="ev-label">
+              <input type="checkbox" id="fac-use-elevator" checked>エレベーター使用
+            </label>
+            <button id="btn-fac-search" onclick="doToiletSearch()">設備検索</button>
+          </div>
+        </div><!-- /#cat-content-facility -->
 
       </div>
     </div>
@@ -682,8 +767,10 @@
 const API_BASE = "";
 
 let map;
-let searchMode = "room";
-let gpsCoords  = null;
+let searchMode    = "room";
+let facSearchMode = "room";
+let gpsCoords     = null;
+let facGpsCoords  = null;
 let allNodes   = [];
 let allRooms   = [];        // [{room, building}, ...]
 let roomsByBuilding = {};   // {"10": ["101A", ...], ...}
@@ -770,7 +857,7 @@ function initRoomData(rooms) {
   });
 
   const buildings = Object.keys(roomsByBuilding).sort((a, b) => Number(a) - Number(b));
-  ["from-bldg", "to-bldg", "gps-to-bldg"].forEach(id => {
+  ["from-bldg", "to-bldg", "gps-to-bldg", "fac-from-bldg"].forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
     buildings.forEach(b => {
@@ -784,8 +871,9 @@ function initRoomData(rooms) {
   setupAutocomplete("from-input",   "from-sugg",   "from-bldg");
   setupAutocomplete("to-input",     "to-sugg",     "to-bldg");
   setupAutocomplete("to-input-gps", "gps-to-sugg", "gps-to-bldg");
+  setupAutocomplete("fac-from-input", "fac-from-sugg", "fac-from-bldg");
 
-  [["from-bldg", "from-input"], ["to-bldg", "to-input"], ["gps-to-bldg", "to-input-gps"]].forEach(([bId, iId]) => {
+  [["from-bldg", "from-input"], ["to-bldg", "to-input"], ["gps-to-bldg", "to-input-gps"], ["fac-from-bldg", "fac-from-input"]].forEach(([bId, iId]) => {
     const sel = document.getElementById(bId);
     if (sel) sel.addEventListener("change", () => {
       const inp = document.getElementById(iId);
@@ -888,6 +976,63 @@ function setMode(mode) {
   if (!searchPanelOpen && window.innerWidth < 768) toggleSearchPanel();
 }
 
+function setFacMode(mode) {
+  facSearchMode = mode;
+  document.getElementById("panel-fac-room").style.display = mode === "room" ? "block" : "none";
+  document.getElementById("panel-fac-gps").style.display  = mode === "gps"  ? "block" : "none";
+  document.getElementById("fac-tab-room").classList.toggle("active", mode === "room");
+  document.getElementById("fac-tab-gps").classList.toggle("active",  mode === "gps");
+  if (!searchPanelOpen && window.innerWidth < 768) toggleSearchPanel();
+}
+
+// ================================================================
+// Category toggle (教室 / 設備検索)
+// ================================================================
+function setCategory(cat) {
+  document.getElementById("cat-content-room").style.display     = cat === "room"     ? "block" : "none";
+  document.getElementById("cat-content-facility").style.display = cat === "facility" ? "block" : "none";
+  document.getElementById("cat-room").classList.toggle("active",     cat === "room");
+  document.getElementById("cat-facility").classList.toggle("active", cat === "facility");
+  if (!searchPanelOpen && window.innerWidth < 768) toggleSearchPanel();
+}
+
+// ================================================================
+// Facility autocomplete
+// ================================================================
+async function doToiletSearch() {
+  const params = new URLSearchParams({
+    type:         document.getElementById("fac-toilet-type").value,
+    use_elevator: document.getElementById("fac-use-elevator").checked ? "1" : "0",
+  });
+
+  if (facSearchMode === "room") {
+    const fromInfo = resolveRoom("fac-from-input", "fac-from-bldg");
+    if (!fromInfo)               { alert("出発教室を入力してください。"); return; }
+    if (fromInfo === "ambiguous") { alert("出発教室が複数の号館に存在します。号館を指定してください。"); return; }
+    params.set("from_room",     fromInfo.room);
+    params.set("from_building", fromInfo.building);
+  } else {
+    if (!facGpsCoords) { alert("GPS位置を先に取得してください。"); return; }
+    const nearest = findNearestNode(facGpsCoords.lat, facGpsCoords.lng);
+    if (!nearest) { alert("近くの出発ノードが見つかりません。"); return; }
+    params.set("from_node", nearest.id);
+  }
+
+  setLoading(true);
+  try {
+    const res = await fetch(`${API_BASE}/api/nearest_toilet?${params}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) { alert("エラー: " + data.error); return; }
+    initRoute(data.path_coords);
+  } catch {
+    document.getElementById("step-label").textContent = "サーバーに接続できません";
+    document.getElementById("step-count").textContent = "app.py が起動しているか確認してください";
+  } finally {
+    setLoading(false);
+  }
+}
+
 // ================================================================
 // Search panel slide toggle (mobile only)
 // ================================================================
@@ -942,6 +1087,32 @@ function captureGPS() {
     },
     () => {
       document.getElementById("gps-text").textContent = "取得失敗";
+      alert("位置情報を取得できませんでした。\nGPSが有効か確認してください。");
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+  );
+}
+
+function captureFacGPS() {
+  if (!navigator.geolocation) { alert("位置情報に対応していません。"); return; }
+  document.getElementById("fac-gps-text").textContent = "取得中...";
+  const warn = document.getElementById("fac-accuracy-warn");
+  warn.style.display = "none"; warn.className = "";
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      facGpsCoords = { lat, lng };
+      document.getElementById("fac-gps-text").textContent =
+        `${lat.toFixed(5)}, ${lng.toFixed(5)}  ±${Math.round(accuracy)}m`;
+      if (accuracy > 30) {
+        warn.style.display = "block"; warn.className = "warn-low";
+        warn.innerHTML = `GPS精度が低下しています（±${Math.round(accuracy)}m）。屋内の可能性があります。<br>`
+          + `近くの<b>部屋番号の案内板</b>を確認して教室名で検索してください。`;
+      }
+      renderGpsOnMap(lat, lng, accuracy);
+    },
+    () => {
+      document.getElementById("fac-gps-text").textContent = "取得失敗";
       alert("位置情報を取得できませんでした。\nGPSが有効か確認してください。");
     },
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
@@ -1488,7 +1659,7 @@ function renderSvgStep(step) {
   const angleRad = angle * Math.PI / 180;
   halo.setAttribute("cx", curNode.svg_x + Math.round(Math.cos(angleRad) * haloOffset));
   halo.setAttribute("cy", curNode.svg_y + Math.round(Math.sin(angleRad) * haloOffset));
-  halo.setAttribute("r", rH); halo.setAttribute("fill", "#B0C4DE"); halo.setAttribute("fill-opacity", "0.9");
+  halo.setAttribute("r", rH); halo.setAttribute("fill", "#32CD32"); halo.setAttribute("fill-opacity", "0.5");
   svgOverlay.appendChild(halo);
 
   const arrow = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
