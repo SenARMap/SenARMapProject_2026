@@ -21,6 +21,11 @@ CDN_BASE         = "https://cdn.iku-navi.net"
 # グローバルID = building_id * ID_OFFSET + ローカルID
 ID_OFFSET          = 100_000
 GLOBAL_NODE_OFFSET = 9_000_000   # 屋外ノードIDのオフセット
+
+# 建物出入り口を通過するコスト加算（単位: weight×length と同じ ≒ メートル相当）
+# 値を大きくするほど建物を通り抜けるルートを避けやすくなる
+# 0 にするとペナルティなし（従来動作）
+ENTRANCE_PENALTY   = 50.0
 OUTDOOR_COLOR      = "#5AFF5A"
 
 # Building color palette (up to 10 buildings)
@@ -224,7 +229,7 @@ def load_data():
                     "floor": 1,
                     "weight": 1.0,
                     "length": 0.0,
-                    "type": 1,
+                    "type": 7,
                     "name": ""
                 })
             if anchor_edges:
@@ -281,7 +286,7 @@ def build_graph(nodes_df, edges_df, use_elevator=True):
             name=str(row["name"]),
             building=int(row["building"]),
             floor=int(row["floor"]),
-            weight=float(row["weight"]) * float(row["length"]),
+            weight=float(row["weight"]) * float(row["length"]) + (ENTRANCE_PENALTY if edge_type == "7" else 0.0),
             length=float(row["length"]),
             edge_type=edge_type,
         )
