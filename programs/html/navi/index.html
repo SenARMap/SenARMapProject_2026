@@ -1484,8 +1484,11 @@ function renderSvgStep(step) {
 
   const halo = document.createElementNS("http://www.w3.org/2000/svg", "circle");
   halo.classList.add("dyn");
-  halo.setAttribute("cx", curNode.svg_x); halo.setAttribute("cy", curNode.svg_y);
-  halo.setAttribute("r", rH); halo.setAttribute("fill", "white"); halo.setAttribute("fill-opacity", "0.90");
+  const haloOffset = Math.round(12 * sz);
+  const angleRad = angle * Math.PI / 180;
+  halo.setAttribute("cx", curNode.svg_x + Math.round(Math.cos(angleRad) * haloOffset));
+  halo.setAttribute("cy", curNode.svg_y + Math.round(Math.sin(angleRad) * haloOffset));
+  halo.setAttribute("r", rH); halo.setAttribute("fill", "#B0C4DE"); halo.setAttribute("fill-opacity", "0.9");
   svgOverlay.appendChild(halo);
 
   const arrow = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
