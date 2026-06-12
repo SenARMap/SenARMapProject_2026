@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>屋外ルート網AR | IKU NAVI</title>
+
+  <!-- A-Frame + AR.js (ロケーションベースAR) -->
+  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif; }
+
+    #hud {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    #btn-back {
+      flex-shrink: 0;
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      color: white; font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      text-decoration: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #hud-status { flex: 1; min-width: 0; }
+    #gps-status {
+      font-size: 13px; font-weight: 600; color: white;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #graph-status { font-size: 11px; color: #CBD5E1; margin-top: 2px; }
+
+    #start-overlay {
+      position: fixed; inset: 0; z-index: 2000;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px;
+      padding: 24px; text-align: center;
+      background: rgba(15, 23, 42, 0.92);
+      color: white;
+    }
+    #start-overlay h1 { font-size: 20px; font-weight: 800; }
+    #start-overlay p  { font-size: 13px; color: #CBD5E1; line-height: 1.8; }
+    #btn-start {
+      margin-top: 8px;
+      height: 48px; padding: 0 36px;
+      border: none; border-radius: 12px;
+      background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+      color: white; font-size: 16px; font-weight: 700;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<!-- 開始オーバーレイ（iOSのセンサー許可はユーザー操作起点が必須） -->
+<div id="start-overlay">
+  <h1>屋外ルート網AR</h1>
+  <p>
+    カメラ・位置情報・モーションセンサーの<br>
+    アクセスを許可してください。<br><br>
+    登録済みの屋外ノードとそれを繋ぐ経路が<br>
+    実際の風景に重なって表示されます。
+  </p>
+  <button id="btn-start">ARを開始</button>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <a id="btn-back" href="index.html" aria-label="ナビに戻る">←</a>
+  <div id="hud-status">
+    <div id="gps-status">GPS取得待ち...</div>
+    <div id="graph-status">データ読み込み中...</div>
+  </div>
+</div>
+
+<!-- ARシーン -->
+<a-scene
+  vr-mode-ui="enabled: false"
+  arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
+  renderer="antialias: true; alpha: true">
+  <a-camera id="ar-camera" gps-new-camera="gpsMinDistance: 3"></a-camera>
+</a-scene>
+
+<script>
+// ================================================================
+// テキストを常にカメラへ向けるビルボードコンポーネント
+// ================================================================
+AFRAME.registerComponent("face-camera", {
+  tick: function () {
+    const cam = document.getElementById("ar-camera");
+    if (cam) this.el.object3D.lookAt(cam.object3D.position);
+  },
+});
+
+// ================================================================
+// 設定
+// ================================================================
+const API_BASE     = "";
+const NODE_COLOR   = "#22D3EE";  // ノード球の色
+const EDGE_COLOR   = "#3B82F6";  // 接続線の色
+const PATH_Y       = 0.3;        // 線・球の高さ（カメラ基準。カメラ≒目線1.6mなので足元寄り）
+const EDGE_RADIUS  = 0.12;       // 接続線（円柱）の太さ
+const NODE_RADIUS  = 0.45;       // ノード球の半径
+
+// ================================================================
+// 座標変換 — AR.js内部と同じ球面メルカトル(EPSG:3857)で
+// 基準点からの相対オフセット(m)を計算する。
+// AR.jsのワールド座標は x=東(+), z=北(-) なので z は反転する。
+// ================================================================
+const EARTH_R = 6378137;
+function mercator(lat, lng) {
+  return {
+    x: EARTH_R * lng * Math.PI / 180,
+    y: EARTH_R * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI / 180) / 2)),
+  };
+}
+
+// ================================================================
+// State
+// ================================================================
+const scene = document.querySelector("a-scene");
+const camEl = document.getElementById("ar-camera");
+let outdoorNodes = [];   // [{id, lat, lng, x, z}, ...] x/z は基準点からの相対座標
+let curPos = null;
+
+// ================================================================
+// 開始ボタン
+// ================================================================
+document.getElementById("btn-start").addEventListener("click", async () => {
+  try {
+    if (typeof DeviceOrientationEvent !== "undefined" &&
+        typeof DeviceOrientationEvent.requestPermission === "function") {
+      await DeviceOrientationEvent.requestPermission();
+    }
+  } catch (e) {
+    console.warn("センサー許可の取得に失敗:", e);
+  }
+  document.getElementById("start-overlay").style.display = "none";
+});
+
+// ================================================================
+// GPS更新 — HUDに現在地と最寄りノードまでの距離を表示
+// ================================================================
+camEl.addEventListener("gps-camera-update-position", (e) => {
+  curPos = e.detail.position;
+  let text = `GPS: ${curPos.latitude.toFixed(5)}, ${curPos.longitude.toFixed(5)}`;
+  const nearest = findNearestNode(curPos.latitude, curPos.longitude);
+  if (nearest) text += `｜最寄りノードまで ${Math.round(nearest.dist)}m`;
+  document.getElementById("gps-status").textContent = text;
+});
+
+function findNearestNode(lat, lng) {
+  let best = null;
+  outdoorNodes.forEach((n) => {
+    const d = haversine(lat, lng, n.lat, n.lng);
+    if (!best || d < best.dist) best = { node: n, dist: d };
+  });
+  return best;
+}
+
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dp = (lat2 - lat1) * Math.PI / 180;
+  const dl = (lng2 - lng1) * Math.PI / 180;
+  const p1 = lat1 * Math.PI / 180, p2 = lat2 * Math.PI / 180;
+  const s  = Math.sin(dp/2)**2 + Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
+
+// ================================================================
+// グラフ取得 → AR配置
+// /api/graph から building=0 かつ lat/lng を持つノードと、
+// 両端がその屋外ノードであるエッジだけを使う。
+// ================================================================
+async function loadOutdoorGraph() {
+  const statusEl = document.getElementById("graph-status");
+  let data;
+  try {
+    const res = await fetch(`${API_BASE}/api/graph`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    data = await res.json();
+  } catch {
+    statusEl.textContent = "APIに接続できません（app.py / nginx を確認）";
+    return;
+  }
+
+  const nodes = (data.nodes || []).filter(
+    (n) => n.building === 0 && n.lat != null && n.lng != null
+  );
+  if (!nodes.length) {
+    statusEl.textContent = "屋外ノードが登録されていません";
+    return;
+  }
+  const byId = {};
+  nodes.forEach((n) => { byId[n.id] = n; });
+
+  // 両端が屋外ノードのエッジのみ（建物接続のアンカーエッジ等は除外）。重複は無向で排除
+  const seen  = new Set();
+  const edges = (data.edges || []).filter((e) => {
+    if (!byId[e.from] || !byId[e.to]) return false;
+    const key = e.from < e.to ? `${e.from}_${e.to}` : `${e.to}_${e.from}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  buildArGraph(nodes, edges, byId);
+  statusEl.textContent = `屋外ノード ${nodes.length}個 / 接続 ${edges.length}本 を表示中`;
+}
+
+// ================================================================
+// AR配置 — 基準点(最初のノード)だけをGPSアンカーにして、
+// 残りは基準点からの相対座標で子要素として置く。
+// 全点を個別にGPS配置するより、線と点のズレが原理的に出ない。
+// ================================================================
+function buildArGraph(nodes, edges, byId) {
+  const origin  = nodes[0];
+  const originM = mercator(origin.lat, origin.lng);
+
+  // 各ノードの相対座標を計算して保持
+  outdoorNodes = nodes.map((n) => {
+    const m = mercator(n.lat, n.lng);
+    return {
+      id:  n.id,
+      lat: n.lat,
+      lng: n.lng,
+      x:  m.x - originM.x,        // 東が +x
+      z: -(m.y - originM.y),      // 北が -z
+    };
+  });
+  const relById = {};
+  outdoorNodes.forEach((n) => { relById[n.id] = n; });
+
+  // GPSアンカー（このエンティティ以下が現実の座標に固定される）
+  const anchor = document.createElement("a-entity");
+  anchor.setAttribute(
+    "gps-new-entity-place",
+    `latitude: ${origin.lat}; longitude: ${origin.lng}`
+  );
+
+  // --- ノード球 + IDラベル ---
+  outdoorNodes.forEach((n) => {
+    const sphere = document.createElement("a-sphere");
+    sphere.setAttribute("radius", NODE_RADIUS);
+    sphere.setAttribute("color", NODE_COLOR);
+    sphere.setAttribute("position", `${n.x} ${PATH_Y} ${n.z}`);
+    anchor.appendChild(sphere);
+
+    // A-Frame標準フォントは日本語非対応のためラベルは英数字
+    const label = document.createElement("a-text");
+    label.setAttribute("value", `N${n.id % 100000}`);
+    label.setAttribute("align", "center");
+    label.setAttribute("color", "white");
+    label.setAttribute("scale", "5 5 5");
+    label.setAttribute("position", `${n.x} ${PATH_Y + 1.6} ${n.z}`);
+    label.setAttribute("side", "double");
+    label.setAttribute("face-camera", "");
+    anchor.appendChild(label);
+  });
+
+  // --- 接続線（円柱を2点間に渡す）---
+  edges.forEach((e) => {
+    const a = relById[e.from];
+    const b = relById[e.to];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    if (len < 0.01) return;
+
+    const cyl = document.createElement("a-cylinder");
+    cyl.setAttribute("radius", EDGE_RADIUS);
+    cyl.setAttribute("height", len);
+    cyl.setAttribute("color", EDGE_COLOR);
+    cyl.setAttribute("opacity", "0.85");
+    cyl.setAttribute(
+      "position",
+      `${a.x + dx / 2} ${PATH_Y} ${a.z + dz / 2}`
+    );
+    // 円柱はY軸方向に伸びるので、向きをクォータニオンでXZ平面の進行方向に合わせる
+    cyl.addEventListener("loaded", () => {
+      const THREE = AFRAME.THREE;
+      const dir = new THREE.Vector3(dx, 0, dz).normalize();
+      cyl.object3D.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0), dir
+      );
+    });
+    anchor.appendChild(cyl);
+  });
+
+  scene.appendChild(anchor);
+}
+
+// 起動時にデータ取得（GPS取得とは独立に走らせる）
+loadOutdoorGraph();
+</script>
+</body>
+</html>
