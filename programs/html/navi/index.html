@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>構内ナビ</title>
+  <title>IKU NAVI</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html { height: 100%; }
@@ -36,6 +36,17 @@
       gap: 8px;
       padding: 8px 10px;
     }
+    #btn-home {
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      border: 1.5px solid #E2E8F0; border-radius: 50%;
+      background: white;
+      display: flex; align-items: center; justify-content: center;
+      color: #64748B; font-size: 15px; line-height: 1;
+      text-decoration: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #btn-home:active { background: #F1F5F9; }
     #search-toggle {
       flex-shrink: 0;
       width: 28px; height: 28px;
@@ -137,6 +148,7 @@
       }
       #search-header { padding: 14px 16px 8px; }
       #search-toggle { display: none; }
+      #btn-home      { display: none; } /* desktop: app-header にリンクがあるため不要 */
       #search-content { display: block; }
       .search-content-inner { overflow: visible; padding: 0 16px 14px; }
 
@@ -542,9 +554,10 @@
   <!-- Search Panel -->
   <div id="search-panel">
     <div id="search-header">
+      <a id="btn-home" href="../index.html" aria-label="トップページに戻る">⌂</a>
       <div class="search-tabs">
         <button class="search-tab active" id="tab-room" onclick="setMode('room')">教室 → 教室</button>
-        <button class="search-tab"        id="tab-gps"  onclick="setMode('gps')">現在地 → 教室</button>
+        <button class="search-tab"        id="tab-gps"  onclick="setMode('gps')">現在地(屋外) → 教室</button>
       </div>
       <button id="search-toggle" onclick="toggleSearchPanel()" aria-label="検索パネルを開閉">
         <span id="search-chevron" class="open">▾</span>

@@ -574,6 +574,46 @@
     }
 
 
+    /* トップへ戻るボタン（モバイルのみ） */
+    #scroll-top-btn {
+      display: none;
+      position: absolute;
+      right: 14px;
+      bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+      z-index: 200;
+      width: 42px; height: 42px;
+      border-radius: 50%;
+      background: rgba(0, 192, 238, 0.18);
+      border: 1px solid rgba(0, 192, 238, 0.45);
+      color: var(--accent);
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 2px 12px rgba(0, 192, 238, 0.2);
+      transition: opacity 0.25s var(--ease-out), transform 0.25s var(--ease-out),
+                  background 0.15s, box-shadow 0.15s;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(10px);
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #scroll-top-btn.visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+    #scroll-top-btn:active {
+      transform: scale(0.9);
+      background: rgba(0, 192, 238, 0.32);
+    }
+    @media (max-width: 767px) {
+      #scroll-top-btn { display: flex; }
+    }
+
     /* 俯瞰ボタン */
     #top-view-btn {
       position: absolute;
@@ -785,6 +825,8 @@
 
 
     </div><!-- /.sheet-scroll-area -->
+
+    <button id="scroll-top-btn" aria-label="トップに戻る">↑</button>
   </aside>
 
   <!-- ========== 3D MAP ========== -->
@@ -849,6 +891,7 @@ function floorColor(f) {
   });
 
   initSheet();
+  initScrollTopBtn();
 })();
 
 async function prefetchRooms() {
@@ -1521,6 +1564,22 @@ function axisStyle(title) {
 document.getElementById("sidebar").addEventListener("transitionend", () => {
   Plotly.Plots.resize(document.getElementById("map"));
 });
+
+// ============================================================
+//  トップへ戻るボタン（モバイル）
+// ============================================================
+function initScrollTopBtn() {
+  const btn        = document.getElementById("scroll-top-btn");
+  const scrollArea = document.querySelector(".sheet-scroll-area");
+
+  scrollArea.addEventListener("scroll", () => {
+    btn.classList.toggle("visible", scrollArea.scrollTop > 120);
+  }, { passive: true });
+
+  btn.addEventListener("click", () => {
+    scrollArea.scrollTo({ top: 0, behavior: "smooth" });
+  });
+}
 
 // ============================================================
 //  俯瞰ビュー
