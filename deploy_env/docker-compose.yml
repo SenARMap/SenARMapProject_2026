@@ -16,8 +16,11 @@ services:
     volumes:
       - ./nginx/ssl/:/etc/nginx/certs/
       - ../:/project/
+    depends_on:
+      - counter
   db:
     image: mariadb:11
+    container_name: 'iki_project_2026_mariadb'
     environment:
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MARIADB_DATABASE: ${DB_NAME}
@@ -34,6 +37,7 @@ services:
   counter:
     build:
       context: ./Counters
+    container_name: 'iki_project_2026_counter'
     environment:
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
       DB_HOST: db
