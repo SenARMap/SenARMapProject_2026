@@ -53,6 +53,14 @@ http {
             proxy_set_header   X-Forwarded-Proto $scheme;
         }
 
+        location /redirect/ {
+            proxy_pass         http://counter:3000/redirect/;
+            proxy_set_header   Host              $host;
+            proxy_set_header   X-Real-IP         $remote_addr;
+            proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header   X-Forwarded-Proto $scheme;
+        }
+
         location / {
             root      /project/programs/html;
             try_files $uri $uri/ =404;
