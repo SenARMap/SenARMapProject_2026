@@ -16,9 +16,9 @@ services:
     volumes:
       - ./nginx/ssl/:/etc/nginx/certs/
       - ../:/project/
-  rails:
-    build: 
-      context: ./Counters
+  counter:
+    build: ./Counters/
+    container_name: 'iki_project_2026_counter'
     environment:
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
   cloudflared:
