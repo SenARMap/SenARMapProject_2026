@@ -16,11 +16,36 @@ services:
     volumes:
       - ./nginx/ssl/:/etc/nginx/certs/
       - ../:/project/
-  counter:
-    build: ./Counters/
-    container_name: 'iki_project_2026_counter'
+  db:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  rails:
+    build:
+      context: ./Counters
+    ports:
+      - 3000:3000
     environment:
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      DB_HOST: db
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+      
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: cloudflared-tunnel
@@ -30,4 +55,7 @@ services:
       - TUNNEL_TOKEN=${TUNNEL_TOKEN}
     depends_on:
       - nginx
+
+volumes:
+  db_data:
     
