@@ -30,7 +30,7 @@ services:
   counters:
     build:
       context: ./Counters
-    container_name: 'iki_project_2026_mariadb'
+    container_name: 'iki_project_2026_counters'
     ports:
       - 3000:3000
     environment:
