@@ -27,7 +27,7 @@ services:
     volumes:
       - db_data:/var/lib/mysql
 
-  counters:
+  counter:
     build:
       context: ./Counters
     container_name: 'iki_project_2026_counters'
