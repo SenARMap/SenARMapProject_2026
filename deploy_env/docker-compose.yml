@@ -31,11 +31,9 @@ services:
       timeout: 5s
       retries: 15
 
-  rails:
+  counter:
     build:
       context: ./Counters
-    ports:
-      - 3000:3000
     environment:
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
       DB_HOST: db
