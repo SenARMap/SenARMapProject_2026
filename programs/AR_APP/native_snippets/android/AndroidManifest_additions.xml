@@ -1,0 +1,21 @@
+<!-- android/app/src/main/AndroidManifest.xml の <manifest> / <application> に追記する -->
+
+<!-- ===== <manifest> 直下 ===== -->
+<uses-permission android:name="android.permission.CAMERA" />
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+<!-- ARCore対応端末のみ（Geospatialは必須） -->
+<uses-feature android:name="android.hardware.camera.ar" android:required="true" />
+
+<!-- ===== <application> 直下 ===== -->
+<!-- ARCore を必須にする。任意にするなら "optional" -->
+<meta-data android:name="com.google.ar.core" android:value="required" />
+
+<!--
+  ARCore Geospatial API キーは AndroidManifest に直書きせず、
+  実行時に Flutter から --dart-define=ARCORE_API_KEY=... で渡し、
+  ネイティブのセッション生成時に設定する（GeoArPlugin.kt 参照）。
+  build.gradle: minSdkVersion 24 以上が必要。
+-->

@@ -1,0 +1,26 @@
+name: iku_navi_ar
+description: IKU NAVI - WebView + 屋外Geo-AR ハイブリッドアプリ
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # iku-navi.net を表示する WebView
+  webview_flutter: ^4.7.0
+  # GPS 取得・屋内外判定
+  geolocator: ^11.0.0
+  # カメラ等のランタイム権限
+  permission_handler: ^11.3.0
+  # /api/graph 取得
+  http: ^1.2.0
+
+dev_dependencies:
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,18 @@
+ios/Runner/Info.plist の <dict> に追記する:
+
+<key>NSCameraUsageDescription</key>
+<string>屋外ARで周囲に経路を重ねて表示するためにカメラを使用します。</string>
+
+<key>NSLocationWhenInUseUsageDescription</key>
+<string>屋内外の判定と屋外ARの測位のために位置情報を使用します。</string>
+
+<!-- ARKit を必須にする場合 -->
+<key>UIRequiredDeviceCapabilities</key>
+<array>
+    <string>arkit</string>
+</array>
+
+注意:
+- ARKit の Geo-tracking (ARGeoTrackingConfiguration) は対応端末・対応都市のみ。
+  実機で ARGeoTrackingConfiguration.isSupported / checkAvailability を確認すること。
+- 最低デプロイ先 iOS 14 以上。
