@@ -39,6 +39,20 @@
     #gps-raw      { font-size: 11px; color: #CBD5E1; margin-top: 2px; }
     #graph-status { font-size: 11px; color: #CBD5E1; margin-top: 2px; }
 
+    #debug-log {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000;
+      max-height: 38vh; overflow-y: auto;
+      padding: 8px 10px;
+      background: rgba(0,0,0,0.72);
+      color: #E2E8F0;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 11px; line-height: 1.5;
+      white-space: pre-wrap; word-break: break-all;
+    }
+    #debug-log .err  { color: #FCA5A5; }
+    #debug-log .ok   { color: #86EFAC; }
+    #debug-log .warn { color: #FDE68A; }
+
     #start-overlay {
       position: fixed; inset: 0; z-index: 2000;
       display: flex; flex-direction: column;
@@ -83,6 +97,9 @@
   </div>
 </div>
 
+<!-- デバッグログ（端末上で実行状況を可視化）。?debug=0 で非表示 -->
+<div id="debug-log"></div>
+
 <!-- ARシーン -->
 <a-scene
   vr-mode-ui="enabled: false"
@@ -92,6 +109,41 @@
 </a-scene>
 
 <script>
+// ================================================================
+// 端末上デバッグログ — iPhone Chrome等でDevToolsが使えない環境向け。
+// 画面下部に実行状況を時刻付きで表示する。?debug=0 で無効化。
+// ================================================================
+const DEBUG_ON = new URLSearchParams(location.search).get("debug") !== "0";
+function dlog(msg, cls) {
+  if (!DEBUG_ON) return;
+  const box = document.getElementById("debug-log");
+  if (!box) return;
+  const t = new Date().toLocaleTimeString("ja-JP", { hour12: false });
+  const line = document.createElement("div");
+  if (cls) line.className = cls;
+  line.textContent = `${t}  ${msg}`;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+if (!DEBUG_ON) {
+  const box = document.getElementById("debug-log");
+  if (box) box.style.display = "none";
+}
+// 実行時エラーを拾ってログに出す（iOSで何か throw していないか確認用）
+window.addEventListener("error", (e) => {
+  dlog(`JSエラー: ${e.message} @${(e.filename||"").split("/").pop()}:${e.lineno}`, "err");
+});
+window.addEventListener("unhandledrejection", (e) => {
+  dlog(`Promiseエラー: ${e.reason && (e.reason.message || e.reason)}`, "err");
+});
+dlog("スクリプト開始", "ok");
+
+// シーンとカメラコンポーネントのライフサイクルを記録
+document.querySelector("a-scene").addEventListener("loaded", () => dlog("a-scene loaded", "ok"));
+document.getElementById("ar-camera").addEventListener("componentinitialized", (e) => {
+  if (e.detail.name === "gps-new-camera") dlog("gps-new-camera 初期化完了", "ok");
+});
+
 // ================================================================
 // テキストを常にカメラへ向けるビルボードコンポーネント
 // ================================================================
@@ -161,8 +213,10 @@ const GPS_ERR_MSG = {
 };
 
 // gps-new-camera コンポーネントの初期化完了を待ってから座標を注入する
+let _waitLogged = false;
 function whenCameraReady(cb) {
   if (camEl.components && camEl.components["gps-new-camera"]) { cb(); return; }
+  if (!_waitLogged) { dlog("gps-new-camera 初期化待ち...", "warn"); _waitLogged = true; }
   camEl.addEventListener("componentinitialized", function onInit(e) {
     if (e.detail.name === "gps-new-camera") {
       camEl.removeEventListener("componentinitialized", onInit);
@@ -171,13 +225,54 @@ function whenCameraReady(cb) {
   });
 }
 
-// AR.js に1フィックス注入する（simulate属性 → 内部で fakeGps が走る）
+// 監視: 注入したのに一定時間 gps-camera-update-position が来なければ警告
+setTimeout(() => {
+  if (_pushCount > 0 && arjsFixCount === 0) {
+    dlog(`注意: ${_pushCount}回注入したが gps-camera-update-position が未発火。`, "err");
+    dlog("→ fakeGps/emit がこの端末で機能していない可能性。", "err");
+  } else if (_pushCount === 0) {
+    dlog("注意: 一度も注入されていない（GPS/シミュレート未起動）。", "err");
+  }
+}, 8000);
+
+// AR.js に1フィックス注入する。
+// simulate属性経由(update→fakeGps)が iOS WebKit で発火しないため、
+// 内部の LocationBased(threeLoc) の fakeGps を直接呼ぶ。
+let _pushCount  = 0;
+let _introspected = false;
 function pushPositionToArjs(lat, lng) {
   whenCameraReady(() => {
-    camEl.setAttribute("gps-new-camera", {
-      simulateLatitude:  lat,
-      simulateLongitude: lng,
-    });
+    _pushCount++;
+    const comp = camEl.components["gps-new-camera"];
+
+    // 初回のみコンポーネント内部の状態をログ出力して原因を特定
+    if (!_introspected) {
+      _introspected = true;
+      dlog(`comp=${!!comp} threeLoc=${!!(comp && comp.threeLoc)} ` +
+           `fakeGps=${!!(comp && comp.threeLoc && comp.threeLoc.fakeGps)}`,
+           comp && comp.threeLoc ? "ok" : "err");
+    }
+
+    if (comp && comp.threeLoc && typeof comp.threeLoc.fakeGps === "function") {
+      try {
+        // fakeGps(longitude, latitude) — 経度・緯度の順に注意
+        comp.threeLoc.fakeGps(lng, lat);
+        dlog(`fakeGps直接呼び出し #${_pushCount}: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+      } catch (err) {
+        dlog(`fakeGps失敗: ${err.message}`, "err");
+      }
+    } else {
+      // フォールバック: 従来の属性経由
+      dlog(`threeLoc不在のため属性経由でフォールバック #${_pushCount}`, "warn");
+      try {
+        camEl.setAttribute("gps-new-camera", {
+          simulateLatitude:  lat,
+          simulateLongitude: lng,
+        });
+      } catch (err) {
+        dlog(`setAttribute失敗: ${err.message}`, "err");
+      }
+    }
   });
 }
 
@@ -221,13 +316,45 @@ document.getElementById("btn-start").addEventListener("click", async () => {
   try {
     if (typeof DeviceOrientationEvent !== "undefined" &&
         typeof DeviceOrientationEvent.requestPermission === "function") {
-      await DeviceOrientationEvent.requestPermission();
+      const res = await DeviceOrientationEvent.requestPermission();
+      dlog(`センサー許可: ${res}`, res === "granted" ? "ok" : "err");
+    } else {
+      dlog("DeviceOrientationEvent.requestPermission なし（許可不要 or 非対応）", "warn");
     }
   } catch (e) {
-    console.warn("センサー許可の取得に失敗:", e);
+    dlog(`センサー許可の取得に失敗: ${e.message}`, "err");
   }
   document.getElementById("start-overlay").style.display = "none";
+  watchOrientation();
 });
+
+// ================================================================
+// 向きセンサーの診断 — deviceorientation が実際に届いているか、
+// コンパス方位(absolute / webkitCompassHeading)が取れているかを確認。
+// 「どっち向いても同じ」= ここのデータがカメラに反映されていない状態。
+// ================================================================
+let _orientCount = 0;
+function watchOrientation() {
+  const handler = (e) => {
+    _orientCount++;
+    if (_orientCount === 1 || _orientCount % 60 === 0) {
+      const heading = (typeof e.webkitCompassHeading === "number")
+        ? `compass=${Math.round(e.webkitCompassHeading)}°`
+        : `alpha=${e.alpha == null ? "null" : Math.round(e.alpha) + "°"}`;
+      dlog(`向きセンサー #${_orientCount}: ${heading} absolute=${e.absolute}`,
+           (e.alpha != null || e.webkitCompassHeading != null) ? "ok" : "warn");
+    }
+  };
+  // iOS Safari/Chrome は absolute 系を出さないため両方購読する
+  window.addEventListener("deviceorientationabsolute", handler);
+  window.addEventListener("deviceorientation", handler);
+
+  setTimeout(() => {
+    if (_orientCount === 0) {
+      dlog("向きセンサーのイベントが0件。カメラが回らない原因はこれ。", "err");
+    }
+  }, 4000);
+}
 
 // ================================================================
 // GPS更新 — HUDに現在地と最寄りノードまでの距離を表示
@@ -235,6 +362,7 @@ document.getElementById("btn-start").addEventListener("click", async () => {
 camEl.addEventListener("gps-camera-update-position", (e) => {
   curPos = e.detail.position;
   arjsFixCount++;
+  if (arjsFixCount === 1) dlog("gps-camera-update-position 初回発火 ✓", "ok");
   let text = `AR位置: ${curPos.latitude.toFixed(5)}, ${curPos.longitude.toFixed(5)} (${arjsFixCount}回反映)`;
   const nearest = findNearestNode(curPos.latitude, curPos.longitude);
   if (nearest) text += `｜最寄りノード ${Math.round(nearest.dist)}m`;
