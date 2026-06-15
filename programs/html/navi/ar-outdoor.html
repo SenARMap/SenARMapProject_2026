@@ -235,19 +235,43 @@ setTimeout(() => {
   }
 }, 8000);
 
-// AR.js に1フィックス注入する（simulate属性 → 内部で fakeGps が走る）
-let _pushCount = 0;
+// AR.js に1フィックス注入する。
+// simulate属性経由(update→fakeGps)が iOS WebKit で発火しないため、
+// 内部の LocationBased(threeLoc) の fakeGps を直接呼ぶ。
+let _pushCount  = 0;
+let _introspected = false;
 function pushPositionToArjs(lat, lng) {
   whenCameraReady(() => {
     _pushCount++;
-    dlog(`AR.jsへ注入 #${_pushCount}: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
-    try {
-      camEl.setAttribute("gps-new-camera", {
-        simulateLatitude:  lat,
-        simulateLongitude: lng,
-      });
-    } catch (err) {
-      dlog(`setAttribute失敗: ${err.message}`, "err");
+    const comp = camEl.components["gps-new-camera"];
+
+    // 初回のみコンポーネント内部の状態をログ出力して原因を特定
+    if (!_introspected) {
+      _introspected = true;
+      dlog(`comp=${!!comp} threeLoc=${!!(comp && comp.threeLoc)} ` +
+           `fakeGps=${!!(comp && comp.threeLoc && comp.threeLoc.fakeGps)}`,
+           comp && comp.threeLoc ? "ok" : "err");
+    }
+
+    if (comp && comp.threeLoc && typeof comp.threeLoc.fakeGps === "function") {
+      try {
+        // fakeGps(longitude, latitude) — 経度・緯度の順に注意
+        comp.threeLoc.fakeGps(lng, lat);
+        dlog(`fakeGps直接呼び出し #${_pushCount}: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+      } catch (err) {
+        dlog(`fakeGps失敗: ${err.message}`, "err");
+      }
+    } else {
+      // フォールバック: 従来の属性経由
+      dlog(`threeLoc不在のため属性経由でフォールバック #${_pushCount}`, "warn");
+      try {
+        camEl.setAttribute("gps-new-camera", {
+          simulateLatitude:  lat,
+          simulateLongitude: lng,
+        });
+      } catch (err) {
+        dlog(`setAttribute失敗: ${err.message}`, "err");
+      }
     }
   });
 }
