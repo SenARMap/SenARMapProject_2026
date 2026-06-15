@@ -423,37 +423,40 @@ function startPositioning() {
 // ================================================================
 // 開始ボタン — センサー許可＋カメラ起動を取得してから計測開始
 // ================================================================
-document.getElementById("btn-start").addEventListener("click", async () => {
-  // 1. センサー許可の取得
-  try {
-    if (typeof DeviceOrientationEvent !== "undefined" &&
-        typeof DeviceOrientationEvent.requestPermission === "function") {
-      const res = await DeviceOrientationEvent.requestPermission();
-      dlog(`センサー許可: ${res}`, res === "granted" ? "ok" : "err");
-    } else {
-      dlog("requestPermission なし（許可不要 or 非対応）", "warn");
-    }
-  } catch (e) {
-    dlog(`センサー許可の取得に失敗: ${e.message}`, "err");
+document.getElementById("btn-start").addEventListener("click", function() {
+  // 1. ユーザーのアクション直後に、非同期(await)を挟まず直接リクエストを呼ぶ
+  if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+    DeviceOrientationEvent.requestPermission()
+      .then(permissionState => {
+        dlog(`センサー許可: ${permissionState}`, permissionState === "granted" ? "ok" : "err");
+        if (permissionState === 'granted') {
+          startAR();
+        } else {
+          alert("センサーが拒否されました。設定や履歴を確認してください。");
+        }
+      })
+      .catch(e => {
+        dlog(`センサー許可エラー: ${e.message}`, "err");
+      });
+  } else {
+    // AndroidやPCなど、許可ダイアログが不要な環境
+    dlog("許可ダイアログ不要環境", "ok");
+    startAR();
   }
+});
 
-  // 2. 背面カメラ映像の取得とvideoタグへの流し込み
+// 許可が下りた後の処理をまとめる
+async function startAR() {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment" }
-    });
-    const video = document.getElementById("bg-video");
-    video.srcObject = stream;
-    dlog("背面カメラの起動に成功", "ok");
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    document.getElementById("bg-video").srcObject = stream;
   } catch (err) {
     dlog(`カメラ起動エラー: ${err.message}`, "err");
   }
-
-  // 3. UIの非表示と各種計測開始
   document.getElementById("start-overlay").style.display = "none";
   attachOrientation();   
   startPositioning();
-});
+}
 
 // データ取得
 loadOutdoorGraph();
