@@ -63,6 +63,14 @@
     }
     #start-overlay h1 { font-size: 20px; font-weight: 800; }
     #start-overlay p  { font-size: 13px; color: #CBD5E1; line-height: 1.8; }
+    #start-overlay .perm-note {
+      background: rgba(59,130,246,0.18);
+      border: 1px solid rgba(96,165,250,0.5);
+      border-radius: 10px;
+      padding: 12px 16px; color: #E2E8F0;
+    }
+    #start-overlay .perm-note b { color: #93C5FD; }
+    #start-overlay .perm-lang { font-size: 11px; color: #94A3B8; }
     #btn-start {
       margin-top: 8px;
       height: 48px; padding: 0 36px;
@@ -79,10 +87,17 @@
 <div id="start-overlay">
   <h1>屋外ルート網AR</h1>
   <p>
-    カメラ・位置情報・モーションセンサーの<br>
-    アクセスを許可してください。<br><br>
     登録済みの屋外ノードとそれを繋ぐ経路が<br>
     実際の風景に重なって表示されます。
+  </p>
+  <p class="perm-note">
+    「開始」を押すと、カメラ・位置情報・モーションの<br>
+    許可ダイアログが順に表示されます。<br>
+    <b>すべて「許可 / Allow / OK」</b>を選んでください。
+  </p>
+  <p class="perm-lang">
+    ※ 許可ダイアログはiOSが表示するため、文言は<br>
+    iPhoneの言語設定に従います（英語表示になる場合があります）。
   </p>
   <button id="btn-start">ARを開始</button>
 </div>
@@ -101,8 +116,11 @@
 <div id="debug-log"></div>
 
 <!-- ARシーン -->
+<!-- device-orientation-permission-ui: A-Frame標準の英語モーション許可モーダルを無効化。
+     許可は自前の「ARを開始」ボタンで取得するため不要。 -->
 <a-scene
   vr-mode-ui="enabled: false"
+  device-orientation-permission-ui="enabled: false"
   arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
   renderer="antialias: true; alpha: true">
   <a-camera id="ar-camera" gps-new-camera="gpsMinDistance: 3"></a-camera>
@@ -326,7 +344,27 @@ document.getElementById("btn-start").addEventListener("click", async () => {
   }
   document.getElementById("start-overlay").style.display = "none";
   watchOrientation();
+  reinitLookControls();
 });
+
+// ================================================================
+// look-controls 再初期化
+// look-controls はシーン起動時（センサー許可前）に初期化されると
+// deviceorientation リスナーを張らず、後から許可しても張り直さない。
+// 許可取得後にコンポーネントを付け直して、向き追従を有効化する。
+// ================================================================
+function reinitLookControls() {
+  const ready = camEl.components && camEl.components["look-controls"];
+  const apply = () => {
+    camEl.removeAttribute("look-controls");
+    // magicWindowTrackingEnabled: モバイルでのデバイス向き追従を明示的に有効化
+    camEl.setAttribute("look-controls",
+      "magicWindowTrackingEnabled: true; touchEnabled: false; mouseEnabled: false");
+    dlog("look-controls を再初期化（向き追従ON）", "ok");
+  };
+  if (ready) { apply(); return; }
+  camEl.addEventListener("loaded", apply, { once: true });
+}
 
 // ================================================================
 // 向きセンサーの診断 — deviceorientation が実際に届いているか、
