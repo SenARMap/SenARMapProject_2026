@@ -213,6 +213,4 @@ pyrightconfig.json
 # WebFrontend API
 config.js
 
-!programs/AR_APP/lib
-
 # End of https://www.toptal.com/developers/gitignore/api/macos,python
