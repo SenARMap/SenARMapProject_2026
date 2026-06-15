@@ -424,13 +424,16 @@ function startPositioning() {
 // 開始ボタン — センサー許可＋カメラ起動を取得してから計測開始
 // ================================================================
 document.getElementById("btn-start").addEventListener("click", function() {
-  // 1. ユーザーのアクション直後に、非同期(await)を挟まず直接リクエストを呼ぶ
+  // ユーザー操作の直後に、await を挟まず許可をリクエストする
   if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
     DeviceOrientationEvent.requestPermission()
       .then(permissionState => {
         dlog(`センサー許可: ${permissionState}`, permissionState === "granted" ? "ok" : "err");
         if (permissionState === 'granted') {
-          startAR();
+          // 重要: カメラ起動(await)より先に、ここで即座に向きセンサーを購読する。
+          // await を挟むと iOS ではユーザー操作コンテキストが切れ、
+          // その後に張った deviceorientation リスナーにイベントが来ない。
+          enableSensorsAndStart();
         } else {
           alert("センサーが拒否されました。設定や履歴を確認してください。");
         }
@@ -441,21 +444,27 @@ document.getElementById("btn-start").addEventListener("click", function() {
   } else {
     // AndroidやPCなど、許可ダイアログが不要な環境
     dlog("許可ダイアログ不要環境", "ok");
-    startAR();
+    enableSensorsAndStart();
   }
 });
 
-// 許可が下りた後の処理をまとめる
-async function startAR() {
+// 許可が下りた直後の処理。向きセンサー購読を最優先で行う。
+function enableSensorsAndStart() {
+  attachOrientation();   // ← await より前。最優先で購読
+  startPositioning();    // GPS / シミュレート
+  startCamera();         // カメラ映像は非同期で後追い（向きとは独立）
+  document.getElementById("start-overlay").style.display = "none";
+}
+
+// カメラ映像（背景）の起動。向きセンサーとは独立に走らせる。
+async function startCamera() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
     document.getElementById("bg-video").srcObject = stream;
+    dlog("カメラ起動 ✓", "ok");
   } catch (err) {
     dlog(`カメラ起動エラー: ${err.message}`, "err");
   }
-  document.getElementById("start-overlay").style.display = "none";
-  attachOrientation();   
-  startPositioning();
 }
 
 // データ取得
