@@ -5,13 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>屋外ルート網AR | IKU NAVI</title>
 
-  <!-- A-Frame + AR.js（AR.jsはカメラ映像の表示のみに使用） -->
   <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif; }
+    body { 
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif; 
+      overflow: hidden; 
+      background: #000; /* カメラ起動前の背景 */
+    }
+
+    /* 背景カメラ映像用（最背面） */
+    #bg-video {
+      position: fixed; inset: 0;
+      width: 100vw; height: 100vh;
+      object-fit: cover; z-index: 0;
+    }
 
     /* 上部HUD */
     #hud {
@@ -71,7 +80,8 @@
 </head>
 <body>
 
-<!-- 開始オーバーレイ -->
+<video id="bg-video" autoplay playsinline muted></video>
+
 <div id="start-overlay">
   <h1>屋外ルート網AR</h1>
   <p>登録済みの屋外ノードとそれを繋ぐ経路が<br>実際の風景に重なって表示されます。</p>
@@ -87,7 +97,6 @@
   <button id="btn-start">ARを開始</button>
 </div>
 
-<!-- HUD -->
 <div id="hud">
   <a id="btn-back" href="index.html" aria-label="ナビに戻る">←</a>
   <div id="hud-status">
@@ -97,35 +106,25 @@
   </div>
 </div>
 
-<!-- デバッグログ -->
 <div id="debug-log"></div>
 
-<!-- ARシーン（AR.jsはカメラ映像のみ。GPS/向きはAR.jsに任せない） -->
 <a-scene
   vr-mode-ui="enabled: false"
   device-orientation-permission-ui="enabled: false"
-  arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
-  renderer="antialias: true; alpha: true">
+  renderer="antialias: true; alpha: true"
+  style="position: fixed; inset: 0; z-index: 1; pointer-events: none;">
 
-  <!-- カメラは原点に固定。向きだけ自前の compass-camera で制御する。
-       <a-camera> は look-controls 等を自動付与してカメラ回転を上書きするため、
-       コントロールの付かない <a-entity camera> を使い、向きの制御を一本化する。 -->
   <a-entity id="ar-camera"
             camera
             position="0 1.6 0"
             compass-camera></a-entity>
 
-  <!-- 全マーカーを格納するコンテナ。現在地に応じて position を動かす。 -->
   <a-entity id="world"></a-entity>
 </a-scene>
 
 <script>
 // ================================================================
 // URLパラメータ
-//   ?lat=..&lng=..  現在地をシミュレート（屋内/PC確認用）
-//   ?yaw=<度>       方位オフセット微調整
-//   ?flip=1         コンパス符号反転（左右が逆のとき）
-//   ?debug=0        デバッグログ非表示
 // ================================================================
 const QS       = new URLSearchParams(location.search);
 const SIM_LAT  = parseFloat(QS.get("lat"));
@@ -154,9 +153,6 @@ dlog("スクリプト開始", "ok");
 
 // ================================================================
 // 向きセンサーの購読
-// iOSでは「許可取得後」に張ったリスナーでないとイベントが来ないため、
-// 開始ボタンの許可取得後に attachOrientation() を呼んで購読する。
-// 取得した最新イベントは gOrient に保持し、compass-camera が参照する。
 // ================================================================
 let gOrient = null;
 let _orientAttached = false;
@@ -245,7 +241,7 @@ AFRAME.registerComponent("face-camera", {
 const API_BASE   = "";
 const NODE_COLOR = "#22D3EE";
 const EDGE_COLOR = "#3B82F6";
-const MARK_Y     = 0;      // マーカーの高さ（カメラは y=1.6 なので少し下に見える）
+const MARK_Y     = 0;      // マーカーの高さ
 const NODE_R     = 0.5;    // ノード球の半径[m]
 const EDGE_R     = 0.12;   // 接続線の太さ[m]
 
@@ -255,7 +251,7 @@ let nodes  = [];                    // [{id, lat, lng}]
 let placed = false;
 
 // ================================================================
-// ENU換算（基準点からの東距離・北距離[m]）。短距離用の簡易式。
+// ENU換算
 // ================================================================
 function enuFromRef(lat, lng) {
   const north = (lat - refLat) * 111320;
@@ -299,7 +295,6 @@ async function loadOutdoorGraph() {
   const byId = {};
   outdoor.forEach((n) => { byId[n.id] = n; });
 
-  // 両端が屋外ノードのエッジのみ。無向で重複排除。
   const seen = new Set();
   const edges = (data.edges || []).filter((e) => {
     if (!byId[e.from] || !byId[e.to]) return false;
@@ -318,18 +313,16 @@ async function loadOutdoorGraph() {
   statusEl.textContent = `屋外ノード ${nodes.length}個 / 接続 ${edges.length}本`;
   dlog(`マーカー構築: ノード${nodes.length} エッジ${edges.length}`, "ok");
 
-  // 既に現在地が分かっていれば即反映
   if (lastUserLat != null) updateWorldPosition(lastUserLat, lastUserLng);
 }
 
-// 基準点からの相対座標でマーカーと線を一度だけ配置する
 function buildMarkers(nodeList, edges, byId) {
   worldEl.innerHTML = "";
-  const pos = {};  // id -> {x, z}
+  const pos = {}; 
 
   nodeList.forEach((n) => {
     const { east, north } = enuFromRef(n.lat, n.lng);
-    const x = east, z = -north;   // A-Frame: 東=+x, 北=-z
+    const x = east, z = -north;   
     pos[n.id] = { x, z };
 
     const sphere = document.createElement("a-sphere");
@@ -338,7 +331,6 @@ function buildMarkers(nodeList, edges, byId) {
     sphere.setAttribute("position", `${x} ${MARK_Y} ${z}`);
     worldEl.appendChild(sphere);
 
-    // A-Frame標準フォントは日本語非対応のためラベルは英数字
     const label = document.createElement("a-text");
     label.setAttribute("value", `N${n.id % 100000}`);
     label.setAttribute("align", "center");
@@ -373,12 +365,11 @@ function buildMarkers(nodeList, edges, byId) {
 }
 
 // ================================================================
-// 現在地に合わせて world コンテナを平行移動（カメラを原点に保つ）
+// 現在地に合わせて world コンテナを平行移動
 // ================================================================
 function updateWorldPosition(lat, lng) {
   if (refLat == null) return;
   const { east, north } = enuFromRef(lat, lng);
-  // ユーザーが原点に来るよう world 全体をずらす
   worldEl.setAttribute("position", `${-east} 0 ${north}`);
 }
 
@@ -430,9 +421,10 @@ function startPositioning() {
 }
 
 // ================================================================
-// 開始ボタン — センサー許可を取得してから計測開始
+// 開始ボタン — センサー許可＋カメラ起動を取得してから計測開始
 // ================================================================
 document.getElementById("btn-start").addEventListener("click", async () => {
+  // 1. センサー許可の取得
   try {
     if (typeof DeviceOrientationEvent !== "undefined" &&
         typeof DeviceOrientationEvent.requestPermission === "function") {
@@ -444,12 +436,26 @@ document.getElementById("btn-start").addEventListener("click", async () => {
   } catch (e) {
     dlog(`センサー許可の取得に失敗: ${e.message}`, "err");
   }
+
+  // 2. 背面カメラ映像の取得とvideoタグへの流し込み
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" }
+    });
+    const video = document.getElementById("bg-video");
+    video.srcObject = stream;
+    dlog("背面カメラの起動に成功", "ok");
+  } catch (err) {
+    dlog(`カメラ起動エラー: ${err.message}`, "err");
+  }
+
+  // 3. UIの非表示と各種計測開始
   document.getElementById("start-overlay").style.display = "none";
-  attachOrientation();   // 許可取得後に向きセンサーを購読
+  attachOrientation();   
   startPositioning();
 });
 
-// データ取得はセンサー許可と独立に開始
+// データ取得
 loadOutdoorGraph();
 </script>
 </body>
