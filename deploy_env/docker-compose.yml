@@ -16,6 +16,8 @@ services:
     volumes:
       - ./nginx/ssl/:/etc/nginx/certs/
       - ../:/project/
+    depends_on:
+      - counter
   db:
     image: mariadb:11
     container_name: 'iki_project_2026_mariadb'
@@ -26,13 +28,16 @@ services:
       MARIADB_PASSWORD: ${DB_PASSWORD}
     volumes:
       - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
 
   counter:
     build:
       context: ./Counters
-    container_name: 'iki_project_2026_counters'
-    ports:
-      - 3000:3000
+    container_name: 'iki_project_2026_counter'
     environment:
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
       DB_HOST: db
@@ -40,7 +45,8 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
       
   cloudflared:
     image: cloudflare/cloudflared:latest
