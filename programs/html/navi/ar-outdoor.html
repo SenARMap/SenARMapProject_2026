@@ -316,13 +316,45 @@ document.getElementById("btn-start").addEventListener("click", async () => {
   try {
     if (typeof DeviceOrientationEvent !== "undefined" &&
         typeof DeviceOrientationEvent.requestPermission === "function") {
-      await DeviceOrientationEvent.requestPermission();
+      const res = await DeviceOrientationEvent.requestPermission();
+      dlog(`センサー許可: ${res}`, res === "granted" ? "ok" : "err");
+    } else {
+      dlog("DeviceOrientationEvent.requestPermission なし（許可不要 or 非対応）", "warn");
     }
   } catch (e) {
-    console.warn("センサー許可の取得に失敗:", e);
+    dlog(`センサー許可の取得に失敗: ${e.message}`, "err");
   }
   document.getElementById("start-overlay").style.display = "none";
+  watchOrientation();
 });
+
+// ================================================================
+// 向きセンサーの診断 — deviceorientation が実際に届いているか、
+// コンパス方位(absolute / webkitCompassHeading)が取れているかを確認。
+// 「どっち向いても同じ」= ここのデータがカメラに反映されていない状態。
+// ================================================================
+let _orientCount = 0;
+function watchOrientation() {
+  const handler = (e) => {
+    _orientCount++;
+    if (_orientCount === 1 || _orientCount % 60 === 0) {
+      const heading = (typeof e.webkitCompassHeading === "number")
+        ? `compass=${Math.round(e.webkitCompassHeading)}°`
+        : `alpha=${e.alpha == null ? "null" : Math.round(e.alpha) + "°"}`;
+      dlog(`向きセンサー #${_orientCount}: ${heading} absolute=${e.absolute}`,
+           (e.alpha != null || e.webkitCompassHeading != null) ? "ok" : "warn");
+    }
+  };
+  // iOS Safari/Chrome は absolute 系を出さないため両方購読する
+  window.addEventListener("deviceorientationabsolute", handler);
+  window.addEventListener("deviceorientation", handler);
+
+  setTimeout(() => {
+    if (_orientCount === 0) {
+      dlog("向きセンサーのイベントが0件。カメラが回らない原因はこれ。", "err");
+    }
+  }, 4000);
+}
 
 // ================================================================
 // GPS更新 — HUDに現在地と最寄りノードまでの距離を表示
