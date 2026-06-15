@@ -108,12 +108,12 @@
   renderer="antialias: true; alpha: true">
 
   <!-- カメラは原点に固定。向きだけ自前の compass-camera で制御する。
-       マーカー側を現在地基準で動かすので gps-new-camera は使わない。 -->
-  <a-camera id="ar-camera"
+       <a-camera> は look-controls 等を自動付与してカメラ回転を上書きするため、
+       コントロールの付かない <a-entity camera> を使い、向きの制御を一本化する。 -->
+  <a-entity id="ar-camera"
+            camera
             position="0 1.6 0"
-            look-controls="enabled: false"
-            wasd-controls="enabled: false"
-            compass-camera></a-camera>
+            compass-camera></a-entity>
 
   <!-- 全マーカーを格納するコンテナ。現在地に応じて position を動かす。 -->
   <a-entity id="world"></a-entity>
@@ -153,6 +153,31 @@ window.addEventListener("error", (e) =>
 dlog("スクリプト開始", "ok");
 
 // ================================================================
+// 向きセンサーの購読
+// iOSでは「許可取得後」に張ったリスナーでないとイベントが来ないため、
+// 開始ボタンの許可取得後に attachOrientation() を呼んで購読する。
+// 取得した最新イベントは gOrient に保持し、compass-camera が参照する。
+// ================================================================
+let gOrient = null;
+let _orientAttached = false;
+let _orientCount = 0;
+function attachOrientation() {
+  if (_orientAttached) return;
+  _orientAttached = true;
+  const onOrient = (e) => {
+    gOrient = e;
+    _orientCount++;
+    if (_orientCount === 1) dlog("deviceorientation 初回受信 ✓", "ok");
+  };
+  window.addEventListener("deviceorientationabsolute", onOrient);
+  window.addEventListener("deviceorientation",        onOrient);
+  dlog("向きセンサー購読開始", "ok");
+  setTimeout(() => {
+    if (_orientCount === 0) dlog("向きイベントが0件。センサー許可を確認。", "err");
+  }, 4000);
+}
+
+// ================================================================
 // 自前の向きコントロール — コンパス絶対方位でカメラのヨーを北基準に固定
 // ================================================================
 AFRAME.registerComponent("compass-camera", {
@@ -162,14 +187,9 @@ AFRAME.registerComponent("compass-camera", {
     this._euler = new THREE.Euler();
     this._q0    = new THREE.Quaternion();
     this._q1    = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -90° around X
-    this._evt   = null;
     this._yawOffset = (parseFloat(QS.get("yaw")) || 0) * Math.PI / 180;
     this._flip      = QS.get("flip") === "1";
     this._logCount  = 0;
-
-    this._onOrient = (e) => { this._evt = e; };
-    window.addEventListener("deviceorientationabsolute", this._onOrient);
-    window.addEventListener("deviceorientation",        this._onOrient);
     dlog("compass-camera 起動", "ok");
   },
 
@@ -179,7 +199,7 @@ AFRAME.registerComponent("compass-camera", {
   },
 
   tick: function () {
-    const e = this._evt;
+    const e = gOrient;
     if (!e) return;
 
     let headingDeg;
@@ -208,11 +228,6 @@ AFRAME.registerComponent("compass-camera", {
     q.setFromEuler(this._euler);
     q.multiply(this._q1);
     q.multiply(this._q0.setFromAxisAngle(this._zee, -orient));
-  },
-
-  remove: function () {
-    window.removeEventListener("deviceorientationabsolute", this._onOrient);
-    window.removeEventListener("deviceorientation",        this._onOrient);
   },
 });
 
@@ -430,6 +445,7 @@ document.getElementById("btn-start").addEventListener("click", async () => {
     dlog(`センサー許可の取得に失敗: ${e.message}`, "err");
   }
   document.getElementById("start-overlay").style.display = "none";
+  attachOrientation();   // 許可取得後に向きセンサーを購読
   startPositioning();
 });
 
