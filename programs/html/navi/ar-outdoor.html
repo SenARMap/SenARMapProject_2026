@@ -136,62 +136,82 @@ let arjsFixCount = 0;    // AR.jsに反映されたGPS更新の回数
 let rawFixCount  = 0;    // 端末から受信した生GPSフィックスの回数
 
 // ================================================================
-// URLパラメータによるデバッグ設定
-//   ?lat=35.61084&lng=139.55369 … GPSをシミュレート（屋内・PCでの動作確認用）
-//   ?acc=300                    … AR.jsが受け入れるGPS精度の上限[m]（既定100）
-// 注意: AR.jsは精度がこの上限より悪いフィックスを黙って破棄する。
+// GPS駆動方式について
+// ----------------------------------------------------------------
+// AR.js の gps-new-camera は内部で自前の watchPosition を回すが、
+// 端末によってはその watch が一度もコールバックを返さず、結果として
+// gps-camera-update-position が永遠に発火しない（=「AR位置: 反映待ち」
+// のまま）症状が出る。
+//
+// そこで本ページでは AR.js 内部のGPS監視に頼らず、こちら側で
+// watchPosition を1本だけ回し、各フィックスを simulateLatitude/
+// simulateLongitude 経由で AR.js に注入する。
+// この属性をセットすると AR.js は内部の watch を stopGps() で止め、
+// fakeGps() で座標を直接流し込む（精度ゲートも通らないので確実に反映）。
 // ================================================================
-{
-  const qs     = new URLSearchParams(location.search);
-  const simLat = parseFloat(qs.get("lat"));
-  const simLng = parseFloat(qs.get("lng"));
-  const acc    = parseFloat(qs.get("acc"));
-  const opts   = {};
-  if (!Number.isNaN(acc)) opts.positionMinAccuracy = acc;
-  if (!Number.isNaN(simLat) && !Number.isNaN(simLng)) {
-    opts.simulateLatitude  = simLat;
-    opts.simulateLongitude = simLng;
-    document.getElementById("gps-raw").textContent =
-      `端末GPS: シミュレート中 (${simLat}, ${simLng})`;
-  }
-  if (Object.keys(opts).length) camEl.setAttribute("gps-new-camera", opts);
-  window._gpsSimulated = "simulateLatitude" in opts;
-}
+const qs     = new URLSearchParams(location.search);
+const fixLat = parseFloat(qs.get("lat"));   // ?lat&lng で固定座標シミュレート（屋内/PC確認用）
+const fixLng = parseFloat(qs.get("lng"));
+const SIMULATED = !Number.isNaN(fixLat) && !Number.isNaN(fixLng);
 
-// ================================================================
-// 診断用: AR.jsとは独立に端末の生GPSを監視してHUDに表示する。
-// AR.js側のイベントが来ない場合に「端末が拾えていない」のか
-// 「AR.jsが精度不足で破棄している」のかを切り分けられる。
-// ================================================================
 const GPS_ERR_MSG = {
   1: "位置情報の許可が拒否されています（ブラウザ設定を確認）",
   2: "位置を取得できません（屋内・GPS無効の可能性）",
   3: "取得タイムアウト",
 };
 
-if (!window._gpsSimulated) {
-  if (!navigator.geolocation) {
-    document.getElementById("gps-raw").textContent = "端末GPS: この環境では使えません";
-  } else {
-    navigator.geolocation.watchPosition(
-      (pos) => {
-        rawFixCount++;
-        const { accuracy } = pos.coords;
-        const el = document.getElementById("gps-raw");
-        let note = "";
-        if (accuracy > 100) note = " ⚠ 精度不足のためAR.jsは破棄(既定100m超)";
-        else if (accuracy > 30) note = " ⚠ 精度低下中";
-        el.textContent = `端末GPS: ±${Math.round(accuracy)}m / ${rawFixCount}回受信${note}`;
-        el.style.color = accuracy > 100 ? "#FCA5A5" : accuracy > 30 ? "#FDE68A" : "#A7F3D0";
-      },
-      (err) => {
-        const el = document.getElementById("gps-raw");
-        el.textContent = `端末GPSエラー: ${GPS_ERR_MSG[err.code] || err.message}`;
-        el.style.color = "#FCA5A5";
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 27000 }
-    );
-  }
+// gps-new-camera コンポーネントの初期化完了を待ってから座標を注入する
+function whenCameraReady(cb) {
+  if (camEl.components && camEl.components["gps-new-camera"]) { cb(); return; }
+  camEl.addEventListener("componentinitialized", function onInit(e) {
+    if (e.detail.name === "gps-new-camera") {
+      camEl.removeEventListener("componentinitialized", onInit);
+      cb();
+    }
+  });
+}
+
+// AR.js に1フィックス注入する（simulate属性 → 内部で fakeGps が走る）
+function pushPositionToArjs(lat, lng) {
+  whenCameraReady(() => {
+    camEl.setAttribute("gps-new-camera", {
+      simulateLatitude:  lat,
+      simulateLongitude: lng,
+    });
+  });
+}
+
+if (SIMULATED) {
+  document.getElementById("gps-raw").textContent =
+    `端末GPS: シミュレート中 (${fixLat}, ${fixLng})`;
+  // シミュレートは初回反映後に simulate値が0へ戻されるため、
+  // 動作確認用に数回流して確実に反映させる
+  let n = 0;
+  const t = setInterval(() => {
+    pushPositionToArjs(fixLat, fixLng);
+    if (++n >= 3) clearInterval(t);
+  }, 600);
+} else if (!navigator.geolocation) {
+  document.getElementById("gps-raw").textContent = "端末GPS: この環境では使えません";
+} else {
+  navigator.geolocation.watchPosition(
+    (pos) => {
+      rawFixCount++;
+      const { latitude, longitude, accuracy } = pos.coords;
+      const el = document.getElementById("gps-raw");
+      const note = accuracy > 30 ? " ⚠ 精度低下中" : "";
+      el.textContent = `端末GPS: ±${Math.round(accuracy)}m / ${rawFixCount}回受信${note}`;
+      el.style.color = accuracy > 50 ? "#FCA5A5" : accuracy > 30 ? "#FDE68A" : "#A7F3D0";
+      // 受信した位置をそのまま AR.js へ注入（精度に関わらず反映する）
+      pushPositionToArjs(latitude, longitude);
+    },
+    (err) => {
+      const el = document.getElementById("gps-raw");
+      el.textContent = `端末GPSエラー: ${GPS_ERR_MSG[err.code] || err.message}`;
+      el.style.color = "#FCA5A5";
+    },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 27000 }
+  );
 }
 
 // ================================================================
