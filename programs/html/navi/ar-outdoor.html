@@ -123,7 +123,12 @@
   device-orientation-permission-ui="enabled: false"
   arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
   renderer="antialias: true; alpha: true">
-  <a-camera id="ar-camera" gps-new-camera="gpsMinDistance: 3"></a-camera>
+  <!-- look-controls は相対回転（起動時の向き=北になる）ので無効化し、
+       コンパス絶対方位を使う arjs-device-orientation-controls を使う。 -->
+  <a-camera id="ar-camera"
+            gps-new-camera="gpsMinDistance: 3"
+            look-controls="enabled: false"
+            arjs-device-orientation-controls="smoothingFactor: 0.8"></a-camera>
 </a-scene>
 
 <script>
@@ -344,26 +349,27 @@ document.getElementById("btn-start").addEventListener("click", async () => {
   }
   document.getElementById("start-overlay").style.display = "none";
   watchOrientation();
-  reinitLookControls();
+  reinitOrientationControls();
 });
 
 // ================================================================
-// look-controls 再初期化
-// look-controls はシーン起動時（センサー許可前）に初期化されると
-// deviceorientation リスナーを張らず、後から許可しても張り直さない。
-// 許可取得後にコンポーネントを付け直して、向き追従を有効化する。
+// 向きコントロール再初期化
+// 向きコントロールはシーン起動時（センサー許可前）に初期化されると
+// deviceorientation リスナーが機能せず、後から許可しても張り直さない。
+// 許可取得後にコンポーネントを付け直して、コンパス追従を有効化する。
 // ================================================================
-function reinitLookControls() {
-  const ready = camEl.components && camEl.components["look-controls"];
+function reinitOrientationControls() {
   const apply = () => {
-    camEl.removeAttribute("look-controls");
-    // magicWindowTrackingEnabled: モバイルでのデバイス向き追従を明示的に有効化
-    camEl.setAttribute("look-controls",
-      "magicWindowTrackingEnabled: true; touchEnabled: false; mouseEnabled: false");
-    dlog("look-controls を再初期化（向き追従ON）", "ok");
+    camEl.removeAttribute("arjs-device-orientation-controls");
+    // 付け直すことで、許可済みの状態で deviceorientation を購読させる
+    camEl.setAttribute("arjs-device-orientation-controls", "smoothingFactor: 0.8");
+    dlog("向きコントロールを再初期化（コンパス絶対方位ON）", "ok");
   };
-  if (ready) { apply(); return; }
-  camEl.addEventListener("loaded", apply, { once: true });
+  if (camEl.components && camEl.components["arjs-device-orientation-controls"]) {
+    apply();
+  } else {
+    camEl.addEventListener("loaded", apply, { once: true });
+  }
 }
 
 // ================================================================
