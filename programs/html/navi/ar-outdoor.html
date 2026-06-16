@@ -10,7 +10,7 @@
     A-Frame / AR.js は使わない。three は UMD(global) ビルドを使用（importmap非対応の古いiOSでも動くように）。
     バージョンは A-Frame 1.3.0 同梱と同じ r137 系に合わせている。
   -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r137/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.137.0/build/three.min.js"></script>
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -172,8 +172,13 @@ if (!DEBUG_ON) document.getElementById("debug-log").style.display = "none";
 window.addEventListener("error", (e) =>
   dlog(`JSエラー: ${e.message} @${(e.filename||"").split("/").pop()}:${e.lineno}`, "err"));
 dlog("スクリプト開始", "ok");
-if (typeof THREE === "undefined") dlog("three.js の読み込みに失敗", "err");
-else dlog(`three.js ${THREE.REVISION} 読み込み ✓`, "ok");
+if (typeof THREE === "undefined") {
+  dlog("three.js の読み込みに失敗（CDN/ネットワークを確認）", "err");
+  document.getElementById("btn-start").disabled = true;
+  document.getElementById("btn-start").textContent = "読み込みエラー";
+  throw new Error("THREE is not loaded");
+}
+dlog(`three.js ${THREE.REVISION} 読み込み ✓`, "ok");
 
 // ================================================================
 // Three.js セットアップ
