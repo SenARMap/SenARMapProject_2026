@@ -259,6 +259,10 @@ const _yawOffset   = (parseFloat(QS.get("yaw")) || 0) * Math.PI / 180;
 const _flip        = QS.get("flip") === "1";
 const _decQS       = parseFloat(QS.get("dec"));
 const _declination = (Number.isNaN(_decQS) ? MAGNETIC_DECLINATION_DEG : _decQS) * Math.PI / 180;
+// tilt: カメラの仮想ピッチを下方向にずらす量[度]。正の値=下向きにシフト。
+// スマホを水平に近く構えたとき、ノードが画面中央より下に表示される。?tilt=N で上書き可。
+const _tiltQS = parseFloat(QS.get("tilt"));
+const _tiltDeg = Number.isNaN(_tiltQS) ? 15 : _tiltQS;
 let   _hudThrottle = 0;
 
 function screenAngle() {
@@ -287,7 +291,7 @@ function updateCameraOrientation() {
   }
 
   const alpha = headingDeg * Math.PI / 180 + _yawOffset + _declination;
-  const beta  = (e.beta  || 0) * Math.PI / 180;
+  const beta  = ((e.beta  || 0) + _tiltDeg) * Math.PI / 180;
   const gamma = (e.gamma || 0) * Math.PI / 180;
   const orient = screenAngle();
 
