@@ -1,379 +1,56 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>カスタムルート描画マップ</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; overflow: hidden; }
-    #map { width: 100%; height: calc(100vh - 130px); }
-    .controls {
-      position: fixed; bottom: 0; left: 0; right: 0;
-      padding: 12px; background: white;
-      box-shadow: 0 -2px 8px rgba(0,0,0,0.15);
-      display: flex; flex-wrap: wrap; gap: 8px;
-    }
-    input[type="number"] {
-      flex: 1; min-width: 120px; height: 44px;
-      font-size: 16px; padding: 0 10px;
-      border: 1px solid #ccc; border-radius: 6px;
-    }
-    button {
-      height: 44px; padding: 0 16px; font-size: 15px;
-      border: none; border-radius: 6px;
-      background: #4285F4; color: white; cursor: pointer;
-    }
-    #svg-view {
-      display: none;
-      width: 100%; height: calc(100vh - 130px);
-      position: relative; background: #f0f0f0; overflow: auto;
-    }
-    #svg-container { width: 100%; height: 100%; }
-    #floor-btns {
-      position: absolute; top: 8px; left: 8px;
-      display: flex; gap: 4px; z-index: 10;
-    }
-    #floor-btns button { background: #555; height: 36px; padding: 0 12px; font-size: 13px; }
-    #floor-btns button.active { background: #4285F4; }
-    #building-btns { display: none; width: 100%; }
-    #building-btns button { background: #E65100; }
-    #building-btns button.active { background: #4285F4; }
-  </style>
-  <script src="script/config.js"></script>
+  <title>IKU NAVI — 生亀プロジェクト 2026</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <div id="map"></div>
+  <main class="page">
 
-  <div id="svg-view">
-    <div id="floor-btns">
-      <button onclick="setActiveFloor(this); showSvg('/svg/10_1F.svg')">1階</button>
-      <button onclick="setActiveFloor(this)">2階</button>
-      <button onclick="setActiveFloor(this)">3階</button>
-      <button onclick="setActiveFloor(this)">4階</button>
-      <button onclick="setActiveFloor(this)">5階</button>
-    </div>
-    <div id="svg-container"></div>
-  </div>
+    <header class="hero">
+      <p class="eyebrow">
+        <span class="eyebrow-dot" aria-hidden="true"></span>
+        ARキャンパスナビゲーション
+      </p>
+      <h1 class="logo">
+        <span class="logo-iku">IKU</span><span class="logo-navi">NAVI</span>
+      </h1>
+      <p class="tagline">キャンパスを、もっとスマートに。</p>
+      <p class="subline">2026年度 生亀プロジェクト</p>
+    </header>
 
-  <div class="controls">
-    <div id="building-btns">
-      <button onclick="showMap()">全体マップ</button>
-    </div>
-    <input type="number" id="startNode" placeholder="出発ノードID (例: 9000001)">
-    <input type="number" id="goalNode" placeholder="目的ノードID (例: 9000015)">
-    <button onclick="searchRoute()">検索</button>
-    <button onclick="startTracking()">現在位置の取得</button>
-    <button onclick="stopTracking()">追跡停止</button>
-  </div>
+    <nav class="cards" aria-label="メインメニュー">
+      <a href="navi/index.html" class="card card-nav">
+        <span class="card-label">Navigation</span>
+        <div class="card-body">
+          <span class="card-glyph" aria-hidden="true">→</span>
+          <h2 class="card-heading">ナビを使う</h2>
+          <p class="card-text">教室名で検索して、AR写真ガイドで目的地まで確実に案内します。</p>
+        </div>
+        <span class="card-cta">アプリを開く <span aria-hidden="true" class="card-arrow">↗</span></span>
+      </a>
 
-  <script>
-    // app.pyのURLに合わせてベースURLを変更してください
+      <a href="blog/index.html" class="card card-blog">
+        <span class="card-label">Blog</span>
+        <div class="card-body">
+          <span class="card-glyph" aria-hidden="true">✦</span>
+          <h2 class="card-heading">ブログ</h2>
+          <p class="card-text">プロジェクトの進捗・技術的な発見・活動記録をまとめています。</p>
+        </div>
+        <span class="card-cta">記事を読む <span aria-hidden="true" class="card-arrow">↗</span></span>
+      </a>
+    </nav>
 
-    const API_BASE = "";
-    let map;
-    let activePolylines = [];
-    let currentLocationMarker = null;
-    let currentPathCoords = null;
+  </main>
 
-    function initMap() {
-        map = new google.maps.Map(document.getElementById("map"), {
-            // ① 初期表示のズームレベル（数値が大きいほど拡大）
-            zoom: 17, 
-            
-            // ② 初期表示の中心点（緯度・経度）
-            center: { lat: 35.61035, lng: 139.55466 } 
-        });
-    }
+  <footer class="footer">
+    <span class="footer-brand">IKU NAVI</span>
+    <span class="footer-sep" aria-hidden="true">—</span>
+    <span>生亀プロジェクト &copy; 2026</span>
+  </footer>
 
-    function clearRoute() {
-      activePolylines.forEach(p => p.setMap(null));
-      activePolylines = [];
-    }
-
-    function haversineDistance(a, b) {
-      const R = 6371000;
-      const φ1 = a.lat * Math.PI / 180, φ2 = b.lat * Math.PI / 180;
-      const Δφ = (b.lat - a.lat) * Math.PI / 180;
-      const Δλ = (b.lng - a.lng) * Math.PI / 180;
-      const x = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
-      return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
-    }
-
-    const MAX_DASHED_M = 500;
-
-    const BUILDINGS = [
-      {
-        id: 10, name: "10号館",
-        svgPath: "/svg/10_1F.svg",
-        entrances: [
-          { lat: 35.6112,  lng: 139.55413 },
-          { lat: 35.61092, lng: 139.55514 }
-        ]
-      }
-    ];
-    const NEARBY_M = 80;
-
-    function buildSegments(pathCoords) {
-      const solidSegments = [];
-      const dashedConnectors = [];
-      let current = [];
-      let lastOutdoor = null;
-      let inIndoor = false;
-
-      for (const node of pathCoords) {
-        const b = node.building;
-        const isOutdoor = b === 0 || b === "0" || b === null || b === undefined;
-
-        if (isOutdoor) {
-          const pt = { lat: node.lat, lng: node.lng };
-          if (inIndoor) {
-            if (lastOutdoor && haversineDistance(lastOutdoor, pt) <= MAX_DASHED_M) {
-              dashedConnectors.push([lastOutdoor, pt]);
-            }
-            inIndoor = false;
-            current = [pt];
-          } else {
-            current.push(pt);
-          }
-          lastOutdoor = pt;
-        } else {
-          if (!inIndoor) {
-            if (current.length > 0) solidSegments.push([...current]);
-            current = [];
-            inIndoor = true;
-          }
-        }
-      }
-      if (current.length > 0) solidSegments.push(current);
-      return { solidSegments, dashedConnectors };
-    }
-
-    // フォームから入力値を取得してAPIを呼び出す
-    function searchRoute() {
-      const startId = document.getElementById("startNode").value;
-      const goalId = document.getElementById("goalNode").value;
-      
-      if (!startId || !goalId) {
-        alert("出発ノードIDと目的ノードIDを入力してください。");
-        return;
-      }
-      
-      fetchAndDrawRoute(startId, goalId);
-    }
-
-    async function fetchAndDrawRoute(startId, goalId) {
-      try {
-        const url = `${API_BASE}/api/route?from_node=${startId}&to_node=${goalId}`;
-        const response = await fetch(url);
-        const data = await response.json();
-        if (data.error) { alert("エラー: " + data.error); return; }
-        currentPathCoords = data.path_coords;
-        drawPathOnMap(data.path_coords);
-        if (document.getElementById("svg-view").style.display !== "none") {
-          drawIndoorRoute(data.path_coords);
-        }
-      } catch (error) {
-        console.error("APIリクエストエラー:", error);
-        alert("APIの呼び出しに失敗しました。app.pyが起動しているか、またはCORS制約がないか確認してください。");
-      }
-    }
-
-    function drawPathOnMap(pathCoords) {
-      clearRoute();
-      const { solidSegments, dashedConnectors } = buildSegments(pathCoords);
-      const bounds = new google.maps.LatLngBounds();
-
-      solidSegments.forEach(seg => {
-        const poly = new google.maps.Polyline({
-          path: seg, geodesic: true,
-          strokeColor: "#0000FF", strokeOpacity: 0.8, strokeWeight: 6
-        });
-        poly.setMap(map);
-        activePolylines.push(poly);
-        seg.forEach(pt => bounds.extend(pt));
-      });
-
-      const dotIcon = {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 7,
-        fillColor: "#FF0000",
-        fillOpacity: 1,
-        strokeColor: "#FF0000",
-        strokeWeight: 0
-      };
-
-      dashedConnectors.forEach(conn => {
-        const poly = new google.maps.Polyline({
-          path: conn, strokeOpacity: 0,
-          icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3, strokeColor: '#888888' },
-                    offset: '0', repeat: '12px' }]
-        });
-        poly.setMap(map);
-        activePolylines.push(poly);
-        conn.forEach(pt => bounds.extend(pt));
-
-        [conn[0], conn[conn.length - 1]].forEach(pt => {
-          const dot = new google.maps.Marker({ position: pt, map: map, icon: dotIcon });
-          activePolylines.push(dot);
-        });
-      });
-
-      if (!bounds.isEmpty()) map.fitBounds(bounds, 50);
-    }
-
-    function startTracking() {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          function(position) {
-            const pos = {
-              lat: position.coords.latitude,
-              lng: position.coords.longitude
-            };
-            if (currentLocationMarker === null) {
-              currentLocationMarker = new google.maps.Marker({
-                position: pos,
-                map: map,
-                title: "現在地",
-                icon: {
-                  path: google.maps.SymbolPath.CIRCLE,
-                  scale: 8,
-                  fillColor: "#00AA00",
-                  fillOpacity: 1,
-                  strokeColor: "white",
-                  strokeWeight: 2
-                }
-              });
-              map.setCenter(pos);
-            } else {
-              currentLocationMarker.setPosition(pos);
-            }
-            checkNearbyBuildings(pos);
-          },
-          function(error) {
-            const msgs = {
-              1: "位置情報の使用が拒否されました。ブラウザの設定で許可してください。",
-              2: "現在地を取得できませんでした。",
-              3: "位置情報の取得がタイムアウトしました。"
-            };
-            alert(msgs[error.code] || "位置情報エラー: " + error.message);
-          },
-          {
-            enableHighAccuracy: false,
-            maximumAge: 60000,
-            timeout: 30000
-          }
-        );
-      } else {
-        alert("お使いのブラウザは位置情報に対応していません。");
-      }
-    }
-
-    function stopTracking() {
-      if (currentLocationMarker !== null) {
-        currentLocationMarker.setMap(null);
-        currentLocationMarker = null;
-      }
-    }
-
-    function checkNearbyBuildings(pos) {
-      const nearby = BUILDINGS.filter(b =>
-        b.entrances.some(e => haversineDistance(pos, e) <= NEARBY_M)
-      );
-      const bar = document.getElementById("building-btns");
-      while (bar.children.length > 1) bar.removeChild(bar.lastChild);
-      if (nearby.length > 0) {
-        bar.style.display = "block";
-        setActiveBuildingBtn(bar.children[0]);
-        nearby.forEach(b => {
-          const btn = document.createElement("button");
-          btn.textContent = b.name;
-          btn.onclick = () => {
-          setActiveBuildingBtn(btn);
-          setActiveFloor(document.querySelector('#floor-btns button'));
-          showSvg(b.svgPath);
-        };
-          bar.appendChild(btn);
-        });
-      } else {
-        bar.style.display = "none";
-      }
-    }
-
-    function setActiveBuildingBtn(btn) {
-      document.querySelectorAll('#building-btns button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-    }
-
-    function setActiveFloor(btn) {
-      document.querySelectorAll('#floor-btns button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-    }
-
-    async function showSvg(svgPath) {
-      document.getElementById("map").style.display = "none";
-      document.getElementById("svg-view").style.display = "block";
-      const container = document.getElementById("svg-container");
-      const res = await fetch(svgPath);
-      container.innerHTML = await res.text();
-      const svgEl = container.querySelector('svg');
-      if (svgEl) {
-        svgEl.style.width = "100%";
-        svgEl.style.height = "100%";
-        const overlay = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        overlay.id = 'route-overlay';
-        svgEl.appendChild(overlay);
-      }
-      if (currentPathCoords) drawIndoorRoute(currentPathCoords);
-    }
-
-    function drawIndoorRoute(pathCoords) {
-      const overlay = document.getElementById('route-overlay');
-      if (!overlay) return;
-      overlay.innerHTML = '';
-      const nodes = pathCoords.filter(n =>
-        n.building === 10 && n.floor === 1 &&
-        n.svg_x !== undefined && n.svg_y !== undefined
-      );
-      if (nodes.length === 0) return;
-      if (nodes.length >= 2) {
-        const pl = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-        pl.setAttribute('points', nodes.map(n => `${n.svg_x},${n.svg_y}`).join(' '));
-        pl.setAttribute('stroke', '#0000FF');
-        pl.setAttribute('stroke-width', '10');
-        pl.setAttribute('fill', 'none');
-        pl.setAttribute('stroke-opacity', '0.8');
-        overlay.appendChild(pl);
-      }
-      nodes.forEach(n => {
-        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        c.setAttribute('cx', n.svg_x); c.setAttribute('cy', n.svg_y);
-        c.setAttribute('r', '14'); c.setAttribute('fill', '#FF0000');
-        c.setAttribute('fill-opacity', '0.9');
-        overlay.appendChild(c);
-      });
-    }
-
-    function showMap() {
-      document.getElementById("svg-view").style.display = "none";
-      document.getElementById("map").style.display = "block";
-      setActiveBuildingBtn(document.querySelector('#building-btns button'));
-    }
-  </script>
-
-  <!-- Google Maps APIの読み込み（YOUR_API_KEYを実際のAPIキーに書き換えてください） -->
-  <script>
-    // JavaScriptを使って動的にGoogle Mapsのスクリプトタグを生成する
-    const mapScript = document.createElement('script');
-    
-    // ここはJavaScriptの世界なので ${...} が正しくAPIキーに変換されます
-    mapScript.src = `https://maps.googleapis.com/maps/api/js?key=${CONFIG.GOOGLE_MAPS_API_KEY}&callback=initMap`;
-    mapScript.async = true;
-    mapScript.defer = true;
-    
-    // 組み立てたタグをHTML（<body>の最後）に挿入して読み込みを開始する
-    document.body.appendChild(mapScript);
-  </script>
 </body>
 </html>
