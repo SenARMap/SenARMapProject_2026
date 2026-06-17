@@ -6,6 +6,7 @@ services:
     volumes:
       - ../:/project/
     command: gunicorn -w 10 -b 0.0.0.0:8000 app:app
+    
   nginx:
     image: iki_project_2026_nginx
     build: ./nginx/
@@ -15,6 +16,7 @@ services:
       - ../:/project/
     depends_on:
       - counter
+      
   db:
     image: mariadb:11
     container_name: 'iki_project_2026_mariadb'
@@ -48,13 +50,17 @@ services:
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
     container_name: cadvisor
+    privileged: true
     restart: unless-stopped
+    devices:
+      - /dev/kmsg:/dev/kmsg
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
+      - /cgroup:/cgroup:ro
 
   prometheus:
     image: prom/prometheus:latest
@@ -63,6 +69,9 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
 
   grafana:
     image: grafana/grafana:latest
@@ -88,4 +97,3 @@ volumes:
   db_data:
   prometheus_data:
   grafana_data:
-    
