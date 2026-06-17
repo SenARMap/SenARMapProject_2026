@@ -1,204 +1,56 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
-  <title>カスタムルート描画マップ</title>
-  <style>
-    /* 地図のサイズ指定（必須） */
-    #map { height: 500px; width: 100%; }
-    
-    /* ボタン周りの余白 */
-    .controls { margin-bottom: 15px; }
-    button, input { padding: 8px; margin-right: 10px; margin-bottom: 10px; cursor: pointer; }
-    input { cursor: text; }
-  </style>
-  <script src="script/config.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IKU NAVI — 生亀プロジェクト 2026</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- API連携用のコントロール -->
-  <div class="controls">
-    <input type="number" id="startNode" placeholder="出発ノードID (例: 100001)">
-    <input type="number" id="goalNode" placeholder="目的ノードID (例: 100005)">
-    <button onclick="searchRoute()">ルートを検索・描画</button>
-    <button onclick="startTracking()">現在地追跡開始</button>
-    <button onclick="stopTracking()">現在地追跡停止</button>
-  </div>
+  <main class="page">
 
-  <!-- 地図を表示するエリア -->
-  <div id="map"></div>
+    <header class="hero">
+      <p class="eyebrow">
+        <span class="eyebrow-dot" aria-hidden="true"></span>
+        ARキャンパスナビゲーション
+      </p>
+      <h1 class="logo">
+        <span class="logo-iku">IKU</span><span class="logo-navi">NAVI</span>
+      </h1>
+      <p class="tagline">キャンパスを、もっとスマートに。</p>
+      <p class="subline">2026年度 生亀プロジェクト</p>
+    </header>
 
-  <script>
-    // app.pyのURLに合わせてベースURLを変更してください
-    const API_BASE = "http://localhost:8080";
-    let map;
-    let currentRouteLine = null;
-    let currentLocationMarker = null;
+    <nav class="cards" aria-label="メインメニュー">
+      <a href="navi/index.html" class="card card-nav">
+        <span class="card-label">Navigation</span>
+        <div class="card-body">
+          <span class="card-glyph" aria-hidden="true">→</span>
+          <h2 class="card-heading">ナビを使う</h2>
+          <p class="card-text">教室名で検索して、AR写真ガイドで目的地まで確実に案内します。</p>
+        </div>
+        <span class="card-cta">アプリを開く <span aria-hidden="true" class="card-arrow">↗</span></span>
+      </a>
 
-    // 地図の初期化処理
-    function initMap() {
-        map = new google.maps.Map(document.getElementById("map"), {
-            // ① 初期表示のズームレベル（数値が大きいほど拡大）
-            zoom: 17, 
-            
-            // ② 初期表示の中心点（緯度・経度）
-            center: { lat: 35.61035, lng: 139.55466 } 
-        });
-    }
+      <a href="blog/index.html" class="card card-blog">
+        <span class="card-label">Blog</span>
+        <div class="card-body">
+          <span class="card-glyph" aria-hidden="true">✦</span>
+          <h2 class="card-heading">ブログ</h2>
+          <p class="card-text">プロジェクトの進捗・技術的な発見・活動記録をまとめています。</p>
+        </div>
+        <span class="card-cta">記事を読む <span aria-hidden="true" class="card-arrow">↗</span></span>
+      </a>
+    </nav>
 
-    // フォームから入力値を取得してAPIを呼び出す
-    function searchRoute() {
-      const startId = document.getElementById("startNode").value;
-      const goalId = document.getElementById("goalNode").value;
-      
-      if (!startId || !goalId) {
-        alert("出発ノードIDと目的ノードIDを入力してください。");
-        return;
-      }
-      
-      fetchAndDrawRoute(startId, goalId);
-    }
+  </main>
 
-    // APIを呼び出してルートを取得・描画する関数
-    async function fetchAndDrawRoute(startId, goalId) {
-      try {
-        // app.py のルーティングAPIをコール
-        const url = `${API_BASE}/api/route?from_node=${startId}&to_node=${goalId}`;
-        const response = await fetch(url);
-        const data = await response.json();
+  <footer class="footer">
+    <span class="footer-brand">IKU NAVI</span>
+    <span class="footer-sep" aria-hidden="true">—</span>
+    <span>生亀プロジェクト &copy; 2026</span>
+  </footer>
 
-        if (data.error) {
-          alert("エラー: " + data.error);
-          return;
-        }
-
-        // path_coords から緯度経度（lat, lng）が存在するものを抽出
-        const pathCoordinates = data.path_coords
-          .filter(node => node.lat !== undefined && node.lng !== undefined)
-          .map(node => ({ lat: node.lat, lng: node.lng }));
-
-        if (pathCoordinates.length === 0) {
-          alert("取得した経路に緯度経度(lat, lng)が含まれていません。");
-          return;
-        }
-
-        drawPathOnMap(pathCoordinates);
-      } catch (error) {
-        console.error("APIリクエストエラー:", error);
-        alert("APIの呼び出しに失敗しました。app.pyが起動しているか、またはCORS制約がないか確認してください。");
-      }
-    }
-
-    function drawPathOnMap(pathCoordinates) {
-    // ① すでに線が描画されていれば、地図から消去する
-    if (currentRouteLine !== null) {
-        currentRouteLine.setMap(null);
-    }
-
-    // ② 矢印アイコンの定義
-    const arrowSymbol = {
-        path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, // 塗りつぶされた矢印
-        scale: 3,               // 矢印の大きさ
-        strokeColor: "#FFFFFF", // 矢印のフチの色（白にすると目立ちます）
-        strokeWeight: 1.5,
-        fillColor: "#0000FF",   // 矢印の中の色（線と同じ青）
-        fillOpacity: 1
-    };
-
-    // ③ ポリライン（線）のオブジェクトを作成
-    currentRouteLine = new google.maps.Polyline({
-        path: pathCoordinates,
-        geodesic: true,
-        strokeColor: "#0000FF", // 線の色（青）
-        strokeOpacity: 0.6,     // 矢印を目立たせるため、線の透明度を少し下げる
-        strokeWeight: 5,        // 線の太さ
-        icons: [{
-        icon: arrowSymbol,
-        offset: "10px",       // 最初の矢印のスタート位置
-        repeat: "60px"        // 60ピクセル間隔で矢印を繰り返し配置
-        }]
-    });
-
-    // ④ 地図に新しい線を描画
-    currentRouteLine.setMap(map);
-
-    // ⑤ ズームと中心の自動調整
-    const bounds = new google.maps.LatLngBounds();
-    pathCoordinates.forEach(coord => {
-        bounds.extend(coord);
-    });
-    map.fitBounds(bounds, 50);
-    }
-
-    let watchId = null; // 追跡処理のIDを保持
-
-    function startTracking() {
-      if (navigator.geolocation) {
-        // 位置が変わるたびに自動で第1引数の関数が実行される
-        watchId = navigator.geolocation.watchPosition(
-          function(position) {
-            const pos = {
-              lat: position.coords.latitude,
-              lng: position.coords.longitude
-            };
-
-            if (currentLocationMarker === null) {
-              // 1. 最初はピンを作成して地図に置く
-              currentLocationMarker = new google.maps.Marker({
-                position: pos,
-                map: map,
-                title: "現在地",
-                icon: {
-                  path: google.maps.SymbolPath.CIRCLE,
-                  scale: 8,
-                  fillColor: "#4285F4",
-                  fillOpacity: 1,
-                  strokeColor: "white",
-                  strokeWeight: 2
-                }
-              });
-              // 初回のみ、地図の中心を現在地に合わせる
-              map.setCenter(pos);
-            } else {
-              // 2. 2回目以降は、ピンの「位置（position）」だけを更新する
-              currentLocationMarker.setPosition(pos);
-            }
-          },
-          function(error) {
-            console.warn("位置情報の取得エラー: ", error.message);
-          },
-          {
-            enableHighAccuracy: true, // スマホの正確なGPSチップを強制的に使う
-            maximumAge: 0,            // 古いキャッシュデータは使わない
-            timeout: 5000             // 5秒以内に取得できなければエラーにする
-          }
-        );
-      } else {
-        alert("お使いのブラウザは位置情報に対応していません。");
-      }
-    }
-
-    // （オプション）追跡を停止してスマホのバッテリー消費を抑える関数
-    function stopTracking() {
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
-        watchId = null;
-      }
-    }
-  </script>
-
-  <!-- Google Maps APIの読み込み（YOUR_API_KEYを実際のAPIキーに書き換えてください） -->
-  <script>
-    // JavaScriptを使って動的にGoogle Mapsのスクリプトタグを生成する
-    const mapScript = document.createElement('script');
-    
-    // ここはJavaScriptの世界なので ${...} が正しくAPIキーに変換されます
-    mapScript.src = `https://maps.googleapis.com/maps/api/js?key=${CONFIG.GOOGLE_MAPS_API_KEY}&callback=initMap`;
-    mapScript.async = true;
-    mapScript.defer = true;
-    
-    // 組み立てたタグをHTML（<body>の最後）に挿入して読み込みを開始する
-    document.body.appendChild(mapScript);
-  </script>
 </body>
 </html>
