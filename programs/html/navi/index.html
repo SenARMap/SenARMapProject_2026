@@ -6,12 +6,16 @@
   <title>IKU NAVI</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { height: 100%; }
+    html { height: 100%; overscroll-behavior: none; }
     body {
       height: 100%; overflow: hidden;
+      overscroll-behavior: none;
       font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
       display: flex;
       flex-direction: column; /* mobile: stacked */
+    }
+    button, a, select, input, label {
+      touch-action: manipulation; /* ダブルタップズームを無効化 */
     }
 
     /* ================================================================
@@ -751,7 +755,7 @@
     <div class="modal-title">目的地に到着！</div>
     <p class="modal-desc">案内はここで終了です。<br>ご利用いただきありがとうございました。</p>
     <!-- ↓ アンケートURLをここに設定してください -->
-    <a class="modal-btn-survey" href="https://forms.example.com/survey" target="_blank" rel="noopener">
+    <a class="modal-btn-survey" href="https://docs.google.com/forms/d/e/1FAIpQLScPw9uoXzk2AiQamOm-zchGnQrmi9lcSFvonsVjFDnMIhU7Dg/viewform?usp=sharing&ouid=117616783174955140351" target="_blank" rel="noopener">
       アンケートに答える ↗
     </a>
     <button class="modal-btn-continue" onclick="closeCompletionModal()">引き続きナビを使う</button>
@@ -1734,6 +1738,12 @@ function initSvgPan() {
 
 // 初期化
 initSvgPan();
+
+// プルトゥリフレッシュ防止（overscroll-behavior非対応ブラウザ向けフォールバック）
+document.addEventListener("touchstart", e => {
+  if (e.touches.length > 1) return; // ピンチ操作は許可
+  if (e.touches[0].clientY <= 20) e.preventDefault(); // 画面最上部からのスワイプのみ阻止
+}, { passive: false });
 </script>
 
 <script>
