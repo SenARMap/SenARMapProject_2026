@@ -214,3 +214,6 @@ pyrightconfig.json
 config.js
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,python
+# YOLOv8 / PyTorch モデルファイル
+*.pt
+*.pth
