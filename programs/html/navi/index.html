@@ -689,8 +689,9 @@
           <!-- 目的: 常に表示 -->
           <div class="route-row">
             <span class="route-label">目的</span>
-            <select class="building-select" id="fac-category">
+            <select class="building-select" id="fac-category" onchange="onFacCategoryChange()">
               <option value="toilet">トイレ</option>
+              <option value="cafeteria">食堂</option>
             </select>
             <select id="fac-toilet-type" style="flex:1;height:38px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:13px;color:#1E293B;background:white;padding:0 6px;cursor:pointer;">
               <option value="all">全て</option>
@@ -698,13 +699,16 @@
               <option value="F">女子トイレ</option>
               <option value="C">多目的トイレ</option>
             </select>
+            <select id="fac-cafeteria-name" style="flex:1;height:38px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:13px;color:#1E293B;background:white;padding:0 6px;cursor:pointer;display:none;">
+              <option value="all">全て</option>
+            </select>
           </div>
 
           <div class="bottom-row">
             <label class="ev-label">
               <input type="checkbox" id="fac-use-elevator" checked>エレベーター使用
             </label>
-            <button id="btn-fac-search" onclick="doToiletSearch()">設備検索</button>
+            <button id="btn-fac-search" onclick="doFacSearch()">設備検索</button>
           </div>
         </div><!-- /#cat-content-facility -->
 
@@ -834,9 +838,10 @@ function initMap() {
 // ================================================================
 async function loadAllData() {
   try {
-    const [dataRes, imgRes] = await Promise.all([
+    const [dataRes, imgRes, cafRes] = await Promise.all([
       fetch(`${API_BASE}/api/all`),
       fetch(`${API_BASE}/api/edge_images`),
+      fetch(`${API_BASE}/api/cafeterias`),
     ]);
     if (dataRes.ok) {
       const data = await dataRes.json();
@@ -846,6 +851,16 @@ async function loadAllData() {
       console.warn("API unavailable — room autocomplete disabled");
     }
     if (imgRes.ok) edgeImages = await imgRes.json();
+    if (cafRes.ok) {
+      const cafList = await cafRes.json();
+      const sel = document.getElementById("fac-cafeteria-name");
+      cafList.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value       = c.name;
+        opt.textContent = `${c.display_name}(${c.building}号館)`;
+        sel.appendChild(opt);
+      });
+    }
   } catch {
     console.warn("API unavailable — room autocomplete disabled");
   }
@@ -1025,6 +1040,50 @@ async function doToiletSearch() {
   setLoading(true);
   try {
     const res = await fetch(`${API_BASE}/api/nearest_toilet?${params}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) { alert("エラー: " + data.error); return; }
+    initRoute(data.path_coords);
+  } catch {
+    document.getElementById("step-label").textContent = "サーバーに接続できません";
+    document.getElementById("step-count").textContent = "app.py が起動しているか確認してください";
+  } finally {
+    setLoading(false);
+  }
+}
+
+function onFacCategoryChange() {
+  const cat = document.getElementById("fac-category").value;
+  document.getElementById("fac-toilet-type").style.display    = cat === "toilet"    ? "" : "none";
+  document.getElementById("fac-cafeteria-name").style.display = cat === "cafeteria" ? "" : "none";
+}
+
+function doFacSearch() {
+  const cat = document.getElementById("fac-category").value;
+  if (cat === "cafeteria") doCafeteriaSearch();
+  else doToiletSearch();
+}
+
+async function doCafeteriaSearch() {
+  const params = new URLSearchParams({
+    use_elevator: document.getElementById("fac-use-elevator").checked ? "1" : "0",
+    name:         document.getElementById("fac-cafeteria-name").value,
+  });
+  if (facSearchMode === "room") {
+    const fromInfo = resolveRoom("fac-from-input", "fac-from-bldg");
+    if (!fromInfo)               { alert("出発教室を入力してください。"); return; }
+    if (fromInfo === "ambiguous") { alert("出発教室が複数の号館に存在します。号館を指定してください。"); return; }
+    params.set("from_room",     fromInfo.room);
+    params.set("from_building", fromInfo.building);
+  } else {
+    if (!facGpsCoords) { alert("GPS位置を先に取得してください。"); return; }
+    const nearest = findNearestNode(facGpsCoords.lat, facGpsCoords.lng);
+    if (!nearest) { alert("近くの出発ノードが見つかりません。"); return; }
+    params.set("from_node", nearest.id);
+  }
+  setLoading(true);
+  try {
+    const res = await fetch(`${API_BASE}/api/nearest_cafeteria?${params}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data.error) { alert("エラー: " + data.error); return; }

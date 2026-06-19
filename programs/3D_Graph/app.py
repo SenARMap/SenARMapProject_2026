@@ -15,7 +15,8 @@ BUILDINGS_JSON  = os.path.join(DATA_DIR, "buildings.json")
 CONNECT_EDGE_CSV = os.path.join(DATA_DIR, "connect_edge.csv")
 GLOBAL_NODE_CSV  = os.path.join(DATA_DIR, "global_node.csv")
 GLOBAL_EDGE_CSV  = os.path.join(DATA_DIR, "global_edge.csv")
-EDGE_IMAGE_CSV   = os.path.join(DATA_DIR, "edge_image.csv")
+EDGE_IMAGE_CSV      = os.path.join(DATA_DIR, "edge_image.csv")
+CAFETERIA_CSV       = os.path.join(DATA_DIR, "cafeteria_edge.csv")
 CDN_BASE         = "https://cdn.iku-navi.net"
 
 # グローバルID = building_id * ID_OFFSET + ローカルID
@@ -776,6 +777,31 @@ _TOILET_TYPE_MAP = {
 _TOILET_LABEL = {"M_Toilet": "男子トイレ", "F_Toilet": "女子トイレ", "C_Toilet": "多目的トイレ"}
 
 
+def _load_cafeteria_list():
+    if not os.path.exists(CAFETERIA_CSV):
+        return []
+    df = pd.read_csv(CAFETERIA_CSV, dtype=str).fillna("")
+    result = []
+    for _, row in df.iterrows():
+        name = row.get("name", "").strip()
+        if not name:
+            continue
+        result.append({
+            "name":         name,
+            "building":     row.get("building", "").strip(),
+            "display_name": row.get("display_name", name).strip(),
+        })
+    return result
+
+_CAFETERIA_LIST  = _load_cafeteria_list()
+_CAFETERIA_NAMES = [c["name"] for c in _CAFETERIA_LIST]
+
+
+@app.route("/api/cafeterias")
+def api_cafeterias():
+    return jsonify(_CAFETERIA_LIST)
+
+
 @app.route("/api/nearest_toilet")
 def api_nearest_toilet():
     """
@@ -877,6 +903,107 @@ def api_nearest_toilet():
     if best_start_row is not None:
         result["from_room"]   = from_room
         result["from_edge"]   = _edge_to_dict(best_start_row)
+    return jsonify(result)
+
+
+# ------------------------------------------------------------------ #
+#  最寄り食堂検索 API
+# ------------------------------------------------------------------ #
+
+@app.route("/api/nearest_cafeteria")
+def api_nearest_cafeteria():
+    """
+    最寄りの食堂への最短経路を返す。
+
+    出発点（いずれか）:
+      from_room=101A&from_building=10
+      from_node=100001
+
+    条件:
+      use_elevator=0/1 (省略時 1)
+    """
+    use_elevator  = request.args.get("use_elevator", "1") != "0"
+    from_room     = request.args.get("from_room",     "").strip()
+    from_building = request.args.get("from_building", type=int)
+    from_node_id  = request.args.get("from_node",     type=int)
+
+    if not from_room and from_node_id is None:
+        return jsonify({"error": "from_room（＋from_building）または from_node を指定してください"}), 400
+
+    if not _CAFETERIA_NAMES:
+        return jsonify({"error": "cafeteria_edge.csv が見つかりません"}), 500
+
+    caf_name = request.args.get("name", "all").strip()
+    targets  = [caf_name] if caf_name != "all" else _CAFETERIA_NAMES
+
+    G = get_cached_graph(use_elevator=use_elevator)
+
+    # 出発候補
+    if from_room:
+        if from_building is None:
+            return jsonify({"error": "from_building を指定してください"}), 400
+        s_edges = _find_edges_for_room(from_room, from_building)
+        if not s_edges:
+            return jsonify({"error": f"建物 {from_building} に教室 '{from_room}' が見つかりません"}), 404
+        seen_s = set()
+        start_candidates = []
+        for r in s_edges:
+            for nid in (int(r["from"]), int(r["to"])):
+                if nid in G.nodes and nid not in seen_s:
+                    seen_s.add(nid)
+                    start_candidates.append((nid, r))
+    else:
+        if from_node_id not in G.nodes:
+            return jsonify({"error": f"ノード {from_node_id} が存在しません"}), 404
+        start_candidates = [(from_node_id, None)]
+
+    # 食堂エッジを room_index から収集
+    room_index, _ = get_cached_room_index()
+    caf_edges, seen_ids = [], set()
+    for (name, _bldg), rows in room_index.items():
+        if name not in targets:
+            continue
+        for row in rows:
+            eid = int(row["id"])
+            if eid in seen_ids:
+                continue
+            seen_ids.add(eid)
+            caf_edges.append(row)
+
+    if not caf_edges:
+        return jsonify({"error": "食堂エッジがデータ内に見つかりません"}), 404
+
+    dest_candidates = [
+        (nid, row) for row in caf_edges
+        for nid in (int(row["from"]), int(row["to"]))
+        if nid in G.nodes
+    ]
+
+    best_path, best_length = None, float("inf")
+    best_start_row = best_caf_row = None
+
+    for (s_node, s_row) in start_candidates:
+        for (d_node, d_row) in dest_candidates:
+            if s_node == d_node:
+                continue
+            try:
+                l, p = nx.bidirectional_dijkstra(G, s_node, d_node, weight="weight")
+                if l < best_length:
+                    best_length, best_path = l, p
+                    best_start_row, best_caf_row = s_row, d_row
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
+                continue
+
+    if best_path is None:
+        return jsonify({"error": "食堂への経路が見つかりません"}), 404
+
+    result = _path_result(G, best_path, best_length)
+    result["cafeteria_building"] = int(best_caf_row["building"])
+    result["cafeteria_floor"]    = int(best_caf_row["floor"])
+    result["cafeteria_edge"]     = _edge_to_dict(best_caf_row)
+    if best_start_row is not None:
+        result["from_room"] = from_room
+        result["from_edge"] = _edge_to_dict(best_start_row)
     return jsonify(result)
 
 
