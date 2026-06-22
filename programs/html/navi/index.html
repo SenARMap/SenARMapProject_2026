@@ -1502,20 +1502,46 @@ function clearMapOverlays() {
   if (stepMarker) { stepMarker.setMap(null); stepMarker = null; }
 }
 
-function drawFullOutdoorRoute(coords) {
-  let seg = [];
+function drawFullOutdoorRoute() {
+  updateOutdoorPolylines(0);
+}
+
+function updateOutdoorPolylines(step) {
+  outdoorPolylines.forEach(p => p.setMap(null));
+  outdoorPolylines = [];
+
+  let seg = [], segIdx = [];
+
   const flush = () => {
-    if (seg.length >= 2) {
+    if (seg.length < 2) { seg = []; segIdx = []; return; }
+
+    let splitAt = -1;
+    for (let i = segIdx.length - 1; i >= 0; i--) {
+      if (segIdx[i] <= step) { splitAt = i; break; }
+    }
+
+    // 通過済み（グレー）
+    if (splitAt > 0) {
       outdoorPolylines.push(new google.maps.Polyline({
-        path: seg.map(n => ({ lat: n.lat, lng: n.lng })),
-        strokeColor: "#3B82F6", strokeOpacity: 0.75,
-        strokeWeight: 5, geodesic: true, map,
+        path: seg.slice(0, splitAt + 1).map(n => ({ lat: n.lat, lng: n.lng })),
+        strokeColor: "#9E9E9E", strokeOpacity: 0.5, strokeWeight: 5, geodesic: true, map,
       }));
     }
-    seg = [];
+
+    // これから（青）。通過済み末尾ノードを共有して線を繋ぐ
+    const aheadFrom = Math.max(0, splitAt);
+    if (aheadFrom < seg.length - 1) {
+      outdoorPolylines.push(new google.maps.Polyline({
+        path: seg.slice(aheadFrom).map(n => ({ lat: n.lat, lng: n.lng })),
+        strokeColor: "#3B82F6", strokeOpacity: 0.85, strokeWeight: 5, geodesic: true, map,
+      }));
+    }
+
+    seg = []; segIdx = [];
   };
-  coords.forEach(n => {
-    if (n.building === 0 && n.lat != null) seg.push(n);
+
+  pathCoords.forEach((n, idx) => {
+    if (n.building === 0 && n.lat != null) { seg.push(n); segIdx.push(idx); }
     else flush();
   });
   flush();
@@ -1544,6 +1570,9 @@ async function goToStep(step) {
     }
     renderSvgStep(step);
   }
+
+  // Three.js AR のルートカラーを更新
+  if (arMarkersBuilt) arUpdateRouteColors(step);
 
   // 最終ステップに到達したら一定時間後に完了モーダルを表示
   if (step === pathCoords.length - 1) {
@@ -1609,6 +1638,7 @@ function moveMapTo(node, step) {
   } else {
     stepMarker.setPosition(pos);
   }
+  updateOutdoorPolylines(step);
   const heading = calcRouteHeading(step);
   if (heading != null) map.setHeading(heading);
   map.setCenter(pos);
@@ -1718,16 +1748,19 @@ function renderSvgStep(step) {
   const aT  = Math.round(10 * sz);
   const aSW = Math.max(2, Math.round(3 * sz));
 
-  if (curFloorIdx > 0) {
-    const done = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-    done.classList.add("dyn");
-    done.setAttribute("points",          floorNodes.slice(0, curFloorIdx + 1).map(n => `${n.svg_x},${n.svg_y}`).join(" "));
-    done.setAttribute("stroke",          "#3B82F6");
-    done.setAttribute("stroke-width",    sw);
-    done.setAttribute("fill",            "none");
-    done.setAttribute("stroke-linecap",  "round");
-    done.setAttribute("stroke-linejoin", "round");
-    svgOverlay.appendChild(done);
+  // 通過済み部分はベースのグレーをそのまま見せる（done polyline は描かない）
+
+  // 残り経路（現在地 → 終点）を青で上書き
+  if (curFloorIdx < floorNodes.length - 1) {
+    const ahead = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    ahead.classList.add("dyn");
+    ahead.setAttribute("points",          floorNodes.slice(curFloorIdx).map(n => `${n.svg_x},${n.svg_y}`).join(" "));
+    ahead.setAttribute("stroke",          "#3B82F6");
+    ahead.setAttribute("stroke-width",    sw);
+    ahead.setAttribute("fill",            "none");
+    ahead.setAttribute("stroke-linecap",  "round");
+    ahead.setAttribute("stroke-linejoin", "round");
+    svgOverlay.appendChild(ahead);
   }
 
   floorNodes.forEach((n, idx) => {
@@ -1736,9 +1769,11 @@ function renderSvgStep(step) {
     c.classList.add("dyn");
     c.setAttribute("cx", n.svg_x); c.setAttribute("cy", n.svg_y);
     if (idx < curFloorIdx) {
-      c.setAttribute("r", rP); c.setAttribute("fill", "#3B82F6"); c.setAttribute("fill-opacity", "0.85");
+      // 通過済み: 小さいグレードット
+      c.setAttribute("r", rF); c.setAttribute("fill", "#9E9E9E"); c.setAttribute("fill-opacity", "0.6");
     } else {
-      c.setAttribute("r", rF); c.setAttribute("fill", "#94A3B8"); c.setAttribute("fill-opacity", "0.75");
+      // これから: 青ドット
+      c.setAttribute("r", rF); c.setAttribute("fill", "#3B82F6"); c.setAttribute("fill-opacity", "0.75");
     }
     svgOverlay.appendChild(c);
   });
@@ -1876,6 +1911,8 @@ let arRunning      = false;
 let arBooting      = false;
 let arMarkersBuilt = false;
 
+let _arMeshes = [];   // { mesh, type: "node"|"edge", idx } — per-step color update
+
 let _arZee, _arEuler, _arQ0, _arQ1;
 
 function arLoadThree() {
@@ -1988,6 +2025,7 @@ function arUpdateWorldPosition(lat, lng) {
 function arBuildRouteMarkers() {
   if (!arWorldGroup || typeof THREE === "undefined") return;
   while (arWorldGroup.children.length) arWorldGroup.remove(arWorldGroup.children[0]);
+  _arMeshes = [];
 
   const outdoorNodes = pathCoords.filter(
     n => n.building === 0 && n.lat != null && n.lng != null
@@ -1999,20 +2037,19 @@ function arBuildRouteMarkers() {
 
   const pos       = {};
   const sphereGeo = new THREE.SphereGeometry(AR_NODE_R, 24, 16);
-  const sphereMat = new THREE.MeshBasicMaterial({ color: AR_NODE_COLOR });
 
-  outdoorNodes.forEach(n => {
+  outdoorNodes.forEach((n, localIdx) => {
+    const globalIdx = pathCoords.indexOf(n);
     const { east, north } = arEnuFromRef(n.lat, n.lng);
     const x = east, z = -north;
     pos[n.id] = { x, z };
-    const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+    const mat    = new THREE.MeshBasicMaterial({ color: AR_NODE_COLOR });
+    const sphere = new THREE.Mesh(sphereGeo, mat);
     sphere.position.set(x, 0, z);
     arWorldGroup.add(sphere);
+    _arMeshes.push({ mesh: sphere, mat, type: "node", idx: globalIdx });
   });
 
-  const edgeMat = new THREE.MeshBasicMaterial({
-    color: AR_EDGE_COLOR, transparent: true, opacity: 0.85
-  });
   const up = new THREE.Vector3(0, 1, 0);
   for (let i = 0; i < pathCoords.length - 1; i++) {
     const a = pathCoords[i], b = pathCoords[i + 1];
@@ -2023,14 +2060,38 @@ function arBuildRouteMarkers() {
     const len = Math.hypot(dx, dz);
     if (len < 0.01) continue;
     const geo = new THREE.CylinderGeometry(AR_EDGE_R, AR_EDGE_R, len, 12);
-    const cyl = new THREE.Mesh(geo, edgeMat);
+    const mat = new THREE.MeshBasicMaterial({
+      color: AR_EDGE_COLOR, transparent: true, opacity: 0.85
+    });
+    const cyl = new THREE.Mesh(geo, mat);
     cyl.position.set(pa.x + dx / 2, 0, pa.z + dz / 2);
     cyl.quaternion.setFromUnitVectors(up, new THREE.Vector3(dx, 0, dz).normalize());
     arWorldGroup.add(cyl);
+    _arMeshes.push({ mesh: cyl, mat, type: "edge", idx: i });
   }
 
   if (arUserLat != null) arUpdateWorldPosition(arUserLat, arUserLng);
   arMarkersBuilt = true;
+}
+
+// 現在ステップに合わせてノード・エッジを通過済み(グレー) / これから(青) に塗り替える
+function arUpdateRouteColors(step) {
+  const PASSED_NODE = 0x9E9E9E;
+  const AHEAD_NODE  = AR_NODE_COLOR;     // 0x22D3EE
+  const PASSED_EDGE = 0x9E9E9E;
+  const AHEAD_EDGE  = AR_EDGE_COLOR;     // 0x3B82F6
+  const PASSED_OPACITY = 0.35;
+  const AHEAD_OPACITY  = 0.85;
+
+  _arMeshes.forEach(({ mat, type, idx }) => {
+    const passed = idx < step;
+    if (type === "node") {
+      mat.color.setHex(passed ? PASSED_NODE : AHEAD_NODE);
+    } else {
+      mat.color.setHex(passed ? PASSED_EDGE : AHEAD_EDGE);
+      mat.opacity = passed ? PASSED_OPACITY : AHEAD_OPACITY;
+    }
+  });
 }
 
 function arScreenAngle() {

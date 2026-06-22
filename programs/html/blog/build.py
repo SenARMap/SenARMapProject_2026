@@ -94,6 +94,7 @@ POST_HTML_TEMPLATE = """\
     <meta name="robots" content="noindex">
     <title>{title} | IKU NAVI ブログ</title>
     <link rel="stylesheet" href="../style.css">
+    <link rel="icon" href="../../images/favicon.ico">
 </head>
 <body>
     <header class="site-header">
