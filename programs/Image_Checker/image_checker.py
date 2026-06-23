@@ -215,13 +215,13 @@ class ImageCard(QFrame):
 
         parts    = self.key.split("_")
         key_lbl  = QLabel(f"{parts[0]} →\n{parts[1]}")
-        key_lbl.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        key_lbl.setFont(QFont("Courier New", 10, QFont.Weight.Bold))
         key_lbl.setStyleSheet(f"color: {TXT_KEY}; background: transparent;")
         vb.addWidget(key_lbl)
 
         bldg_txt = "屋外" if self.building == 0 else f"{self.building}号館 {self.floor}階"
         bldg_lbl = QLabel(bldg_txt)
-        bldg_lbl.setFont(QFont("", 9))
+        bldg_lbl.setFont(QFont("", 11))
         bldg_lbl.setStyleSheet(f"color: {TXT_SECONDARY}; background: transparent;")
         vb.addWidget(bldg_lbl)
 
@@ -229,7 +229,7 @@ class ImageCard(QFrame):
 
         # ステータス
         self._status = QLabel()
-        self._status.setFont(QFont("", 9, QFont.Weight.Bold))
+        self._status.setFont(QFont("", 11, QFont.Weight.Bold))
         self._status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._update_status_label()
         root.addWidget(self._status)
@@ -273,7 +273,7 @@ class ImageCard(QFrame):
         pix.fill(QColor(bg))
         p = QPainter(pix)
         p.setPen(QPen(QColor(color), 2))
-        p.setFont(QFont("", 12, QFont.Weight.Bold))
+        p.setFont(QFont("", 14, QFont.Weight.Bold))
         p.drawText(pix.rect(), Qt.AlignmentFlag.AlignCenter, text)
         p.end()
         self._thumb.setPixmap(pix)
@@ -359,7 +359,7 @@ class MainWindow(QMainWindow):
             QLineEdit {{
                 background: #374151; color: {TXT_PRIMARY};
                 border: 1px solid #4B5563; border-radius: 6px;
-                padding: 5px 10px; font-size: 13px;
+                padding: 5px 10px; font-size: 15px;
             }}
             QLineEdit:focus {{ border-color: {ACCENT}; }}
             QProgressBar {{
@@ -390,13 +390,13 @@ class MainWindow(QMainWindow):
         row.setSpacing(10)
 
         title = QLabel("IKU NAVI 画像チェッカー")
-        title.setFont(QFont("", 15, QFont.Weight.Bold))
+        title.setFont(QFont("", 18, QFont.Weight.Bold))
         title.setStyleSheet(f"color: {ACCENT};")
         row.addWidget(title)
 
         row.addSpacing(12)
         lbl = QLabel("API URL:")
-        lbl.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 12px;")
+        lbl.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 16px;")
         row.addWidget(lbl)
 
         self._api_edit = QLineEdit(DEFAULT_API)
@@ -406,7 +406,7 @@ class MainWindow(QMainWindow):
 
         self._fetch_btn = QPushButton("取得開始")
         self._fetch_btn.setFixedSize(100, 34)
-        self._fetch_btn.setFont(QFont("", 11, QFont.Weight.Bold))
+        self._fetch_btn.setFont(QFont("", 13, QFont.Weight.Bold))
         self._fetch_btn.setStyleSheet(f"""
             QPushButton {{
                 background: {ACCENT}; color: #001A22; border-radius: 6px;
@@ -430,7 +430,7 @@ class MainWindow(QMainWindow):
         row.addStretch()
 
         self._status_lbl = QLabel("API URL を入力して「取得開始」")
-        self._status_lbl.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 12px;")
+        self._status_lbl.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 16px;")
         row.addWidget(self._status_lbl)
 
         return bar
@@ -457,7 +457,7 @@ class MainWindow(QMainWindow):
 
         # ── 号館フィルタ ─────────────────────────────────────────────────────
         lbl1 = QLabel("号館:")
-        lbl1.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 12px;")
+        lbl1.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 16px;")
         self._filterbar_row.addWidget(lbl1)
 
         all_bldg = self._make_pill("全て", True)
@@ -483,7 +483,7 @@ class MainWindow(QMainWindow):
 
         # ── 状態フィルタ ──────────────────────────────────────────────────────
         lbl2 = QLabel("表示:")
-        lbl2.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 12px;")
+        lbl2.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 16px;")
         self._filterbar_row.addWidget(lbl2)
 
         self._state_btns: dict[str, QPushButton] = {}
@@ -502,13 +502,13 @@ class MainWindow(QMainWindow):
         self._filterbar_row.addStretch()
 
         self._count_lbl = QLabel("")
-        self._count_lbl.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 12px;")
+        self._count_lbl.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 16px;")
         self._filterbar_row.addWidget(self._count_lbl)
 
     def _make_pill(self, text: str, active: bool) -> QPushButton:
         btn = QPushButton(text)
         btn.setFixedHeight(28)
-        btn.setFont(QFont("", 10))
+        btn.setFont(QFont("", 12))
         self._set_pill(btn, active)
         return btn
 
@@ -542,7 +542,7 @@ class MainWindow(QMainWindow):
 
         ph = QLabel("API URL を入力して「取得開始」をクリックしてください")
         ph.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ph.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 14px;")
+        ph.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 16px;")
         gl.addWidget(ph, 0, 0)
 
         self._grid_widget = gw
@@ -720,12 +720,12 @@ class MainWindow(QMainWindow):
         if not visible and not self._cards:
             lbl = QLabel("API URL を入力して「取得開始」をクリックしてください")
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 14px;")
+            lbl.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 16px;")
             gl.addWidget(lbl, 0, 0)
         elif not visible:
             lbl = QLabel("該当するエッジがありません")
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 14px;")
+            lbl.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 16px;")
             gl.addWidget(lbl, 0, 0)
         else:
             vw   = max(1, self._scroll.viewport().width() - 32)
@@ -752,7 +752,7 @@ class MainWindow(QMainWindow):
 
     def _set_status(self, text: str, color: str):
         self._status_lbl.setText(text)
-        self._status_lbl.setStyleSheet(f"color: {color}; font-size: 12px;")
+        self._status_lbl.setStyleSheet(f"color: {color}; font-size: 16px;")
 
     def _update_count_lbl(self):
         if not hasattr(self, "_count_lbl"):
@@ -769,11 +769,23 @@ class MainWindow(QMainWindow):
         if loading:
             parts.append(f"読込中 {loading}")
         parts += [f"✔ {ok}", f"✕ 欠損 {missing}", f"— 未登録 {unreg}"]
-        parts.append(f"[表示 {visible}]")
+
+        if self._current_building != -1:
+            bldg_cards  = [c for c in self._cards.values() if c.building == self._current_building]
+            bldg_total  = len(bldg_cards)
+            bldg_ok     = sum(1 for c in bldg_cards if c.state == "ok")
+            bldg_miss   = sum(1 for c in bldg_cards if c.state == "missing")
+            bldg_unreg  = sum(1 for c in bldg_cards if c.state == "unregistered")
+            bldg_name   = "屋外" if self._current_building == 0 else f"{self._current_building}号館"
+            parts.append(
+                f"[{bldg_name}: 全 {bldg_total}  ✔ {bldg_ok}  ✕ {bldg_miss}  — {bldg_unreg}  表示 {visible}]"
+            )
+        else:
+            parts.append(f"[表示 {visible}]")
 
         color = COL_NG if (missing or unreg) else (TXT_SECONDARY if loading else COL_OK)
         self._count_lbl.setText("  ".join(parts))
-        self._count_lbl.setStyleSheet(f"color: {color}; font-size: 12px;")
+        self._count_lbl.setStyleSheet(f"color: {color}; font-size: 16px;")
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
