@@ -12,7 +12,9 @@
 
 import sys
 import threading
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -23,6 +25,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QGridLayout,
     QLabel, QPushButton, QLineEdit, QScrollArea,
     QFrame, QProgressBar, QMessageBox,
+    QDialog, QTextEdit, QComboBox, QFileDialog,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QColor, QPixmap, QPainter, QPen
@@ -309,6 +312,174 @@ class ImageCard(QFrame):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# テキスト出力ダイアログ
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _cjk_pad(text: str, width: int) -> str:
+    """CJK 全角文字を 2 カラム幅として計算してスペースで右埋めする"""
+    disp = sum(2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in text)
+    return text + " " * max(0, width - disp)
+
+
+class ExportDialog(QDialog):
+    """欠損・未登録エッジをテキスト表形式で出力するダイアログ"""
+
+    def __init__(self, cards: dict, buildings: list, parent=None):
+        super().__init__(parent)
+        self._cards     = cards
+        self._buildings = buildings
+        self._sel_bldg  = -1
+
+        self.setWindowTitle("テキスト出力 — 欠損・未登録一覧")
+        self.setMinimumSize(720, 520)
+        self.resize(860, 640)
+        self.setStyleSheet(f"""
+            QDialog, QWidget  {{ background: {BG_WIN}; color: {TXT_PRIMARY}; }}
+            QTextEdit {{
+                background: #1A2233; color: {TXT_PRIMARY};
+                border: 1px solid {BORDER}; border-radius: 6px;
+                font-family: "Courier New", monospace; font-size: 13px;
+            }}
+            QComboBox {{
+                background: #374151; color: {TXT_PRIMARY};
+                border: 1px solid #4B5563; border-radius: 6px;
+                padding: 4px 10px; font-size: 14px; min-width: 110px;
+            }}
+            QComboBox QAbstractItemView {{
+                background: #374151; color: {TXT_PRIMARY};
+                selection-background-color: {BTN_ACTIVE};
+            }}
+        """)
+        self._build_ui()
+        self._refresh()
+
+    def _build_ui(self):
+        vbox = QVBoxLayout(self)
+        vbox.setContentsMargins(16, 16, 16, 16)
+        vbox.setSpacing(10)
+
+        row = QHBoxLayout()
+        lbl = QLabel("対象号館:")
+        lbl.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 15px;")
+        row.addWidget(lbl)
+
+        self._combo = QComboBox()
+        self._combo.addItem("全て", -1)
+        for b in self._buildings:
+            self._combo.addItem("屋外" if b == 0 else f"{b}号館", b)
+        self._combo.currentIndexChanged.connect(lambda _: self._on_bldg_changed())
+        row.addWidget(self._combo)
+        row.addStretch()
+
+        copy_btn = QPushButton("クリップボードにコピー")
+        copy_btn.setFont(QFont("", 12))
+        copy_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {BTN_ACTIVE}; color: #FFF;
+                border-radius: 5px; padding: 4px 14px; border: none;
+            }}
+            QPushButton:hover {{ background: #22D4FF; color: #000; }}
+        """)
+        copy_btn.clicked.connect(self._copy)
+        row.addWidget(copy_btn)
+
+        save_btn = QPushButton("ファイルに保存")
+        save_btn.setFont(QFont("", 12))
+        save_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {BTN_IDLE}; color: {TXT_PRIMARY};
+                border-radius: 5px; padding: 4px 14px; border: none;
+            }}
+            QPushButton:hover {{ background: #4B5563; }}
+        """)
+        save_btn.clicked.connect(self._save)
+        row.addWidget(save_btn)
+
+        vbox.addLayout(row)
+
+        self._text = QTextEdit()
+        self._text.setReadOnly(True)
+        vbox.addWidget(self._text)
+
+    def _on_bldg_changed(self):
+        self._sel_bldg = self._combo.currentData()
+        self._refresh()
+
+    def _generate(self) -> str:
+        target = {"missing", "unregistered"}
+        cards = [
+            c for c in self._cards.values()
+            if c.state in target
+            and (self._sel_bldg == -1 or c.building == self._sel_bldg)
+        ]
+        cards.sort(key=lambda c: (c.building, c.floor, int(c.key.split("_")[0])))
+
+        if self._sel_bldg == -1:
+            bldg_label = "全て"
+        elif self._sel_bldg == 0:
+            bldg_label = "屋外"
+        else:
+            bldg_label = f"{self._sel_bldg}号館"
+
+        now   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        lines = [
+            "IKU NAVI 画像チェッカー — 欠損・未登録エッジ一覧",
+            f"生成日時: {now}",
+            f"対象号館: {bldg_label}",
+            "",
+        ]
+
+        if not cards:
+            lines.append("※ 欠損・未登録エッジはありません")
+            return "\n".join(lines)
+
+        W_KEY   = max(len("エッジキー"), max(len(c.key) for c in cards)) + 2
+        W_BLDG  = 8   # 表示幅（CJK 考慮）
+        W_FLOOR = 4
+        SEP     = "-" * (W_KEY + W_BLDG + W_FLOOR + 28 + 6)
+
+        lines += [
+            SEP,
+            _cjk_pad("エッジキー", W_KEY)
+            + "  " + _cjk_pad("号館", W_BLDG)
+            + "  " + _cjk_pad("階", W_FLOOR)
+            + "  状態",
+            SEP,
+        ]
+
+        for c in cards:
+            bldg_str  = "屋外" if c.building == 0 else f"{c.building}号館"
+            floor_str = f"{c.floor}階"
+            state_str = "欠損 (CDN に存在しない)" if c.state == "missing" else "未登録 (CSV 未登録)"
+            lines.append(
+                f"{c.key:<{W_KEY}}"
+                "  " + _cjk_pad(bldg_str, W_BLDG)
+                + "  " + _cjk_pad(floor_str, W_FLOOR)
+                + f"  {state_str}"
+            )
+
+        n_miss  = sum(1 for c in cards if c.state == "missing")
+        n_unreg = sum(1 for c in cards if c.state == "unregistered")
+        lines += [SEP, f"合計: {len(cards)} 件  (欠損: {n_miss}  未登録: {n_unreg})"]
+        return "\n".join(lines)
+
+    def _refresh(self):
+        self._text.setPlainText(self._generate())
+
+    def _copy(self):
+        QApplication.clipboard().setText(self._text.toPlainText())
+
+    def _save(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "ファイルに保存", "missing_edges.txt",
+            "テキストファイル (*.txt);;すべてのファイル (*)",
+        )
+        if path:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self._text.toPlainText())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # メインウィンドウ
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -417,6 +588,23 @@ class MainWindow(QMainWindow):
         """)
         self._fetch_btn.clicked.connect(self._start_fetch)
         row.addWidget(self._fetch_btn)
+
+        row.addSpacing(6)
+
+        self._export_btn = QPushButton("欠損を出力")
+        self._export_btn.setFixedSize(110, 34)
+        self._export_btn.setFont(QFont("", 13, QFont.Weight.Bold))
+        self._export_btn.setEnabled(False)
+        self._export_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {BTN_IDLE}; color: {TXT_PRIMARY}; border-radius: 6px;
+            }}
+            QPushButton:hover    {{ background: #4B5563; }}
+            QPushButton:pressed  {{ background: #374151; }}
+            QPushButton:disabled {{ background: #2D3748; color: #4B5563; }}
+        """)
+        self._export_btn.clicked.connect(self._open_export_dialog)
+        row.addWidget(self._export_btn)
 
         row.addSpacing(6)
 
@@ -626,6 +814,7 @@ class MainWindow(QMainWindow):
         self._buildings = sorted(buildings_set)
         self._rebuild_filterbar()
         self._refresh_grid()
+        self._export_btn.setEnabled(True)
 
         total_edges = len(self._cards)
         registered  = len(tasks)
@@ -747,6 +936,12 @@ class MainWindow(QMainWindow):
         for k, btn in self._state_btns.items():
             self._set_pill(btn, k == fkey)
         self._refresh_grid()
+
+    # ── テキスト出力 ──────────────────────────────────────────────────────────
+
+    def _open_export_dialog(self):
+        dlg = ExportDialog(self._cards, self._buildings, parent=self)
+        dlg.exec()
 
     # ── ユーティリティ ────────────────────────────────────────────────────────
 
