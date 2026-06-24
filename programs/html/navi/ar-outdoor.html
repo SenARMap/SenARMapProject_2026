@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>屋外ルート網AR | IKU NAVI</title>
+  <link rel="icon" href="../images/favicon.ico">
+
+  <!--
+    生Three.js + Geolocation + DeviceOrientation で構成。
+    A-Frame / AR.js は使わない。three は UMD(global) ビルドを使用（importmap非対応の古いiOSでも動くように）。
+    バージョンは A-Frame 1.3.0 同梱と同じ r137 系に合わせている。
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.137.0/build/three.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; }
+    body {
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
+      overflow: hidden;
+      background: #000;
+    }
+
+    /* 背景カメラ映像（最背面） */
+    #bg-video {
+      position: fixed; inset: 0;
+      width: 100vw; height: 100vh;
+      object-fit: cover; z-index: 0;
+    }
+
+    /* Three.js の描画キャンバス（カメラ映像の上、透過） */
+    #gl-canvas {
+      position: fixed; inset: 0;
+      width: 100vw; height: 100vh;
+      z-index: 1; pointer-events: none;
+    }
+
+    /* 上部HUD */
+    #hud {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    }
+    #btn-back {
+      flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%;
+      background: rgba(255,255,255,0.15); color: white; font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      text-decoration: none; -webkit-tap-highlight-color: transparent;
+    }
+    #hud-status { flex: 1; min-width: 0; }
+    #gps-status     { font-size: 13px; font-weight: 600; color: white;
+                      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #compass-status { font-size: 11px; color: #CBD5E1; margin-top: 2px; }
+    #graph-status   { font-size: 11px; color: #CBD5E1; margin-top: 2px; }
+
+    /* 開始オーバーレイ（iOSのセンサー許可はユーザー操作起点が必須） */
+    #start-overlay {
+      position: fixed; inset: 0; z-index: 2000;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 14px;
+      padding: 24px; text-align: center;
+      background: rgba(15, 23, 42, 0.93); color: white;
+    }
+    #start-overlay h1 { font-size: 20px; font-weight: 800; }
+    #start-overlay p  { font-size: 13px; color: #CBD5E1; line-height: 1.8; }
+    #start-overlay .perm-note {
+      background: rgba(59,130,246,0.18); border: 1px solid rgba(96,165,250,0.5);
+      border-radius: 10px; padding: 12px 16px; color: #E2E8F0;
+    }
+    #start-overlay .perm-note b { color: #93C5FD; }
+    #start-overlay .perm-lang { font-size: 11px; color: #94A3B8; }
+    #btn-start {
+      margin-top: 4px; height: 48px; padding: 0 36px;
+      border: none; border-radius: 12px;
+      background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+      color: white; font-size: 16px; font-weight: 700; cursor: pointer;
+    }
+
+    /* デバッグログ（?debug=0 で非表示） */
+    #debug-log {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000;
+      max-height: 34vh; overflow-y: auto; padding: 8px 10px;
+      background: rgba(0,0,0,0.72); color: #E2E8F0;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-all;
+    }
+    #debug-log .err  { color: #FCA5A5; }
+    #debug-log .ok   { color: #86EFAC; }
+    #debug-log .warn { color: #FDE68A; }
+  </style>
+</head>
+<body>
+
+<video id="bg-video" autoplay playsinline muted></video>
+<canvas id="gl-canvas"></canvas>
+
+<div id="start-overlay">
+  <h1>屋外ルート網AR</h1>
+  <p>登録済みの屋外ノードとそれを繋ぐ経路が<br>実際の風景に重なって表示されます。</p>
+  <p class="perm-note">
+    「開始」を押すと、カメラ・位置情報・モーションの<br>
+    許可ダイアログが順に表示されます。<br>
+    <b>すべて「許可 / Allow / OK」</b>を選んでください。
+  </p>
+  <p class="perm-lang">
+    ※ 許可ダイアログはiOSが表示するため、文言は<br>
+    iPhoneの言語設定に従います（英語表示になる場合があります）。
+  </p>
+  <button id="btn-start">ARを開始</button>
+</div>
+
+<div id="hud">
+  <a id="btn-back" href="index.html" aria-label="ナビに戻る">←</a>
+  <div id="hud-status">
+    <div id="gps-status">現在地: 取得待ち...</div>
+    <div id="compass-status">向き: センサー待ち...</div>
+    <div id="graph-status">データ読み込み中...</div>
+  </div>
+</div>
+
+<div id="debug-log"></div>
+
+<script>
+// ================================================================
+// URLパラメータ
+//   lat,lng : 現在地のシミュレート（GPSの代わりに固定座標を使う）
+//   debug=0 : デバッグログ非表示
+//   yaw=N   : 方位を手動で N° 回転補正（現場合わせ用）
+//   flip=1  : コンパス回転方向を反転（端末差の保険）
+//   dec=N   : 磁気偏角[度]を上書き（磁北→真北補正）
+//   fov=N   : Three.jsカメラの垂直画角[度]。実機カメラに合わせて調整
+// ================================================================
+const QS        = new URLSearchParams(location.search);
+const SIM_LAT   = parseFloat(QS.get("lat"));
+const SIM_LNG   = parseFloat(QS.get("lng"));
+const SIMULATED = !Number.isNaN(SIM_LAT) && !Number.isNaN(SIM_LNG);
+const DEBUG_ON  = QS.get("debug") !== "0";
+
+// ================================================================
+// 定数
+// ================================================================
+const API_BASE   = "";
+// 磁気偏角[度]（磁北→真北の補正）。0で無効。?dec=N で上書き可能。
+// 例: 東京付近は約 -7.5（西偏）。現場で方位が一定角ズレる場合に調整する。
+const MAGNETIC_DECLINATION_DEG = 0;
+const CAMERA_FOV = (() => { const f = parseFloat(QS.get("fov")); return Number.isNaN(f) ? 65 : f; })();
+
+const NODE_COLOR = 0x22D3EE;
+const EDGE_COLOR = 0x3B82F6;
+const EYE_HEIGHT = 1.6;     // 目線の高さ[m]（カメラのY）
+const MARK_Y     = 0;       // マーカーの設置高さ[m]
+const NODE_R     = 0.5;     // ノード球の半径[m]
+const EDGE_R     = 0.12;    // 接続線の太さ[m]
+
+// ================================================================
+// デバッグログ
+// ================================================================
+function dlog(msg, cls) {
+  if (!DEBUG_ON) return;
+  const box = document.getElementById("debug-log");
+  if (!box) return;
+  const t = new Date().toLocaleTimeString("ja-JP", { hour12: false });
+  const line = document.createElement("div");
+  if (cls) line.className = cls;
+  line.textContent = `${t}  ${msg}`;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+if (!DEBUG_ON) document.getElementById("debug-log").style.display = "none";
+window.addEventListener("error", (e) =>
+  dlog(`JSエラー: ${e.message} @${(e.filename||"").split("/").pop()}:${e.lineno}`, "err"));
+dlog("スクリプト開始", "ok");
+if (typeof THREE === "undefined") {
+  dlog("three.js の読み込みに失敗（CDN/ネットワークを確認）", "err");
+  document.getElementById("btn-start").disabled = true;
+  document.getElementById("btn-start").textContent = "読み込みエラー";
+  throw new Error("THREE is not loaded");
+}
+dlog(`three.js ${THREE.REVISION} 読み込み ✓`, "ok");
+
+// ================================================================
+// Three.js セットアップ
+//   座標系（ENU・右手系）: +X=東, +Y=上, -Z=北
+//   カメラは原点(=現在地)に置き、worldGroup を平行移動して相対配置する。
+// ================================================================
+const canvas   = document.getElementById("gl-canvas");
+const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+renderer.setClearColor(0x000000, 0);  // 背景透過（後ろのカメラ映像を見せる）
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 5000);
+camera.position.set(0, EYE_HEIGHT, 0);
+
+const worldGroup = new THREE.Group();   // ノード・エッジを入れる器
+scene.add(worldGroup);
+
+// 弱い環境光（MeshBasicは光源不要だが将来の差し替え用に置いておく）
+scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", () => setTimeout(resize, 300));
+resize();
+
+// ================================================================
+// 向きセンサーの購読
+// ================================================================
+let gOrient = null;
+let _orientAttached = false;
+let _orientCount = 0;
+let _haveAbsolute = false;   // deviceorientationabsolute（北基準の絶対方位）を受信済みか
+function attachOrientation() {
+  if (_orientAttached) return;
+  _orientAttached = true;
+
+  // 絶対方位（北基準）。Android Chrome 等で発火。最優先で採用。
+  const onAbsolute = (e) => {
+    if (e.alpha == null) return;  // alpha が null の絶対イベントは無効
+    if (!_haveAbsolute) { _haveAbsolute = true; dlog("絶対方位 deviceorientationabsolute 採用 ✓", "ok"); }
+    gOrient = e;
+    if (++_orientCount === 1) dlog("向きイベント 初回受信 ✓", "ok");
+  };
+
+  // 相対方位。iOS では webkitCompassHeading（北基準）を持つのでこちらを使う。
+  // Android の deviceorientation は北基準でない相対値なので、絶対方位が来たら無視する。
+  const onRelative = (e) => {
+    if (_haveAbsolute && typeof e.webkitCompassHeading !== "number") return;
+    gOrient = e;
+    if (++_orientCount === 1) dlog("向きイベント 初回受信 ✓", "ok");
+  };
+
+  window.addEventListener("deviceorientationabsolute", onAbsolute);
+  window.addEventListener("deviceorientation",        onRelative);
+  dlog("向きセンサー購読開始", "ok");
+  setTimeout(() => {
+    if (_orientCount === 0) dlog("向きイベントが0件。センサー許可を確認。", "err");
+  }, 4000);
+}
+
+// ================================================================
+// 向き → カメラ姿勢
+//   W3C deviceorientation(alpha,beta,gamma) を Three.js のクォータニオンへ変換。
+//   alpha はコンパス絶対方位（真北基準）に差し替えて、ヨーを北固定にする。
+//   旧 THREE.DeviceOrientationControls と同じ変換式。
+// ================================================================
+const _zee   = new THREE.Vector3(0, 0, 1);
+const _euler = new THREE.Euler();
+const _q0    = new THREE.Quaternion();
+const _q1    = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -90° around X
+const _yawOffset   = (parseFloat(QS.get("yaw")) || 0) * Math.PI / 180;
+const _flip        = QS.get("flip") === "1";
+const _decQS       = parseFloat(QS.get("dec"));
+const _declination = (Number.isNaN(_decQS) ? MAGNETIC_DECLINATION_DEG : _decQS) * Math.PI / 180;
+// tilt: カメラの仮想ピッチを下方向にずらす量[度]。正の値=下向きにシフト。
+// スマホを水平に近く構えたとき、ノードが画面中央より下に表示される。?tilt=N で上書き可。
+const _tiltQS = parseFloat(QS.get("tilt"));
+const _tiltDeg = Number.isNaN(_tiltQS) ? 15 : _tiltQS;
+let   _hudThrottle = 0;
+
+function screenAngle() {
+  const a = (screen.orientation && screen.orientation.angle);
+  return ((a != null ? a : window.orientation) || 0) * Math.PI / 180;
+}
+
+function updateCameraOrientation() {
+  const e = gOrient;
+  if (!e) return;
+
+  let headingDeg;
+  if (typeof e.webkitCompassHeading === "number") {
+    // webkitCompassHeading: 0=北で時計回り。式の alpha は反時計回りなので変換。
+    headingDeg = _flip ? e.webkitCompassHeading : (360 - e.webkitCompassHeading);
+  } else {
+    headingDeg = e.alpha || 0;
+  }
+
+  // HUD更新は間引き
+  if ((_hudThrottle++ % 30) === 0) {
+    const disp = (typeof e.webkitCompassHeading === "number")
+      ? `${Math.round(e.webkitCompassHeading)}°` : `alpha ${Math.round(e.alpha||0)}°`;
+    const el = document.getElementById("compass-status");
+    if (el) el.textContent = `向き: ${disp}`;
+  }
+
+  const alpha = headingDeg * Math.PI / 180 + _yawOffset + _declination;
+  const beta  = ((e.beta  || 0) + _tiltDeg) * Math.PI / 180;
+  const gamma = (e.gamma || 0) * Math.PI / 180;
+  const orient = screenAngle();
+
+  _euler.set(beta, alpha, -gamma, "YXZ");
+  const q = camera.quaternion;
+  q.setFromEuler(_euler);
+  q.multiply(_q1);
+  q.multiply(_q0.setFromAxisAngle(_zee, -orient));
+}
+
+// ================================================================
+// 描画ループ
+// ================================================================
+let _running = false;
+function animate() {
+  if (!_running) return;
+  requestAnimationFrame(animate);
+  updateCameraOrientation();
+  renderer.render(scene, camera);
+}
+
+// ================================================================
+// ENU換算（緯度経度 → メートル平面）
+// ================================================================
+let refLat = null, refLng = null;   // ENUの基準点（最初のノード）
+function enuFromRef(lat, lng) {
+  const north = (lat - refLat) * 111320;
+  const east  = (lng - refLng) * 111320 * Math.cos(refLat * Math.PI / 180);
+  return { east, north };
+}
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dp = (lat2 - lat1) * Math.PI / 180;
+  const dl = (lng2 - lng1) * Math.PI / 180;
+  const p1 = lat1 * Math.PI / 180, p2 = lat2 * Math.PI / 180;
+  const s  = Math.sin(dp/2)**2 + Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
+
+// ================================================================
+// ラベル（常にカメラを向くスプライト）
+// ================================================================
+function makeLabel(text) {
+  const pad = 16, fontSize = 48;
+  const cv  = document.createElement("canvas");
+  const ctx = cv.getContext("2d");
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  const w = Math.ceil(ctx.measureText(text).width) + pad * 2;
+  const h = fontSize + pad * 2;
+  cv.width = w; cv.height = h;
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  ctx.fillStyle = "rgba(15,23,42,0.75)";
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(text, w / 2, h / 2);
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.minFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  const scale = 0.01;  // 1px ≒ 0.01m
+  sprite.scale.set(w * scale, h * scale, 1);
+  return sprite;
+}
+
+// ================================================================
+// グラフ取得 → マーカー構築
+// ================================================================
+let nodes  = [];      // [{id, lat, lng}]
+let placed = false;
+
+async function loadOutdoorGraph() {
+  const statusEl = document.getElementById("graph-status");
+  let data;
+  try {
+    const res = await fetch(`${API_BASE}/api/graph`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    data = await res.json();
+  } catch {
+    statusEl.textContent = "APIに接続できません（app.py / nginx を確認）";
+    dlog("API取得失敗", "err");
+    return;
+  }
+
+  const outdoor = (data.nodes || []).filter(
+    (n) => n.building === 0 && n.lat != null && n.lng != null
+  );
+  if (!outdoor.length) {
+    statusEl.textContent = "屋外ノードが登録されていません";
+    dlog("屋外ノード0件", "err");
+    return;
+  }
+  const byId = {};
+  outdoor.forEach((n) => { byId[n.id] = n; });
+
+  const seen = new Set();
+  const edges = (data.edges || []).filter((e) => {
+    if (!byId[e.from] || !byId[e.to]) return false;
+    const key = e.from < e.to ? `${e.from}_${e.to}` : `${e.to}_${e.from}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  nodes  = outdoor.map((n) => ({ id: n.id, lat: n.lat, lng: n.lng }));
+  refLat = nodes[0].lat;
+  refLng = nodes[0].lng;
+
+  buildMarkers(nodes, edges);
+  placed = true;
+  statusEl.textContent = `屋外ノード ${nodes.length}個 / 接続 ${edges.length}本`;
+  dlog(`マーカー構築: ノード${nodes.length} エッジ${edges.length}`, "ok");
+
+  if (lastUserLat != null) updateWorldPosition(lastUserLat, lastUserLng);
+}
+
+function buildMarkers(nodeList, edges) {
+  // 既存をクリア
+  while (worldGroup.children.length) worldGroup.remove(worldGroup.children[0]);
+
+  const pos = {};
+  const sphereGeo = new THREE.SphereGeometry(NODE_R, 24, 16);
+  const sphereMat = new THREE.MeshBasicMaterial({ color: NODE_COLOR });
+
+  nodeList.forEach((n) => {
+    const { east, north } = enuFromRef(n.lat, n.lng);
+    const x = east, z = -north;   // ENU → Three.js（北=-Z）
+    pos[n.id] = { x, z };
+
+    const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+    sphere.position.set(x, MARK_Y, z);
+    worldGroup.add(sphere);
+
+    const label = makeLabel(`N${n.id % 100000}`);
+    label.position.set(x, MARK_Y + 1.6, z);
+    worldGroup.add(label);
+  });
+
+  const edgeMat = new THREE.MeshBasicMaterial({ color: EDGE_COLOR, transparent: true, opacity: 0.85 });
+  const up = new THREE.Vector3(0, 1, 0);
+  edges.forEach((e) => {
+    const a = pos[e.from], b = pos[e.to];
+    if (!a || !b) return;
+    const dx = b.x - a.x, dz = b.z - a.z;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.01) return;
+
+    const geo = new THREE.CylinderGeometry(EDGE_R, EDGE_R, len, 12);
+    const cyl = new THREE.Mesh(geo, edgeMat);
+    cyl.position.set(a.x + dx / 2, MARK_Y, a.z + dz / 2);
+    cyl.quaternion.setFromUnitVectors(up, new THREE.Vector3(dx, 0, dz).normalize());
+    worldGroup.add(cyl);
+  });
+}
+
+// ================================================================
+// 現在地に合わせて worldGroup を平行移動
+// ================================================================
+function updateWorldPosition(lat, lng) {
+  if (refLat == null) return;
+  const { east, north } = enuFromRef(lat, lng);
+  // 現在地が原点に来るように、ノード群を逆方向へずらす
+  worldGroup.position.set(-east, 0, north);
+}
+
+// ================================================================
+// 現在地（GPS / シミュレート）
+// ================================================================
+let lastUserLat = null, lastUserLng = null;
+let gpsCount = 0;
+
+function onUserPosition(lat, lng, accuracy) {
+  lastUserLat = lat; lastUserLng = lng;
+  const el = document.getElementById("gps-status");
+  const accTxt = accuracy != null ? ` ±${Math.round(accuracy)}m` : "（シミュレート）";
+  let text = `現在地: ${lat.toFixed(5)}, ${lng.toFixed(5)}${accTxt}`;
+  if (nodes.length) {
+    let best = Infinity;
+    nodes.forEach((n) => { best = Math.min(best, haversine(lat, lng, n.lat, n.lng)); });
+    text += `｜最寄りノード ${Math.round(best)}m`;
+  }
+  el.textContent = text;
+  if (placed) updateWorldPosition(lat, lng);
+}
+
+function startPositioning() {
+  if (SIMULATED) {
+    dlog(`シミュレート現在地: ${SIM_LAT}, ${SIM_LNG}`, "warn");
+    onUserPosition(SIM_LAT, SIM_LNG, null);
+    return;
+  }
+  if (!navigator.geolocation) {
+    document.getElementById("gps-status").textContent = "現在地: この環境では取得不可";
+    return;
+  }
+  navigator.geolocation.watchPosition(
+    (pos) => {
+      gpsCount++;
+      const { latitude, longitude, accuracy } = pos.coords;
+      if (gpsCount === 1) dlog(`GPS初回受信 ±${Math.round(accuracy)}m`, "ok");
+      onUserPosition(latitude, longitude, accuracy);
+    },
+    (err) => {
+      const msg = { 1: "許可が拒否されています", 2: "取得できません（屋内?）", 3: "タイムアウト" };
+      document.getElementById("gps-status").textContent =
+        `現在地エラー: ${msg[err.code] || err.message}`;
+      dlog(`GPSエラー code=${err.code}`, "err");
+    },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 27000 }
+  );
+}
+
+// ================================================================
+// 開始ボタン — センサー許可 → 計測・描画開始
+// ================================================================
+document.getElementById("btn-start").addEventListener("click", function () {
+  // ユーザー操作の直後に await を挟まず許可をリクエストする（iOS要件）
+  if (typeof DeviceOrientationEvent !== "undefined" &&
+      typeof DeviceOrientationEvent.requestPermission === "function") {
+    DeviceOrientationEvent.requestPermission()
+      .then((state) => {
+        dlog(`センサー許可: ${state}`, state === "granted" ? "ok" : "err");
+        if (state === "granted") {
+          enableSensorsAndStart();
+        } else {
+          alert("センサーが拒否されました。設定や履歴を確認してください。");
+        }
+      })
+      .catch((e) => dlog(`センサー許可エラー: ${e.message}`, "err"));
+  } else {
+    dlog("許可ダイアログ不要環境", "ok");
+    enableSensorsAndStart();
+  }
+});
+
+// 許可が下りた直後の処理。向きセンサー購読を最優先で行う。
+function enableSensorsAndStart() {
+  attachOrientation();   // ← await より前。最優先で購読（iOSのユーザー操作コンテキスト維持）
+  startPositioning();    // GPS / シミュレート
+  startCamera();         // カメラ映像は非同期で後追い
+  _running = true;
+  animate();             // 描画ループ開始
+  document.getElementById("start-overlay").style.display = "none";
+}
+
+// カメラ映像（背景）の起動。向きセンサーとは独立に走らせる。
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    document.getElementById("bg-video").srcObject = stream;
+    dlog("カメラ起動 ✓", "ok");
+  } catch (err) {
+    dlog(`カメラ起動エラー: ${err.message}`, "err");
+  }
+}
+
+// データ取得（開始前に先読み）
+loadOutdoorGraph();
+</script>
+</body>
+</html>

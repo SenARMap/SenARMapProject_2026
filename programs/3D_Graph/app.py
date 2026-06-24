@@ -15,12 +15,18 @@ BUILDINGS_JSON  = os.path.join(DATA_DIR, "buildings.json")
 CONNECT_EDGE_CSV = os.path.join(DATA_DIR, "connect_edge.csv")
 GLOBAL_NODE_CSV  = os.path.join(DATA_DIR, "global_node.csv")
 GLOBAL_EDGE_CSV  = os.path.join(DATA_DIR, "global_edge.csv")
-EDGE_IMAGE_CSV   = os.path.join(DATA_DIR, "edge_image.csv")
+EDGE_IMAGE_CSV      = os.path.join(DATA_DIR, "edge_image.csv")
+CAFETERIA_CSV       = os.path.join(DATA_DIR, "cafeteria_edge.csv")
 CDN_BASE         = "https://cdn.iku-navi.net"
 
 # グローバルID = building_id * ID_OFFSET + ローカルID
 ID_OFFSET          = 100_000
 GLOBAL_NODE_OFFSET = 9_000_000   # 屋外ノードIDのオフセット
+
+# 建物出入り口を通過するコスト加算（単位: weight×length と同じ ≒ メートル相当）
+# 値を大きくするほど建物を通り抜けるルートを避けやすくなる
+# 0 にするとペナルティなし（従来動作）
+ENTRANCE_PENALTY   = 50.0
 OUTDOOR_COLOR      = "#5AFF5A"
 
 # Building color palette (up to 10 buildings)
@@ -224,7 +230,7 @@ def load_data():
                     "floor": 1,
                     "weight": 1.0,
                     "length": 0.0,
-                    "type": 1,
+                    "type": 7,
                     "name": ""
                 })
             if anchor_edges:
@@ -281,7 +287,7 @@ def build_graph(nodes_df, edges_df, use_elevator=True):
             name=str(row["name"]),
             building=int(row["building"]),
             floor=int(row["floor"]),
-            weight=float(row["weight"]) * float(row["length"]),
+            weight=float(row["weight"]) * float(row["length"]) + (ENTRANCE_PENALTY if edge_type == "7" else 0.0),
             length=float(row["length"]),
             edge_type=edge_type,
         )
@@ -307,12 +313,86 @@ _cached_nodes_df = None
 _cached_edges_df = None
 _cached_graph_with_ev = None
 _cached_graph_without_ev = None
+_cached_room_index = None   # {(教室名, building): [edge行, ...]}
+_cached_rooms_list = None   # api_rooms / api_all 用の整形済み教室リスト
+_cached_nodes_list = None   # api_all 用の整形済みノードリスト
+_cached_node_xyz   = None   # {node_id: (x, y, z)}
 
 def get_cached_data():
     global _cached_nodes_df, _cached_edges_df
     if _cached_nodes_df is None or _cached_edges_df is None:
         _cached_nodes_df, _cached_edges_df = load_data()
     return _cached_nodes_df, _cached_edges_df
+
+
+def _build_room_index(edges_df):
+    """エッジの name 列を分解し、教室名→エッジ行 の索引と教室一覧を一度だけ構築する"""
+    index, rooms_list, seen = {}, [], set()
+    for _, row in edges_df.iterrows():
+        raw_name = str(row["name"]).strip()
+        if not raw_name or raw_name == "nan":
+            continue
+        building = int(row["building"])
+        for room in raw_name.split(";"):
+            room = room.strip()
+            if not room:
+                continue
+            index.setdefault((room, building), []).append(row)
+            if (room, building) not in seen:
+                seen.add((room, building))
+                rooms_list.append({
+                    "room":     room,
+                    "building": building,
+                    "floor":    int(row["floor"]),
+                    "edge_id":  int(row["id"]),
+                    "from":     int(row["from"]),
+                    "to":       int(row["to"]),
+                })
+    rooms_list.sort(key=lambda r: (r["building"], r["room"]))
+    return index, rooms_list
+
+
+def get_cached_room_index():
+    global _cached_room_index, _cached_rooms_list
+    if _cached_room_index is None:
+        _, edges_df = get_cached_data()
+        _cached_room_index, _cached_rooms_list = _build_room_index(edges_df)
+    return _cached_room_index, _cached_rooms_list
+
+
+def get_cached_node_xyz():
+    global _cached_node_xyz
+    if _cached_node_xyz is None:
+        nodes_df, _ = get_cached_data()
+        _cached_node_xyz = {
+            int(r["id"]): (float(r["x"]), float(r["y"]), float(r["z"]))
+            for _, r in nodes_df.iterrows()
+        }
+    return _cached_node_xyz
+
+
+def get_cached_nodes_list():
+    global _cached_nodes_list
+    if _cached_nodes_list is None:
+        nodes_df, _ = get_cached_data()
+        nodes = []
+        for _, row in nodes_df.iterrows():
+            if any(pd.isna(row[c]) for c in ["id", "building", "floor", "type"]):
+                continue
+            nd = {
+                "id":       int(row["id"]),
+                "building": int(row["building"]),
+                "floor":    int(row["floor"]),
+                "type":     int(row["type"]),
+            }
+            if "lat" in row and pd.notna(row["lat"]):
+                nd["lat"] = float(row["lat"])
+            if "lng" in row and pd.notna(row["lng"]):
+                nd["lng"] = float(row["lng"])
+            nodes.append(nd)
+        nodes.sort(key=lambda n: n["id"])
+        _cached_nodes_list = nodes
+    return _cached_nodes_list
 
 def get_cached_graph(use_elevator=True):
     global _cached_graph_with_ev, _cached_graph_without_ev
@@ -328,16 +408,22 @@ def get_cached_graph(use_elevator=True):
 
 def clear_cache():
     global _cached_nodes_df, _cached_edges_df, _cached_graph_with_ev, _cached_graph_without_ev
+    global _cached_room_index, _cached_rooms_list, _cached_nodes_list, _cached_node_xyz
     _cached_nodes_df = None
     _cached_edges_df = None
     _cached_graph_with_ev = None
     _cached_graph_without_ev = None
+    _cached_room_index = None
+    _cached_rooms_list = None
+    _cached_nodes_list = None
+    _cached_node_xyz = None
 
 
-def _edge_to_dict(row, nodes_df):
+def _edge_to_dict(row):
     """edgeの行を座標付きdictに変換するヘルパー"""
-    from_node = nodes_df[nodes_df["id"] == int(row["from"])].iloc[0]
-    to_node   = nodes_df[nodes_df["id"] == int(row["to"])].iloc[0]
+    node_xyz = get_cached_node_xyz()
+    x0, y0, z0 = node_xyz[int(row["from"])]
+    x1, y1, z1 = node_xyz[int(row["to"])]
     return {
         "id":       int(row["id"]),
         "name":     str(row["name"]),
@@ -348,8 +434,8 @@ def _edge_to_dict(row, nodes_df):
         "weight":   float(row["weight"]),
         "length":   float(row["length"]),
         "type":     str(row["type"]),
-        "x0": float(from_node["x"]), "y0": float(from_node["y"]), "z0": float(from_node["z"]),
-        "x1": float(to_node["x"]),   "y1": float(to_node["y"]),   "z1": float(to_node["z"]),
+        "x0": x0, "y0": y0, "z0": z0,
+        "x1": x1, "y1": y1, "z1": z1,
     }
 
 
@@ -434,7 +520,7 @@ def api_graph():
         nodes.append(node_dict)
 
     valid_edges = edges_df.dropna(subset=["id", "from", "to", "building", "floor", "weight", "length"])
-    edges = [_edge_to_dict(row, nodes_df) for _, row in valid_edges.iterrows()]
+    edges = [_edge_to_dict(row) for _, row in valid_edges.iterrows()]
 
     config = _load_transform_config()
     config.update(_calc_transforms_from_anchors())
@@ -457,37 +543,12 @@ def api_rooms():
     building_filter = request.args.get("building", type=int)
     query           = request.args.get("q", "").strip().lower()
 
-    _, edges_df = get_cached_data()
-
-    rooms = []
-    seen  = set()  # 重複排除 (room + building)
-
-    for _, row in edges_df.iterrows():
-        if building_filter and int(row["building"]) != building_filter:
-            continue
-        raw_name = str(row["name"]).strip()
-        if not raw_name or raw_name == "nan":
-            continue
-        for room in raw_name.split(";"):
-            room = room.strip()
-            if not room:
-                continue
-            if query and query not in room.lower():
-                continue
-            key = (room, int(row["building"]))
-            if key in seen:
-                continue
-            seen.add(key)
-            rooms.append({
-                "room":     room,
-                "building": int(row["building"]),
-                "floor":    int(row["floor"]),
-                "edge_id":  int(row["id"]),
-                "from":     int(row["from"]),
-                "to":       int(row["to"]),
-            })
-
-    rooms.sort(key=lambda r: (r["building"], r["room"]))
+    _, rooms_list = get_cached_room_index()
+    rooms = [
+        r for r in rooms_list
+        if (building_filter is None or r["building"] == building_filter)
+        and (not query or query in r["room"].lower())
+    ]
     return jsonify(rooms)
 
 
@@ -502,63 +563,18 @@ def api_all():
         "buildings": [ 1, 2, ... ]
       }
     """
-    nodes_df, edges_df = get_cached_data()
-
-    rooms = []
-    seen = set()
-    for _, row in edges_df.iterrows():
-        raw_name = str(row["name"]).strip()
-        if not raw_name or raw_name == "nan":
-            continue
-        for room in raw_name.split(";"):
-            room = room.strip()
-            if not room:
-                continue
-            key = (room, int(row["building"]))
-            if key in seen:
-                continue
-            seen.add(key)
-            rooms.append({
-                "room":     room,
-                "building": int(row["building"]),
-                "floor":    int(row["floor"]),
-                "edge_id":  int(row["id"]),
-                "from":     int(row["from"]),
-                "to":       int(row["to"]),
-            })
-    rooms.sort(key=lambda r: (r["building"], r["room"]))
-
-    nodes = []
-    for _, row in nodes_df.iterrows():
-        if any(pd.isna(row[c]) for c in ["id", "building", "floor", "type"]):
-            continue
-        nd = {
-            "id":       int(row["id"]),
-            "building": int(row["building"]),
-            "floor":    int(row["floor"]),
-            "type":     int(row["type"]),
-        }
-        if "lat" in row and pd.notna(row["lat"]):
-            nd["lat"] = float(row["lat"])
-        if "lng" in row and pd.notna(row["lng"]):
-            nd["lng"] = float(row["lng"])
-        nodes.append(nd)
-    nodes.sort(key=lambda n: n["id"])
-
+    nodes_df, _ = get_cached_data()
+    _, rooms = get_cached_room_index()
+    nodes    = get_cached_nodes_list()
     buildings = sorted(nodes_df["building"].dropna().astype(int).unique().tolist())
 
     return jsonify({"rooms": rooms, "nodes": nodes, "buildings": buildings})
 
 
-def _find_edges_for_room(edges_df, room_name, building):
-    """教室名が含まれるエッジ行のリストを返す"""
-    matched = []
-    for _, row in edges_df.iterrows():
-        if int(row["building"]) != building:
-            continue
-        if room_name in [r.strip() for r in str(row["name"]).split(";")]:
-            matched.append(row)
-    return matched
+def _find_edges_for_room(room_name, building):
+    """教室名が含まれるエッジ行のリストを返す（起動時に構築した索引から引く）"""
+    index, _ = get_cached_room_index()
+    return index.get((room_name, int(building)), [])
 
 
 @app.route("/api/navigate_to_room")
@@ -589,11 +605,10 @@ def api_navigate_to_room():
         return jsonify({"error": "start_room（＋start_building）または start を指定してください"}), 400
 
     use_elevator = request.args.get("use_elevator", "1") != "0"
-    nodes_df, edges_df = get_cached_data()
     G = get_cached_graph(use_elevator=use_elevator)
 
     # --- 目的教室のエッジを検索 ---
-    dest_edges = _find_edges_for_room(edges_df, room_name, building)
+    dest_edges = _find_edges_for_room(room_name, building)
     if not dest_edges:
         return jsonify({"error": f"建物 {building} に教室 '{room_name}' が見つかりません"}), 404
 
@@ -602,7 +617,7 @@ def api_navigate_to_room():
     start_edge_row = None
 
     if start_room and start_building is not None:
-        s_edges = _find_edges_for_room(edges_df, start_room, start_building)
+        s_edges = _find_edges_for_room(start_room, start_building)
         if not s_edges:
             return jsonify({"error": f"建物 {start_building} に出発教室 '{start_room}' が見つかりません"}), 404
         for row in s_edges:
@@ -642,10 +657,10 @@ def api_navigate_to_room():
 
     result = _path_result(G, best_path, best_length)
     result["destination_room"] = room_name
-    result["destination_edge"] = _edge_to_dict(best_dest_edge, nodes_df)
+    result["destination_edge"] = _edge_to_dict(best_dest_edge)
     if best_start_edge is not None:
         result["start_room"] = start_room
-        result["start_edge"] = _edge_to_dict(best_start_edge, nodes_df)
+        result["start_edge"] = _edge_to_dict(best_start_edge)
     return jsonify(result)
 
 
@@ -684,14 +699,13 @@ def api_route():
     if not to_room and to_node_id is None:
         return jsonify({"error": "to_room（＋to_building）または to_node を指定してください"}), 400
 
-    nodes_df, edges_df = get_cached_data()
     G = get_cached_graph(use_elevator=use_elevator)
 
     # --- 出発候補ノード ---
     if from_room:
         if from_building is None:
             return jsonify({"error": "from_building を指定してください"}), 400
-        s_edges = _find_edges_for_room(edges_df, from_room, from_building)
+        s_edges = _find_edges_for_room(from_room, from_building)
         if not s_edges:
             return jsonify({"error": f"建物 {from_building} に教室 '{from_room}' が見つかりません"}), 404
         seen_s = set()
@@ -710,7 +724,7 @@ def api_route():
     if to_room:
         if to_building is None:
             return jsonify({"error": "to_building を指定してください"}), 400
-        d_edges = _find_edges_for_room(edges_df, to_room, to_building)
+        d_edges = _find_edges_for_room(to_room, to_building)
         if not d_edges:
             return jsonify({"error": f"建物 {to_building} に教室 '{to_room}' が見つかりません"}), 404
         dest_candidates = [(nid, r) for r in d_edges
@@ -743,10 +757,10 @@ def api_route():
     result = _path_result(G, best_path, best_length)
     if best_start_edge is not None:
         result["from_room"]  = from_room
-        result["from_edge"]  = _edge_to_dict(best_start_edge, nodes_df)
+        result["from_edge"]  = _edge_to_dict(best_start_edge)
     if best_dest_edge is not None:
         result["to_room"]    = to_room
-        result["to_edge"]    = _edge_to_dict(best_dest_edge, nodes_df)
+        result["to_edge"]    = _edge_to_dict(best_dest_edge)
     return jsonify(result)
 
 
@@ -761,6 +775,31 @@ _TOILET_TYPE_MAP = {
     "ALL": ["M_Toilet", "F_Toilet", "C_Toilet"],
 }
 _TOILET_LABEL = {"M_Toilet": "男子トイレ", "F_Toilet": "女子トイレ", "C_Toilet": "多目的トイレ"}
+
+
+def _load_cafeteria_list():
+    if not os.path.exists(CAFETERIA_CSV):
+        return []
+    df = pd.read_csv(CAFETERIA_CSV, dtype=str).fillna("")
+    result = []
+    for _, row in df.iterrows():
+        name = row.get("name", "").strip()
+        if not name:
+            continue
+        result.append({
+            "name":         name,
+            "building":     row.get("building", "").strip(),
+            "display_name": row.get("display_name", name).strip(),
+        })
+    return result
+
+_CAFETERIA_LIST  = _load_cafeteria_list()
+_CAFETERIA_NAMES = [c["name"] for c in _CAFETERIA_LIST]
+
+
+@app.route("/api/cafeterias")
+def api_cafeterias():
+    return jsonify(_CAFETERIA_LIST)
 
 
 @app.route("/api/nearest_toilet")
@@ -789,14 +828,13 @@ def api_nearest_toilet():
 
     targets = _TOILET_TYPE_MAP.get(toilet_type, _TOILET_TYPE_MAP["ALL"])
 
-    nodes_df, edges_df = get_cached_data()
     G = get_cached_graph(use_elevator=use_elevator)
 
     # 出発候補
     if from_room:
         if from_building is None:
             return jsonify({"error": "from_building を指定してください"}), 400
-        s_edges = _find_edges_for_room(edges_df, from_room, from_building)
+        s_edges = _find_edges_for_room(from_room, from_building)
         if not s_edges:
             return jsonify({"error": f"建物 {from_building} に教室 '{from_room}' が見つかりません"}), 404
         seen_s = set()
@@ -811,11 +849,17 @@ def api_nearest_toilet():
             return jsonify({"error": f"ノード {from_node_id} が存在しません"}), 404
         start_candidates = [(from_node_id, None)]
 
-    # トイレエッジを全建物から収集
-    toilet_edges = []
-    for _, row in edges_df.iterrows():
-        names = [n.strip() for n in str(row["name"]).split(";")]
-        if any(t in names for t in targets):
+    # トイレエッジを全建物から収集（教室名索引から引く。複数種別併記のエッジはIDで重複排除）
+    room_index, _ = get_cached_room_index()
+    toilet_edges, seen_ids = [], set()
+    for (name, _bldg), rows in room_index.items():
+        if name not in targets:
+            continue
+        for row in rows:
+            eid = int(row["id"])
+            if eid in seen_ids:
+                continue
+            seen_ids.add(eid)
             toilet_edges.append(row)
 
     if not toilet_edges:
@@ -855,10 +899,111 @@ def api_nearest_toilet():
     result["toilet_label"]    = _TOILET_LABEL.get(found_key, "トイレ")
     result["toilet_building"] = int(best_toilet_row["building"])
     result["toilet_floor"]    = int(best_toilet_row["floor"])
-    result["toilet_edge"]     = _edge_to_dict(best_toilet_row, nodes_df)
+    result["toilet_edge"]     = _edge_to_dict(best_toilet_row)
     if best_start_row is not None:
         result["from_room"]   = from_room
-        result["from_edge"]   = _edge_to_dict(best_start_row, nodes_df)
+        result["from_edge"]   = _edge_to_dict(best_start_row)
+    return jsonify(result)
+
+
+# ------------------------------------------------------------------ #
+#  最寄り食堂検索 API
+# ------------------------------------------------------------------ #
+
+@app.route("/api/nearest_cafeteria")
+def api_nearest_cafeteria():
+    """
+    最寄りの食堂への最短経路を返す。
+
+    出発点（いずれか）:
+      from_room=101A&from_building=10
+      from_node=100001
+
+    条件:
+      use_elevator=0/1 (省略時 1)
+    """
+    use_elevator  = request.args.get("use_elevator", "1") != "0"
+    from_room     = request.args.get("from_room",     "").strip()
+    from_building = request.args.get("from_building", type=int)
+    from_node_id  = request.args.get("from_node",     type=int)
+
+    if not from_room and from_node_id is None:
+        return jsonify({"error": "from_room（＋from_building）または from_node を指定してください"}), 400
+
+    if not _CAFETERIA_NAMES:
+        return jsonify({"error": "cafeteria_edge.csv が見つかりません"}), 500
+
+    caf_name = request.args.get("name", "all").strip()
+    targets  = [caf_name] if caf_name != "all" else _CAFETERIA_NAMES
+
+    G = get_cached_graph(use_elevator=use_elevator)
+
+    # 出発候補
+    if from_room:
+        if from_building is None:
+            return jsonify({"error": "from_building を指定してください"}), 400
+        s_edges = _find_edges_for_room(from_room, from_building)
+        if not s_edges:
+            return jsonify({"error": f"建物 {from_building} に教室 '{from_room}' が見つかりません"}), 404
+        seen_s = set()
+        start_candidates = []
+        for r in s_edges:
+            for nid in (int(r["from"]), int(r["to"])):
+                if nid in G.nodes and nid not in seen_s:
+                    seen_s.add(nid)
+                    start_candidates.append((nid, r))
+    else:
+        if from_node_id not in G.nodes:
+            return jsonify({"error": f"ノード {from_node_id} が存在しません"}), 404
+        start_candidates = [(from_node_id, None)]
+
+    # 食堂エッジを room_index から収集
+    room_index, _ = get_cached_room_index()
+    caf_edges, seen_ids = [], set()
+    for (name, _bldg), rows in room_index.items():
+        if name not in targets:
+            continue
+        for row in rows:
+            eid = int(row["id"])
+            if eid in seen_ids:
+                continue
+            seen_ids.add(eid)
+            caf_edges.append(row)
+
+    if not caf_edges:
+        return jsonify({"error": "食堂エッジがデータ内に見つかりません"}), 404
+
+    dest_candidates = [
+        (nid, row) for row in caf_edges
+        for nid in (int(row["from"]), int(row["to"]))
+        if nid in G.nodes
+    ]
+
+    best_path, best_length = None, float("inf")
+    best_start_row = best_caf_row = None
+
+    for (s_node, s_row) in start_candidates:
+        for (d_node, d_row) in dest_candidates:
+            if s_node == d_node:
+                continue
+            try:
+                l, p = nx.bidirectional_dijkstra(G, s_node, d_node, weight="weight")
+                if l < best_length:
+                    best_length, best_path = l, p
+                    best_start_row, best_caf_row = s_row, d_row
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
+                continue
+
+    if best_path is None:
+        return jsonify({"error": "食堂への経路が見つかりません"}), 404
+
+    result = _path_result(G, best_path, best_length)
+    result["cafeteria_building"] = int(best_caf_row["building"])
+    result["cafeteria_floor"]    = int(best_caf_row["floor"])
+    result["cafeteria_edge"]     = _edge_to_dict(best_caf_row)
+    if best_start_row is not None:
+        result["from_room"] = from_room
+        result["from_edge"] = _edge_to_dict(best_start_row)
     return jsonify(result)
 
 
@@ -875,7 +1020,6 @@ def api_shortest_path():
         return jsonify({"error": "start と goal のノードIDを指定してください"}), 400
 
     use_elevator = request.args.get("use_elevator", "1") != "0"
-    nodes_df, edges_df = get_cached_data()
     G = get_cached_graph(use_elevator=use_elevator)
 
     if start not in G.nodes:
@@ -893,45 +1037,8 @@ def api_shortest_path():
 
 
 # ------------------------------------------------------------------ #
-#  建物変換パラメータ API
-# ------------------------------------------------------------------ #
-
-@app.route("/api/building_config", methods=["GET"])
-def api_building_config_get():
-    """全建物の rot_deg / tz_offset を返す"""
-    config = _load_transform_config()
-    nodes_df, _ = get_cached_data()
-    buildings = sorted(
-        nodes_df[nodes_df["building"].astype(int) != 0]["building"]
-        .dropna().astype(int).unique().tolist()
-    )
-    result = {}
-    for b in buildings:
-        cfg = config.get(str(b), {})
-        result[b] = {
-            "rot_deg":   cfg.get("rot_deg",   0.0),
-            "tz_offset": cfg.get("tz_offset", 0.0),
-            "tx":        cfg.get("tx",        0.0),
-            "ty":        cfg.get("ty",        0.0),
-        }
-    return jsonify(result)
 
 
-@app.route("/api/building_config/<int:building_id>", methods=["POST"])
-def api_building_config_post(building_id):
-    """建物の rot_deg / tz_offset を buildings.json に保存する"""
-    data = request.get_json(force=True)
-    config = _load_transform_config()
-    cfg = config.get(str(building_id), {})
-    if "rot_deg"   in data:
-        cfg["rot_deg"]   = float(data["rot_deg"])
-    if "tz_offset" in data:
-        cfg["tz_offset"] = float(data["tz_offset"])
-    config[str(building_id)] = cfg
-    with open(BUILDINGS_JSON, "w") as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
-    clear_cache()
-    return jsonify({"ok": True, "building": building_id, "config": cfg})
 
 
 @app.route("/api/edge_images")
@@ -944,6 +1051,7 @@ def api_edge_images():
         return jsonify({})
     df = pd.read_csv(EDGE_IMAGE_CSV)
     df.columns = df.columns.str.strip()
+    df = df.dropna(subset=["from", "to"])
     result = {}
     for _, row in df.iterrows():
         f, t = int(row["from"]), int(row["to"])

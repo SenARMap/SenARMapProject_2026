@@ -3,15 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>構内ナビ</title>
+  <title>IKU NAVI</title>
+  <link rel="icon" href="../images/favicon.ico">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { height: 100%; }
+    html { height: 100%; overscroll-behavior: none; }
     body {
       height: 100%; overflow: hidden;
+      overscroll-behavior: none;
       font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
       display: flex;
       flex-direction: column; /* mobile: stacked */
+    }
+    button, a, select, input, label {
+      touch-action: manipulation; /* ダブルタップズームを無効化 */
     }
 
     /* ================================================================
@@ -25,10 +30,52 @@
     #search-panel {
       order: 1;
       background: white;
-      padding: 8px 10px;
+      padding: 0;
       box-shadow: 0 2px 6px rgba(0,0,0,0.12);
       flex-shrink: 0;
       z-index: 100;
+    }
+    #search-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+    }
+    #btn-home {
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      border: 1.5px solid #E2E8F0; border-radius: 50%;
+      background: white;
+      display: flex; align-items: center; justify-content: center;
+      color: #64748B; font-size: 15px; line-height: 1;
+      text-decoration: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #btn-home:active { background: #F1F5F9; }
+    #search-toggle {
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      border: 1.5px solid #E2E8F0; border-radius: 50%;
+      background: white;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: #64748B; font-size: 13px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #search-chevron {
+      display: inline-block;
+      transition: transform 0.3s ease;
+      line-height: 1;
+    }
+    #search-chevron.open { transform: rotate(180deg); }
+    #search-content {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.3s ease;
+    }
+    #search-content.open { grid-template-rows: 1fr; }
+    .search-content-inner {
+      overflow: hidden;
+      padding: 0 10px 8px;
     }
     #map-area {
       order: 2;
@@ -101,9 +148,14 @@
         order: 0;
         box-shadow: none;
         border-bottom: 1px solid #F1F5F9;
-        padding: 14px 16px;
+        padding: 0;
         flex-shrink: 0;
       }
+      #search-header { padding: 14px 16px 8px; }
+      #search-toggle { display: none; }
+      #btn-home      { display: none; } /* desktop: app-header にリンクがあるため不要 */
+      #search-content { display: block; }
+      .search-content-inner { overflow: visible; padding: 0 16px 14px; }
 
       #nav-bar {
         order: 0;
@@ -130,7 +182,7 @@
     /* ================================================================
        Search Panel internals
     ================================================================ */
-    .search-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+    .search-tabs { display: flex; gap: 6px; flex: 1; }
     .search-tab {
       flex: 1; height: 34px;
       border: 1.5px solid #CBD5E1; border-radius: 17px;
@@ -240,6 +292,22 @@
     }
     #btn-search:hover { opacity: 0.9; }
 
+    .category-tabs { display: flex; gap: 6px; flex: 1; }
+    .category-tab {
+      flex: 1; height: 34px;
+      border: 1.5px solid #CBD5E1; border-radius: 17px;
+      background: white; font-size: 13px; font-weight: 600;
+      color: #64748B; cursor: pointer; transition: all 0.2s;
+    }
+    .category-tab.active { background: #3B82F6; border-color: #3B82F6; color: white; }
+    #btn-fac-search {
+      flex: 1; height: 40px; border: none; border-radius: 10px;
+      background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+      color: white; font-size: 15px; font-weight: 700;
+      cursor: pointer; transition: opacity 0.15s;
+    }
+    #btn-fac-search:hover { opacity: 0.9; }
+
     .gps-wrapper {
       border: 1.5px solid #BFDBFE; border-radius: 8px;
       margin-bottom: 6px; overflow: hidden;
@@ -254,12 +322,28 @@
       background: #3B82F6; color: white; font-size: 13px;
       font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0;
     }
+    .btn-swap {
+      display: block; width: 28px; height: 28px;
+      margin: 0 0 4px 0;
+      background: white; border: 1.5px solid #E2E8F0; border-radius: 50%;
+      font-size: 16px; line-height: 1; cursor: pointer; color: #3B82F6;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .btn-swap:hover { background: #EFF6FF; color: #3B82F6; border-color: #3B82F6; }
+
     #accuracy-warn {
       display: none;
       padding: 6px 12px; font-size: 12px; line-height: 1.6;
     }
     #accuracy-warn.warn-low  { background: #FFFBEB; color: #78350F; }
     #accuracy-warn.warn-high { background: #FEF2F2; color: #7F1D1D; }
+
+    #fac-accuracy-warn {
+      display: none;
+      padding: 6px 12px; font-size: 12px; line-height: 1.6;
+    }
+    #fac-accuracy-warn.warn-low  { background: #FFFBEB; color: #78350F; }
+    #fac-accuracy-warn.warn-high { background: #FEF2F2; color: #7F1D1D; }
 
     /* ================================================================
        Map / SVG
@@ -348,6 +432,20 @@
       font-size: 12px;
       color: #94A3B8;
       letter-spacing: 0.1em;
+    }
+    #ar-placeholder.arrival {
+      background: linear-gradient(160deg, #EFF6FF 0%, #F0FDF4 100%);
+      gap: 12px;
+    }
+    #ar-placeholder.arrival .arrival-icon {
+      font-size: 48px;
+      line-height: 1;
+    }
+    #ar-placeholder.arrival .arrival-title {
+      font-size: 18px; font-weight: 700; color: #1E40AF;
+    }
+    #ar-placeholder.arrival .arrival-desc {
+      font-size: 13px; color: #475569; text-align: center; line-height: 1.6;
     }
     #ar-label {
       display: none;
@@ -465,6 +563,22 @@
       font-size: 16px; font-weight: 600; color: #1E293B;
       box-shadow: 0 10px 40px rgba(0,0,0,0.2);
     }
+
+    /* ================================================================
+       AR Outdoor Elements
+    ================================================================ */
+    #ar-bg-video {
+      display: none;
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover; z-index: 1;
+    }
+    #ar-gl-canvas {
+      display: none;
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      z-index: 2; pointer-events: none;
+    }
   </style>
   <script src="script/config.js"></script>
 </head>
@@ -483,60 +597,139 @@
 
   <!-- Search Panel -->
   <div id="search-panel">
-    <div class="search-tabs">
-      <button class="search-tab active" id="tab-room" onclick="setMode('room')">教室 → 教室</button>
-      <button class="search-tab"        id="tab-gps"  onclick="setMode('gps')">現在地 → 教室</button>
+    <div id="search-header">
+      <a id="btn-home" href="../index.html" aria-label="トップページに戻る">⌂</a>
+      <div class="category-tabs">
+        <button class="category-tab active" id="cat-room"     onclick="setCategory('room')">教室</button>
+        <button class="category-tab"        id="cat-facility" onclick="setCategory('facility')">設備検索</button>
+      </div>
+      <button id="search-toggle" onclick="toggleSearchPanel()" aria-label="検索パネルを開閉">
+        <span id="search-chevron" class="open">▾</span>
+      </button>
     </div>
 
-    <div id="panel-room">
-      <div class="route-row">
-        <span class="route-label">出発</span>
-        <select class="building-select" id="from-bldg">
-          <option value="">全</option>
-        </select>
-        <div class="ac-wrap">
-          <input id="from-input" placeholder="教室名" autocomplete="off">
-          <div class="suggestions" id="from-sugg"></div>
-        </div>
-      </div>
-      <div class="route-row">
-        <span class="route-label">目的</span>
-        <select class="building-select" id="to-bldg">
-          <option value="">全</option>
-        </select>
-        <div class="ac-wrap">
-          <input id="to-input" placeholder="教室名" autocomplete="off">
-          <div class="suggestions" id="to-sugg"></div>
-        </div>
-      </div>
-    </div>
+    <div id="search-content" class="open">
+      <div class="search-content-inner">
 
-    <div id="panel-gps" style="display:none">
-      <div class="gps-wrapper">
-        <div class="gps-row">
-          <span id="gps-text">GPS未取得 — 右のボタンで現在地を取得</span>
-          <button class="btn-gps" onclick="captureGPS()">取得</button>
+        <!-- 教室カテゴリ -->
+        <div id="cat-content-room">
+        <div class="search-tabs" style="margin-bottom:8px;">
+          <button class="search-tab active" id="tab-room" onclick="setMode('room')">教室 → 教室</button>
+          <button class="search-tab"        id="tab-gps"  onclick="setMode('gps')">現在地(屋外) → 教室</button>
         </div>
-        <div id="accuracy-warn"></div>
-      </div>
-      <div class="route-row">
-        <span class="route-label">目的</span>
-        <select class="building-select" id="gps-to-bldg">
-          <option value="">全</option>
-        </select>
-        <div class="ac-wrap">
-          <input id="to-input-gps" placeholder="教室名" autocomplete="off">
-          <div class="suggestions" id="gps-to-sugg"></div>
-        </div>
-      </div>
-    </div>
 
-    <div class="bottom-row">
-      <label class="ev-label">
-        <input type="checkbox" id="use-elevator" checked>
-        エレベーター使用
-      </label>
-      <button id="btn-search" onclick="doSearch()">ルート検索</button>
+        <div id="panel-room">
+          <div class="route-row">
+            <span class="route-label">出発</span>
+            <select class="building-select" id="from-bldg">
+              <option value="">全</option>
+            </select>
+            <div class="ac-wrap">
+              <input id="from-input" placeholder="教室名" autocomplete="off">
+              <div class="suggestions" id="from-sugg"></div>
+            </div>
+          </div>
+          <button class="btn-swap" onclick="swapFromTo()" title="出発地と目的地を入れ替え">⇅</button>
+          <div class="route-row">
+            <span class="route-label">目的</span>
+            <select class="building-select" id="to-bldg">
+              <option value="">全</option>
+            </select>
+            <div class="ac-wrap">
+              <input id="to-input" placeholder="教室名" autocomplete="off">
+              <div class="suggestions" id="to-sugg"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="panel-gps" style="display:none">
+          <div class="gps-wrapper">
+            <div class="gps-row">
+              <span id="gps-text">GPS未取得 — 右のボタンで現在地を取得</span>
+              <button class="btn-gps" onclick="captureGPS()">取得</button>
+            </div>
+            <div id="accuracy-warn"></div>
+          </div>
+          <div class="route-row">
+            <span class="route-label">目的</span>
+            <select class="building-select" id="gps-to-bldg">
+              <option value="">全</option>
+            </select>
+            <div class="ac-wrap">
+              <input id="to-input-gps" placeholder="教室名" autocomplete="off">
+              <div class="suggestions" id="gps-to-sugg"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bottom-row">
+          <label class="ev-label">
+            <input type="checkbox" id="use-elevator" checked>
+            エレベーター使用
+          </label>
+          <button id="btn-search" onclick="doSearch()">ルート検索</button>
+        </div>
+        </div><!-- /#cat-content-room -->
+
+        <!-- 設備検索カテゴリ -->
+        <div id="cat-content-facility" style="display:none">
+
+          <!-- モードタブ -->
+          <div class="search-tabs" style="margin-bottom:8px;">
+            <button class="search-tab active" id="fac-tab-room" onclick="setFacMode('room')">教室 → 設備</button>
+            <button class="search-tab"        id="fac-tab-gps"  onclick="setFacMode('gps')">現在地(屋外) → 設備</button>
+          </div>
+
+          <!-- 教室モード: 出発(教室) -->
+          <div id="panel-fac-room">
+            <div class="route-row">
+              <span class="route-label">出発</span>
+              <select class="building-select" id="fac-from-bldg"><option value="">全</option></select>
+              <div class="ac-wrap">
+                <input id="fac-from-input" placeholder="教室名" autocomplete="off">
+                <div class="suggestions" id="fac-from-sugg"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- GPSモード: 現在地取得 -->
+          <div id="panel-fac-gps" style="display:none">
+            <div class="gps-wrapper">
+              <div class="gps-row">
+                <span id="fac-gps-text">GPS未取得 — 右のボタンで現在地を取得</span>
+                <button class="btn-gps" onclick="captureFacGPS()">取得</button>
+              </div>
+              <div id="fac-accuracy-warn"></div>
+            </div>
+          </div>
+
+          <!-- 目的: 常に表示 -->
+          <div class="route-row">
+            <span class="route-label">目的</span>
+            <select class="building-select" id="fac-category" onchange="onFacCategoryChange()">
+              <option value="toilet">トイレ</option>
+              <option value="cafeteria">食堂</option>
+            </select>
+            <select id="fac-toilet-type" style="flex:1;height:38px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:13px;color:#1E293B;background:white;padding:0 6px;cursor:pointer;">
+              <option value="all">全て</option>
+              <option value="M">男子トイレ</option>
+              <option value="F">女子トイレ</option>
+              <option value="C">多目的トイレ</option>
+            </select>
+            <select id="fac-cafeteria-name" style="flex:1;height:38px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:13px;color:#1E293B;background:white;padding:0 6px;cursor:pointer;display:none;">
+              <option value="all">全て</option>
+            </select>
+          </div>
+
+          <div class="bottom-row">
+            <label class="ev-label">
+              <input type="checkbox" id="fac-use-elevator" checked>エレベーター使用
+            </label>
+            <button id="btn-fac-search" onclick="doFacSearch()">設備検索</button>
+          </div>
+        </div><!-- /#cat-content-facility -->
+
+      </div>
     </div>
   </div>
 
@@ -552,9 +745,14 @@
 
   <!-- AR / Camera Area -->
   <div id="ar-area">
+    <video id="ar-bg-video" autoplay playsinline muted></video>
+    <canvas id="ar-gl-canvas"></canvas>
     <div id="ar-cache"></div><!-- prefetch済み <img> がここに積まれる -->
     <div id="ar-placeholder">
       <div class="ph-text">AR / Camera</div>
+      <div class="arrival-icon" style="display:none"></div>
+      <div class="arrival-title" style="display:none">目的地周辺に到達しました！</div>
+      <div class="arrival-desc" style="display:none">案内はここで終了です。<br>ご利用いただきありがとうございました。</div>
     </div>
     <div id="ar-label">進行方向</div>
     <img id="direction-arrow" src="" alt="方向矢印">
@@ -580,7 +778,7 @@
     <div class="modal-title">目的地に到着！</div>
     <p class="modal-desc">案内はここで終了です。<br>ご利用いただきありがとうございました。</p>
     <!-- ↓ アンケートURLをここに設定してください -->
-    <a class="modal-btn-survey" href="https://forms.example.com/survey" target="_blank" rel="noopener">
+    <a class="modal-btn-survey" href="https://docs.google.com/forms/d/e/1FAIpQLScPw9uoXzk2AiQamOm-zchGnQrmi9lcSFvonsVjFDnMIhU7Dg/viewform?usp=sharing&ouid=117616783174955140351" target="_blank" rel="noopener">
       アンケートに答える ↗
     </a>
     <button class="modal-btn-continue" onclick="closeCompletionModal()">引き続きナビを使う</button>
@@ -596,8 +794,10 @@
 const API_BASE = "";
 
 let map;
-let searchMode = "room";
-let gpsCoords  = null;
+let searchMode    = "room";
+let facSearchMode = "room";
+let gpsCoords     = null;
+let facGpsCoords  = null;
 let allNodes   = [];
 let allRooms   = [];        // [{room, building}, ...]
 let roomsByBuilding = {};   // {"10": ["101A", ...], ...}
@@ -657,9 +857,10 @@ function initMap() {
 // ================================================================
 async function loadAllData() {
   try {
-    const [dataRes, imgRes] = await Promise.all([
+    const [dataRes, imgRes, cafRes] = await Promise.all([
       fetch(`${API_BASE}/api/all`),
       fetch(`${API_BASE}/api/edge_images`),
+      fetch(`${API_BASE}/api/cafeterias`),
     ]);
     if (dataRes.ok) {
       const data = await dataRes.json();
@@ -669,6 +870,16 @@ async function loadAllData() {
       console.warn("API unavailable — room autocomplete disabled");
     }
     if (imgRes.ok) edgeImages = await imgRes.json();
+    if (cafRes.ok) {
+      const cafList = await cafRes.json();
+      const sel = document.getElementById("fac-cafeteria-name");
+      cafList.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value       = c.name;
+        opt.textContent = `${c.display_name}(${c.building}号館)`;
+        sel.appendChild(opt);
+      });
+    }
   } catch {
     console.warn("API unavailable — room autocomplete disabled");
   }
@@ -684,7 +895,7 @@ function initRoomData(rooms) {
   });
 
   const buildings = Object.keys(roomsByBuilding).sort((a, b) => Number(a) - Number(b));
-  ["from-bldg", "to-bldg", "gps-to-bldg"].forEach(id => {
+  ["from-bldg", "to-bldg", "gps-to-bldg", "fac-from-bldg"].forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
     buildings.forEach(b => {
@@ -698,11 +909,13 @@ function initRoomData(rooms) {
   setupAutocomplete("from-input",   "from-sugg",   "from-bldg");
   setupAutocomplete("to-input",     "to-sugg",     "to-bldg");
   setupAutocomplete("to-input-gps", "gps-to-sugg", "gps-to-bldg");
+  setupAutocomplete("fac-from-input", "fac-from-sugg", "fac-from-bldg");
 
-  [["from-bldg", "from-input"], ["to-bldg", "to-input"], ["gps-to-bldg", "to-input-gps"]].forEach(([bId, iId]) => {
+  [["from-bldg", "from-input"], ["to-bldg", "to-input"], ["gps-to-bldg", "to-input-gps"], ["fac-from-bldg", "fac-from-input"]].forEach(([bId, iId]) => {
     const sel = document.getElementById(bId);
     if (sel) sel.addEventListener("change", () => {
-      document.getElementById(iId)?.dispatchEvent(new Event("input"));
+      const inp = document.getElementById(iId);
+      if (inp) { inp.value = ""; inp.dispatchEvent(new Event("input")); }
     });
   });
 }
@@ -758,6 +971,18 @@ function setupAutocomplete(inputId, suggId, bldgSelectId) {
 // ================================================================
 // Room resolution
 // ================================================================
+function swapFromTo() {
+  const fromBldg = document.getElementById("from-bldg");
+  const toBldg   = document.getElementById("to-bldg");
+  const fromInp  = document.getElementById("from-input");
+  const toInp    = document.getElementById("to-input");
+  [fromBldg.value, toBldg.value] = [toBldg.value, fromBldg.value];
+  [fromInp.value,  toInp.value]  = [toInp.value,  fromInp.value];
+  document.getElementById("from-sugg").style.display = "none";
+  document.getElementById("to-sugg").style.display = "none";
+}
+
+// ================================================================
 function resolveRoom(inputId, bldgSelectId) {
   const inputEl = document.getElementById(inputId);
   const bldgEl  = document.getElementById(bldgSelectId);
@@ -785,6 +1010,147 @@ function setMode(mode) {
   document.getElementById("panel-gps").style.display  = mode === "gps"  ? "block" : "none";
   document.getElementById("tab-room").classList.toggle("active", mode === "room");
   document.getElementById("tab-gps").classList.toggle("active",  mode === "gps");
+  // タブ切り替え時にパネルが閉じていれば自動で開く
+  if (!searchPanelOpen && window.innerWidth < 768) toggleSearchPanel();
+}
+
+function setFacMode(mode) {
+  facSearchMode = mode;
+  document.getElementById("panel-fac-room").style.display = mode === "room" ? "block" : "none";
+  document.getElementById("panel-fac-gps").style.display  = mode === "gps"  ? "block" : "none";
+  document.getElementById("fac-tab-room").classList.toggle("active", mode === "room");
+  document.getElementById("fac-tab-gps").classList.toggle("active",  mode === "gps");
+  if (!searchPanelOpen && window.innerWidth < 768) toggleSearchPanel();
+}
+
+// ================================================================
+// Category toggle (教室 / 設備検索)
+// ================================================================
+function setCategory(cat) {
+  document.getElementById("cat-content-room").style.display     = cat === "room"     ? "block" : "none";
+  document.getElementById("cat-content-facility").style.display = cat === "facility" ? "block" : "none";
+  document.getElementById("cat-room").classList.toggle("active",     cat === "room");
+  document.getElementById("cat-facility").classList.toggle("active", cat === "facility");
+  if (!searchPanelOpen && window.innerWidth < 768) toggleSearchPanel();
+}
+
+// ================================================================
+// Facility autocomplete
+// ================================================================
+async function doToiletSearch() {
+  arRequestPermissionsEarly();
+  const params = new URLSearchParams({
+    type:         document.getElementById("fac-toilet-type").value,
+    use_elevator: document.getElementById("fac-use-elevator").checked ? "1" : "0",
+  });
+
+  if (facSearchMode === "room") {
+    const fromInfo = resolveRoom("fac-from-input", "fac-from-bldg");
+    if (!fromInfo)               { alert("出発教室を入力してください。"); return; }
+    if (fromInfo === "ambiguous") { alert("出発教室が複数の号館に存在します。号館を指定してください。"); return; }
+    params.set("from_room",     fromInfo.room);
+    params.set("from_building", fromInfo.building);
+  } else {
+    if (!facGpsCoords) { alert("GPS位置を先に取得してください。"); return; }
+    const nearest = findNearestNode(facGpsCoords.lat, facGpsCoords.lng);
+    if (!nearest) { alert("近くの出発ノードが見つかりません。"); return; }
+    params.set("from_node", nearest.id);
+  }
+
+  setLoading(true);
+  try {
+    const res = await fetch(`${API_BASE}/api/nearest_toilet?${params}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) { alert("エラー: " + data.error); return; }
+    initRoute(data.path_coords);
+  } catch {
+    document.getElementById("step-label").textContent = "サーバーに接続できません";
+    document.getElementById("step-count").textContent = "app.py が起動しているか確認してください";
+  } finally {
+    setLoading(false);
+  }
+}
+
+function onFacCategoryChange() {
+  const cat = document.getElementById("fac-category").value;
+  document.getElementById("fac-toilet-type").style.display    = cat === "toilet"    ? "" : "none";
+  document.getElementById("fac-cafeteria-name").style.display = cat === "cafeteria" ? "" : "none";
+}
+
+function doFacSearch() {
+  const cat = document.getElementById("fac-category").value;
+  if (cat === "cafeteria") doCafeteriaSearch();
+  else doToiletSearch();
+}
+
+async function doCafeteriaSearch() {
+  arRequestPermissionsEarly();
+  const params = new URLSearchParams({
+    use_elevator: document.getElementById("fac-use-elevator").checked ? "1" : "0",
+    name:         document.getElementById("fac-cafeteria-name").value,
+  });
+  if (facSearchMode === "room") {
+    const fromInfo = resolveRoom("fac-from-input", "fac-from-bldg");
+    if (!fromInfo)               { alert("出発教室を入力してください。"); return; }
+    if (fromInfo === "ambiguous") { alert("出発教室が複数の号館に存在します。号館を指定してください。"); return; }
+    params.set("from_room",     fromInfo.room);
+    params.set("from_building", fromInfo.building);
+  } else {
+    if (!facGpsCoords) { alert("GPS位置を先に取得してください。"); return; }
+    const nearest = findNearestNode(facGpsCoords.lat, facGpsCoords.lng);
+    if (!nearest) { alert("近くの出発ノードが見つかりません。"); return; }
+    params.set("from_node", nearest.id);
+  }
+  setLoading(true);
+  try {
+    const res = await fetch(`${API_BASE}/api/nearest_cafeteria?${params}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) { alert("エラー: " + data.error); return; }
+    initRoute(data.path_coords);
+  } catch {
+    document.getElementById("step-label").textContent = "サーバーに接続できません";
+    document.getElementById("step-count").textContent = "app.py が起動しているか確認してください";
+  } finally {
+    setLoading(false);
+  }
+}
+
+// ================================================================
+// Search panel slide toggle (mobile only)
+// ================================================================
+let searchPanelOpen = true;
+
+function toggleSearchPanel() {
+  searchPanelOpen = !searchPanelOpen;
+  const content = document.getElementById("search-content");
+  const inner   = document.querySelector(".search-content-inner");
+  const chevron = document.getElementById("search-chevron");
+
+  if (searchPanelOpen) {
+    content.classList.add("open");
+    chevron.classList.add("open");
+    // アニメーション完了後に overflow を解除してサジェストを表示可能にする
+    content.addEventListener("transitionend", () => {
+      inner.style.overflow = "";
+    }, { once: true });
+  } else {
+    inner.style.overflow = "hidden";
+    content.classList.remove("open");
+    chevron.classList.remove("open");
+  }
+}
+
+function collapseSearchPanel() {
+  if (!searchPanelOpen || window.innerWidth >= 768) return;
+  const content = document.getElementById("search-content");
+  const inner   = document.querySelector(".search-content-inner");
+  const chevron = document.getElementById("search-chevron");
+  inner.style.overflow = "hidden";
+  content.classList.remove("open");
+  chevron.classList.remove("open");
+  searchPanelOpen = false;
 }
 
 // ================================================================
@@ -805,6 +1171,32 @@ function captureGPS() {
     },
     () => {
       document.getElementById("gps-text").textContent = "取得失敗";
+      alert("位置情報を取得できませんでした。\nGPSが有効か確認してください。");
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+  );
+}
+
+function captureFacGPS() {
+  if (!navigator.geolocation) { alert("位置情報に対応していません。"); return; }
+  document.getElementById("fac-gps-text").textContent = "取得中...";
+  const warn = document.getElementById("fac-accuracy-warn");
+  warn.style.display = "none"; warn.className = "";
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      facGpsCoords = { lat, lng };
+      document.getElementById("fac-gps-text").textContent =
+        `${lat.toFixed(5)}, ${lng.toFixed(5)}  ±${Math.round(accuracy)}m`;
+      if (accuracy > 30) {
+        warn.style.display = "block"; warn.className = "warn-low";
+        warn.innerHTML = `GPS精度が低下しています（±${Math.round(accuracy)}m）。屋内の可能性があります。<br>`
+          + `近くの<b>部屋番号の案内板</b>を確認して教室名で検索してください。`;
+      }
+      renderGpsOnMap(lat, lng, accuracy);
+    },
+    () => {
+      document.getElementById("fac-gps-text").textContent = "取得失敗";
       alert("位置情報を取得できませんでした。\nGPSが有効か確認してください。");
     },
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
@@ -898,6 +1290,7 @@ function bearingDeg(lat1, lng1, lat2, lng2) {
 // Search
 // ================================================================
 async function doSearch() {
+  arRequestPermissionsEarly();
   const params = new URLSearchParams();
   params.set("use_elevator", document.getElementById("use-elevator").checked ? "1" : "0");
 
@@ -945,21 +1338,51 @@ function setLoading(on) {
 
 // ================================================================
 // Route image (AR area) — active クラスの付け替えで表示切り替え
+// 屋外ステップは AR カメラビューを表示、屋内は写真 or プレースホルダー
 // ================================================================
 function updateRouteImage(step) {
-  const label       = document.getElementById("ar-label");
-  const placeholder = document.getElementById("ar-placeholder");
+  const label  = document.getElementById("ar-label");
+  const phEl   = document.getElementById("ar-placeholder");
+  const node   = pathCoords[step];
+  const isLast = step >= pathCoords.length - 1;
+  const isOutdoor = node && node.building === 0 && node.lat != null && !isLast;
 
+  if (isOutdoor) {
+    Object.values(imgByStep).forEach(img => img.classList.remove("active"));
+    phEl.style.display  = "none";
+    label.style.display = "none";
+    document.getElementById("direction-arrow").style.display = "none";
+    arShowView();
+    return;
+  }
+
+  arHideView();
   Object.values(imgByStep).forEach(img => img.classList.remove("active"));
 
   const img = imgByStep[step];
-  if (img && step < pathCoords.length - 1) {
+
+  if (img && !isLast) {
     img.classList.add("active");
-    placeholder.style.display = "none";
-    label.style.display       = "block";
+    phEl.style.display  = "none";
+    label.style.display = "block";
+    phEl.classList.remove("arrival");
+    phEl.querySelectorAll(".arrival-icon,.arrival-title,.arrival-desc")
+        .forEach(el => el.style.display = "none");
+    phEl.querySelector(".ph-text").style.display = "";
+  } else if (isLast) {
+    phEl.style.display  = "flex";
+    label.style.display = "none";
+    phEl.classList.add("arrival");
+    phEl.querySelector(".ph-text").style.display = "none";
+    phEl.querySelectorAll(".arrival-icon,.arrival-title,.arrival-desc")
+        .forEach(el => el.style.display = "");
   } else {
-    placeholder.style.display = "flex";
-    label.style.display       = "none";
+    phEl.style.display  = "flex";
+    label.style.display = "none";
+    phEl.classList.remove("arrival");
+    phEl.querySelectorAll(".arrival-icon,.arrival-title,.arrival-desc")
+        .forEach(el => el.style.display = "none");
+    phEl.querySelector(".ph-text").style.display = "";
   }
   updateDirectionArrow(step);
 }
@@ -970,8 +1393,8 @@ function updateRouteImage(step) {
 // node[step+1]到着時の進む方向を計算して矢印を更新する。
 // ================================================================
 function calcTurnDirection(step) {
-  // 最後の2ステップでは次の区間がないため矢印なし
-  if (step >= pathCoords.length - 2) return null;
+  // pathCoords[step+2] が存在しない最終アプローチ区間は直進とみなす
+  if (step >= pathCoords.length - 2) return "straight";
 
   const prev = pathCoords[step];
   const cur  = pathCoords[step + 1];
@@ -1064,9 +1487,12 @@ function initRoute(coords) {
   svgBuilding = null;
   svgFloor    = null;
   svgOverlay  = null;
+  arMarkersBuilt = false;
+  arHideView();
   clearMapOverlays();
   drawFullOutdoorRoute(coords);
   prefetchRouteImages(coords);
+  collapseSearchPanel();  // ルート確定後にパネルを収納
   goToStep(0);
 }
 
@@ -1076,20 +1502,46 @@ function clearMapOverlays() {
   if (stepMarker) { stepMarker.setMap(null); stepMarker = null; }
 }
 
-function drawFullOutdoorRoute(coords) {
-  let seg = [];
+function drawFullOutdoorRoute() {
+  updateOutdoorPolylines(0);
+}
+
+function updateOutdoorPolylines(step) {
+  outdoorPolylines.forEach(p => p.setMap(null));
+  outdoorPolylines = [];
+
+  let seg = [], segIdx = [];
+
   const flush = () => {
-    if (seg.length >= 2) {
+    if (seg.length < 2) { seg = []; segIdx = []; return; }
+
+    let splitAt = -1;
+    for (let i = segIdx.length - 1; i >= 0; i--) {
+      if (segIdx[i] <= step) { splitAt = i; break; }
+    }
+
+    // 通過済み（グレー）
+    if (splitAt > 0) {
       outdoorPolylines.push(new google.maps.Polyline({
-        path: seg.map(n => ({ lat: n.lat, lng: n.lng })),
-        strokeColor: "#3B82F6", strokeOpacity: 0.75,
-        strokeWeight: 5, geodesic: true, map,
+        path: seg.slice(0, splitAt + 1).map(n => ({ lat: n.lat, lng: n.lng })),
+        strokeColor: "#9E9E9E", strokeOpacity: 0.5, strokeWeight: 5, geodesic: true, map,
       }));
     }
-    seg = [];
+
+    // これから（青）。通過済み末尾ノードを共有して線を繋ぐ
+    const aheadFrom = Math.max(0, splitAt);
+    if (aheadFrom < seg.length - 1) {
+      outdoorPolylines.push(new google.maps.Polyline({
+        path: seg.slice(aheadFrom).map(n => ({ lat: n.lat, lng: n.lng })),
+        strokeColor: "#3B82F6", strokeOpacity: 0.85, strokeWeight: 5, geodesic: true, map,
+      }));
+    }
+
+    seg = []; segIdx = [];
   };
-  coords.forEach(n => {
-    if (n.building === 0 && n.lat != null) seg.push(n);
+
+  pathCoords.forEach((n, idx) => {
+    if (n.building === 0 && n.lat != null) { seg.push(n); segIdx.push(idx); }
     else flush();
   });
   flush();
@@ -1119,8 +1571,16 @@ async function goToStep(step) {
     renderSvgStep(step);
   }
 
-  // 最終ステップに到達したら完了モーダルを表示
-  if (step === pathCoords.length - 1) showCompletionModal();
+  // Three.js AR のルートカラーを更新
+  if (arMarkersBuilt) arUpdateRouteColors(step);
+
+  // 最終ステップに到達したら一定時間後に完了モーダルを表示
+  if (step === pathCoords.length - 1) {
+    clearTimeout(window._completionTimer);
+    window._completionTimer = setTimeout(showCompletionModal, 3000); // ← 秒数はここで調整（ミリ秒）
+  } else {
+    clearTimeout(window._completionTimer);
+  }
 }
 
 function prevStep() { if (currentStep > 0) goToStep(currentStep - 1); }
@@ -1178,6 +1638,7 @@ function moveMapTo(node, step) {
   } else {
     stepMarker.setPosition(pos);
   }
+  updateOutdoorPolylines(step);
   const heading = calcRouteHeading(step);
   if (heading != null) map.setHeading(heading);
   map.setCenter(pos);
@@ -1287,16 +1748,19 @@ function renderSvgStep(step) {
   const aT  = Math.round(10 * sz);
   const aSW = Math.max(2, Math.round(3 * sz));
 
-  if (curFloorIdx > 0) {
-    const done = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-    done.classList.add("dyn");
-    done.setAttribute("points",          floorNodes.slice(0, curFloorIdx + 1).map(n => `${n.svg_x},${n.svg_y}`).join(" "));
-    done.setAttribute("stroke",          "#3B82F6");
-    done.setAttribute("stroke-width",    sw);
-    done.setAttribute("fill",            "none");
-    done.setAttribute("stroke-linecap",  "round");
-    done.setAttribute("stroke-linejoin", "round");
-    svgOverlay.appendChild(done);
+  // 通過済み部分はベースのグレーをそのまま見せる（done polyline は描かない）
+
+  // 残り経路（現在地 → 終点）を青で上書き
+  if (curFloorIdx < floorNodes.length - 1) {
+    const ahead = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    ahead.classList.add("dyn");
+    ahead.setAttribute("points",          floorNodes.slice(curFloorIdx).map(n => `${n.svg_x},${n.svg_y}`).join(" "));
+    ahead.setAttribute("stroke",          "#3B82F6");
+    ahead.setAttribute("stroke-width",    sw);
+    ahead.setAttribute("fill",            "none");
+    ahead.setAttribute("stroke-linecap",  "round");
+    ahead.setAttribute("stroke-linejoin", "round");
+    svgOverlay.appendChild(ahead);
   }
 
   floorNodes.forEach((n, idx) => {
@@ -1305,9 +1769,11 @@ function renderSvgStep(step) {
     c.classList.add("dyn");
     c.setAttribute("cx", n.svg_x); c.setAttribute("cy", n.svg_y);
     if (idx < curFloorIdx) {
-      c.setAttribute("r", rP); c.setAttribute("fill", "#3B82F6"); c.setAttribute("fill-opacity", "0.85");
+      // 通過済み: 小さいグレードット
+      c.setAttribute("r", rF); c.setAttribute("fill", "#9E9E9E"); c.setAttribute("fill-opacity", "0.6");
     } else {
-      c.setAttribute("r", rF); c.setAttribute("fill", "#94A3B8"); c.setAttribute("fill-opacity", "0.75");
+      // これから: 青ドット
+      c.setAttribute("r", rF); c.setAttribute("fill", "#3B82F6"); c.setAttribute("fill-opacity", "0.75");
     }
     svgOverlay.appendChild(c);
   });
@@ -1323,8 +1789,11 @@ function renderSvgStep(step) {
 
   const halo = document.createElementNS("http://www.w3.org/2000/svg", "circle");
   halo.classList.add("dyn");
-  halo.setAttribute("cx", curNode.svg_x); halo.setAttribute("cy", curNode.svg_y);
-  halo.setAttribute("r", rH); halo.setAttribute("fill", "white"); halo.setAttribute("fill-opacity", "0.90");
+  const haloOffset = Math.round(12 * sz);
+  const angleRad = angle * Math.PI / 180;
+  halo.setAttribute("cx", curNode.svg_x + Math.round(Math.cos(angleRad) * haloOffset));
+  halo.setAttribute("cy", curNode.svg_y + Math.round(Math.sin(angleRad) * haloOffset));
+  halo.setAttribute("r", rH); halo.setAttribute("fill", "#32CD32"); halo.setAttribute("fill-opacity", "0.5");
   svgOverlay.appendChild(halo);
 
   const arrow = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
@@ -1399,6 +1868,329 @@ function initSvgPan() {
 
 // 初期化
 initSvgPan();
+
+// プルトゥリフレッシュ防止（overscroll-behavior非対応ブラウザ向けフォールバック）
+document.addEventListener("touchstart", e => {
+  if (e.touches.length > 1) return; // ピンチ操作は許可
+  if (e.touches[0].clientY <= 20) e.preventDefault(); // 画面最上部からのスワイプのみ阻止
+}, { passive: false });
+</script>
+
+<script>
+// ================================================================
+// AR Outdoor Integration
+// Three.js + カメラ + ジャイロ を #ar-area 内で動かす。
+// 屋外ステップ到達時に arShowView()、屋内に戻ったら arHideView() を呼ぶ。
+// ================================================================
+const AR_THREE_CDN  = "https://cdn.jsdelivr.net/npm/three@0.137.0/build/three.min.js";
+const AR_EYE_HEIGHT = 1.6;
+const AR_NODE_R     = 0.5;
+const AR_EDGE_R     = 0.12;
+const AR_NODE_COLOR = 0x22D3EE;
+const AR_EDGE_COLOR = 0x3B82F6;
+const AR_CAMERA_FOV = 65;
+const AR_TILT_DEG   = 15;
+
+let arPermissionsRequested = false;
+let arOrientAttached = false;
+let arOrientCount    = 0;
+let arHaveAbsolute   = false;
+let arGOrient        = null;
+
+let arStream       = null;
+let arRenderer     = null;
+let arScene3       = null;
+let arCamera3      = null;
+let arWorldGroup   = null;
+let arRefLat       = null;
+let arRefLng       = null;
+let arUserLat      = null;
+let arUserLng      = null;
+let arGpsWatchId   = null;
+let arRunning      = false;
+let arBooting      = false;
+let arMarkersBuilt = false;
+
+let _arMeshes = [];   // { mesh, type: "node"|"edge", idx } — per-step color update
+
+let _arZee, _arEuler, _arQ0, _arQ1;
+
+function arLoadThree() {
+  return new Promise((resolve, reject) => {
+    if (typeof THREE !== "undefined") { resolve(); return; }
+    const s = document.createElement("script");
+    s.src = AR_THREE_CDN;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+function arAttachOrientation() {
+  if (arOrientAttached) return;
+  arOrientAttached = true;
+  const onAbsolute = (e) => {
+    if (e.alpha == null) return;
+    arHaveAbsolute = true;
+    arGOrient = e;
+    arOrientCount++;
+  };
+  const onRelative = (e) => {
+    if (arHaveAbsolute && typeof e.webkitCompassHeading !== "number") return;
+    arGOrient = e;
+    arOrientCount++;
+  };
+  window.addEventListener("deviceorientationabsolute", onAbsolute);
+  window.addEventListener("deviceorientation",         onRelative);
+}
+
+// 検索ボタン押下（ユーザー操作コンテキスト）で呼ぶ。
+// iOS の DeviceOrientationEvent.requestPermission は同期的に
+// ユーザー操作内で呼ばないと許可ダイアログが出ないため、ここで先取りする。
+function arRequestPermissionsEarly() {
+  if (arPermissionsRequested) return;
+  arPermissionsRequested = true;
+
+  // Three.js を並行ロード（画面切り替え時のもたつきを減らす）
+  arLoadThree().catch(() => {});
+
+  // iOS 向け向きセンサー許可（ユーザー操作コンテキスト内で同期呼び出し必須）
+  if (typeof DeviceOrientationEvent !== "undefined" &&
+      typeof DeviceOrientationEvent.requestPermission === "function") {
+    DeviceOrientationEvent.requestPermission()
+      .then(state => { if (state === "granted") arAttachOrientation(); })
+      .catch(() => {});
+  } else {
+    arAttachOrientation();
+  }
+
+  // カメラ許可の先取り（ストリームをキャッシュしておく）
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+      .then(stream => { arStream = stream; })
+      .catch(() => {});
+  }
+}
+
+function arEnsureRenderer() {
+  if (arRenderer || typeof THREE === "undefined") return;
+
+  const canvas = document.getElementById("ar-gl-canvas");
+  arRenderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  arRenderer.setClearColor(0x000000, 0);
+
+  arScene3 = new THREE.Scene();
+  arCamera3 = new THREE.PerspectiveCamera(AR_CAMERA_FOV, 1, 0.1, 5000);
+  arCamera3.position.set(0, AR_EYE_HEIGHT, 0);
+
+  arWorldGroup = new THREE.Group();
+  arScene3.add(arWorldGroup);
+  arScene3.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+  _arZee  = new THREE.Vector3(0, 0, 1);
+  _arEuler = new THREE.Euler();
+  _arQ0   = new THREE.Quaternion();
+  _arQ1   = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+
+  window.addEventListener("resize",            arResizeCanvas);
+  window.addEventListener("orientationchange", () => setTimeout(arResizeCanvas, 300));
+  arResizeCanvas();
+}
+
+function arResizeCanvas() {
+  if (!arRenderer || !arCamera3) return;
+  const area = document.getElementById("ar-area");
+  if (!area) return;
+  const w = area.clientWidth, h = area.clientHeight;
+  if (!w || !h) return;
+  arRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  arRenderer.setSize(w, h, false);
+  arCamera3.aspect = w / h;
+  arCamera3.updateProjectionMatrix();
+}
+
+function arEnuFromRef(lat, lng) {
+  const north = (lat - arRefLat) * 111320;
+  const east  = (lng - arRefLng) * 111320 * Math.cos(arRefLat * Math.PI / 180);
+  return { east, north };
+}
+
+function arUpdateWorldPosition(lat, lng) {
+  if (arRefLat == null || !arWorldGroup) return;
+  const { east, north } = arEnuFromRef(lat, lng);
+  arWorldGroup.position.set(-east, 0, north);
+}
+
+// pathCoords から屋外区間のノード・エッジを Three.js シーンに配置する
+function arBuildRouteMarkers() {
+  if (!arWorldGroup || typeof THREE === "undefined") return;
+  while (arWorldGroup.children.length) arWorldGroup.remove(arWorldGroup.children[0]);
+  _arMeshes = [];
+
+  const outdoorNodes = pathCoords.filter(
+    n => n.building === 0 && n.lat != null && n.lng != null
+  );
+  if (!outdoorNodes.length) return;
+
+  arRefLat = outdoorNodes[0].lat;
+  arRefLng = outdoorNodes[0].lng;
+
+  const pos       = {};
+  const sphereGeo = new THREE.SphereGeometry(AR_NODE_R, 24, 16);
+
+  outdoorNodes.forEach((n, localIdx) => {
+    const globalIdx = pathCoords.indexOf(n);
+    const { east, north } = arEnuFromRef(n.lat, n.lng);
+    const x = east, z = -north;
+    pos[n.id] = { x, z };
+    const mat    = new THREE.MeshBasicMaterial({ color: AR_NODE_COLOR });
+    const sphere = new THREE.Mesh(sphereGeo, mat);
+    sphere.position.set(x, 0, z);
+    arWorldGroup.add(sphere);
+    _arMeshes.push({ mesh: sphere, mat, type: "node", idx: globalIdx });
+  });
+
+  const up = new THREE.Vector3(0, 1, 0);
+  for (let i = 0; i < pathCoords.length - 1; i++) {
+    const a = pathCoords[i], b = pathCoords[i + 1];
+    if (a.building !== 0 || b.building !== 0 || a.lat == null || b.lat == null) continue;
+    const pa = pos[a.id], pb = pos[b.id];
+    if (!pa || !pb) continue;
+    const dx = pb.x - pa.x, dz = pb.z - pa.z;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.01) continue;
+    const geo = new THREE.CylinderGeometry(AR_EDGE_R, AR_EDGE_R, len, 12);
+    const mat = new THREE.MeshBasicMaterial({
+      color: AR_EDGE_COLOR, transparent: true, opacity: 0.85
+    });
+    const cyl = new THREE.Mesh(geo, mat);
+    cyl.position.set(pa.x + dx / 2, 0, pa.z + dz / 2);
+    cyl.quaternion.setFromUnitVectors(up, new THREE.Vector3(dx, 0, dz).normalize());
+    arWorldGroup.add(cyl);
+    _arMeshes.push({ mesh: cyl, mat, type: "edge", idx: i });
+  }
+
+  if (arUserLat != null) arUpdateWorldPosition(arUserLat, arUserLng);
+  arMarkersBuilt = true;
+}
+
+// 現在ステップに合わせてノード・エッジを通過済み(グレー) / これから(青) に塗り替える
+function arUpdateRouteColors(step) {
+  const PASSED_NODE = 0x9E9E9E;
+  const AHEAD_NODE  = AR_NODE_COLOR;     // 0x22D3EE
+  const PASSED_EDGE = 0x9E9E9E;
+  const AHEAD_EDGE  = AR_EDGE_COLOR;     // 0x3B82F6
+  const PASSED_OPACITY = 0.35;
+  const AHEAD_OPACITY  = 0.85;
+
+  _arMeshes.forEach(({ mat, type, idx }) => {
+    const passed = idx < step;
+    if (type === "node") {
+      mat.color.setHex(passed ? PASSED_NODE : AHEAD_NODE);
+    } else {
+      mat.color.setHex(passed ? PASSED_EDGE : AHEAD_EDGE);
+      mat.opacity = passed ? PASSED_OPACITY : AHEAD_OPACITY;
+    }
+  });
+}
+
+function arScreenAngle() {
+  const a = screen.orientation && screen.orientation.angle;
+  return ((a != null ? a : window.orientation) || 0) * Math.PI / 180;
+}
+
+function arUpdateCameraOrientation() {
+  const e = arGOrient;
+  if (!e || !arCamera3) return;
+
+  let headingDeg;
+  if (typeof e.webkitCompassHeading === "number") {
+    headingDeg = 360 - e.webkitCompassHeading;
+  } else {
+    headingDeg = e.alpha || 0;
+  }
+
+  const alpha  = headingDeg * Math.PI / 180;
+  const beta   = ((e.beta  || 0) + AR_TILT_DEG) * Math.PI / 180;
+  const gamma  = (e.gamma  || 0) * Math.PI / 180;
+  const orient = arScreenAngle();
+
+  _arEuler.set(beta, alpha, -gamma, "YXZ");
+  const q = arCamera3.quaternion;
+  q.setFromEuler(_arEuler);
+  q.multiply(_arQ1);
+  q.multiply(_arQ0.setFromAxisAngle(_arZee, -orient));
+}
+
+function arAnimate() {
+  if (!arRunning) return;
+  requestAnimationFrame(arAnimate);
+  arUpdateCameraOrientation();
+  arRenderer.render(arScene3, arCamera3);
+}
+
+async function arShowView() {
+  if (arRunning || arBooting) return;
+  arBooting = true;
+
+  try {
+    await arLoadThree();
+  } catch {
+    arBooting = false;
+    return;
+  }
+  if (!arBooting) return;
+
+  arEnsureRenderer();
+
+  const video = document.getElementById("ar-bg-video");
+  if (!video.srcObject) {
+    if (arStream) {
+      video.srcObject = arStream;
+    } else {
+      try {
+        const s = await navigator.mediaDevices.getUserMedia(
+          { video: { facingMode: "environment" } }
+        );
+        if (!arBooting) { s.getTracks().forEach(t => t.stop()); return; }
+        arStream = s;
+        video.srcObject = s;
+      } catch { /* カメラ利用不可 */ }
+    }
+  }
+  if (!arBooting) return;
+
+  // AR用GPS継続追跡（初回のみ開始）
+  if (!arGpsWatchId && navigator.geolocation) {
+    arGpsWatchId = navigator.geolocation.watchPosition(
+      pos => {
+        arUserLat = pos.coords.latitude;
+        arUserLng = pos.coords.longitude;
+        arUpdateWorldPosition(arUserLat, arUserLng);
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 27000 }
+    );
+  }
+
+  document.getElementById("ar-bg-video").style.display = "block";
+  document.getElementById("ar-gl-canvas").style.display = "block";
+
+  if (!arMarkersBuilt) arBuildRouteMarkers();
+  arResizeCanvas();
+
+  arRunning = true;
+  arBooting = false;
+  arAnimate();
+}
+
+function arHideView() {
+  arBooting = false;
+  if (!arRunning) return;
+  arRunning = false;
+  document.getElementById("ar-bg-video").style.display = "none";
+  document.getElementById("ar-gl-canvas").style.display = "none";
+}
 </script>
 
 <script>

@@ -23,6 +23,8 @@ data/
 ├── global_node.csv          # 屋外ノード ＋ アンカー参照座標（グローバル座標）
 ├── global_edge.csv          # 屋外エッジ（屋外ノード間・建物との接続）
 ├── connect_edge.csv         # 建物間直接接続エッジ（グローバルIDで記述、屋外ノード不要の場合）
+├── edge_image.csv           # エッジ→AR経路画像のマッピング（CDNファイル名）
+├── cafeteria_edge.csv       # 食堂情報（name / building / display_name）
 ├── buildings.json           # 各建物の座標変換パラメータ（手動設定・微調整用）
 └── anchors.csv              # アンカーノード対応表（自動変換パラメータ計算用）
 ```

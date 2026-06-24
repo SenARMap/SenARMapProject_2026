@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>屋外ARテスト | IKU NAVI</title>
+  <link rel="icon" href="../images/favicon.ico">
+
+  <!-- A-Frame + AR.js (ロケーションベースAR) -->
+  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif; }
+
+    /* 上部HUD */
+    #hud {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    #btn-back {
+      flex-shrink: 0;
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      color: white; font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      text-decoration: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #hud-status { flex: 1; min-width: 0; }
+    #gps-status {
+      font-size: 13px; font-weight: 600; color: white;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #marker-status { font-size: 11px; color: #CBD5E1; margin-top: 2px; }
+
+    /* 開始オーバーレイ — iOSのセンサー許可はユーザー操作起点が必須 */
+    #start-overlay {
+      position: fixed; inset: 0; z-index: 2000;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px;
+      padding: 24px; text-align: center;
+      background: rgba(15, 23, 42, 0.92);
+      color: white;
+    }
+    #start-overlay h1 { font-size: 20px; font-weight: 800; }
+    #start-overlay p  { font-size: 13px; color: #CBD5E1; line-height: 1.8; }
+    #btn-start {
+      margin-top: 8px;
+      height: 48px; padding: 0 36px;
+      border: none; border-radius: 12px;
+      background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+      color: white; font-size: 16px; font-weight: 700;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<!-- 開始オーバーレイ -->
+<div id="start-overlay">
+  <h1>屋外ARテスト</h1>
+  <p>
+    カメラ・位置情報・モーションセンサーの<br>
+    アクセスを許可してください。<br><br>
+    現在地の北10mに赤、東10mに青のボックスが出ます。<br>
+    キャンパス内では屋外ルートノードも表示されます。
+  </p>
+  <button id="btn-start">ARを開始</button>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <a id="btn-back" href="index.html" aria-label="ナビに戻る">←</a>
+  <div id="hud-status">
+    <div id="gps-status">GPS取得待ち...</div>
+    <div id="marker-status">マーカー: 0個</div>
+  </div>
+</div>
+
+<!-- ARシーン -->
+<a-scene
+  vr-mode-ui="enabled: false"
+  arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
+  renderer="antialias: true; alpha: true">
+  <a-camera id="ar-camera" gps-new-camera="gpsMinDistance: 3"></a-camera>
+</a-scene>
+
+<script>
+// ================================================================
+// テキスト等を常にカメラへ向けるビルボードコンポーネント
+// ================================================================
+AFRAME.registerComponent("face-camera", {
+  tick: function () {
+    const cam = document.getElementById("ar-camera");
+    if (cam) this.el.object3D.lookAt(cam.object3D.position);
+  },
+});
+
+// ================================================================
+// State
+// ================================================================
+const API_BASE = "";
+const scene  = document.querySelector("a-scene");
+const camEl  = document.getElementById("ar-camera");
+let firstFix     = false;
+let markerCount  = 0;
+
+// ================================================================
+// 開始ボタン — iOS 13+ はユーザー操作からのセンサー許可要求が必須
+// ================================================================
+document.getElementById("btn-start").addEventListener("click", async () => {
+  try {
+    if (typeof DeviceOrientationEvent !== "undefined" &&
+        typeof DeviceOrientationEvent.requestPermission === "function") {
+      await DeviceOrientationEvent.requestPermission();
+    }
+  } catch (e) {
+    console.warn("センサー許可の取得に失敗:", e);
+  }
+  document.getElementById("start-overlay").style.display = "none";
+});
+
+// ================================================================
+// GPS更新 — 初回フィックスでマーカーを配置
+// ================================================================
+camEl.addEventListener("gps-camera-update-position", (e) => {
+  const { latitude: lat, longitude: lng } = e.detail.position;
+  document.getElementById("gps-status").textContent =
+    `GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+  if (!firstFix) {
+    firstFix = true;
+    addTestMarkers(lat, lng);
+    loadCampusNodes();
+  }
+});
+
+// ================================================================
+// マーカー生成ヘルパー
+// ================================================================
+function offsetCoord(lat, lng, northM, eastM) {
+  // 短距離用の簡易換算（緯度1度 ≒ 111,320m）
+  return {
+    lat: lat + northM / 111320,
+    lng: lng + eastM / (111320 * Math.cos(lat * Math.PI / 180)),
+  };
+}
+
+function addMarker(lat, lng, { shape = "sphere", color = "#22D3EE", label = "" } = {}) {
+  const ent = document.createElement("a-entity");
+  ent.setAttribute("gps-new-entity-place", `latitude: ${lat}; longitude: ${lng}`);
+
+  const body = document.createElement(shape === "box" ? "a-box" : "a-sphere");
+  if (shape === "box") {
+    body.setAttribute("width", 1.5);
+    body.setAttribute("height", 1.5);
+    body.setAttribute("depth", 1.5);
+  } else {
+    body.setAttribute("radius", 0.6);
+  }
+  body.setAttribute("color", color);
+  body.setAttribute("position", "0 1.5 0");
+  ent.appendChild(body);
+
+  // 注意: A-Frame標準フォントは日本語非対応のためラベルは英数字のみ
+  if (label) {
+    const text = document.createElement("a-text");
+    text.setAttribute("value", label);
+    text.setAttribute("align", "center");
+    text.setAttribute("color", "white");
+    text.setAttribute("scale", "8 8 8");
+    text.setAttribute("position", "0 3.2 0");
+    text.setAttribute("side", "double");
+    text.setAttribute("face-camera", "");
+    ent.appendChild(text);
+  }
+
+  scene.appendChild(ent);
+  markerCount++;
+  document.getElementById("marker-status").textContent = `マーカー: ${markerCount}個`;
+}
+
+// ================================================================
+// テスト用マーカー — 現在地基準なのでキャンパス外でも動作確認できる
+// ================================================================
+function addTestMarkers(lat, lng) {
+  const north = offsetCoord(lat, lng, 10, 0);
+  const east  = offsetCoord(lat, lng, 0, 10);
+  addMarker(north.lat, north.lng, { shape: "box", color: "#EF4444", label: "N 10m" });
+  addMarker(east.lat,  east.lng,  { shape: "box", color: "#3B82F6", label: "E 10m" });
+}
+
+// ================================================================
+// キャンパスの屋外ノードをAPIから取得して配置
+// ================================================================
+async function loadCampusNodes() {
+  try {
+    const res = await fetch(`${API_BASE}/api/all`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const outdoor = (data.nodes || []).filter(
+      (n) => n.building === 0 && n.lat != null && n.lng != null
+    );
+    outdoor.forEach((n) => {
+      // 屋外ノードIDはオフセット(9,000,000)付きなので表示用に短縮
+      const shortId = n.id >= 9000000 ? n.id - 9000000 : n.id;
+      addMarker(n.lat, n.lng, { color: "#22D3EE", label: `node ${shortId}` });
+    });
+    if (!outdoor.length) {
+      document.getElementById("marker-status").textContent += "（屋外ノードなし）";
+    }
+  } catch {
+    document.getElementById("marker-status").textContent += "（API未接続 — テスト用のみ）";
+  }
+}
+</script>
+</body>
+</html>
