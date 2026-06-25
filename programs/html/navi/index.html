@@ -1428,6 +1428,12 @@ function calcTurnDirection(step) {
   const c = pathCoords[curIdx];
   const n = pathCoords[nextIdx];
 
+  // 異なるフロア・建物間ではSVG座標系が別物なので比較不能 → 直進とみなす
+  if (p.building !== c.building || p.floor !== c.floor ||
+      c.building !== n.building || c.floor !== n.floor) {
+    return "straight";
+  }
+
   const inAngle  = Math.atan2(c.svg_y - p.svg_y, c.svg_x - p.svg_x) * 180 / Math.PI;
   const outAngle = Math.atan2(n.svg_y - c.svg_y, n.svg_x - c.svg_x) * 180 / Math.PI;
   const turnDeg  = ((outAngle - inAngle + 540) % 360) - 180;
@@ -1785,6 +1791,17 @@ function renderSvgStep(step) {
     angle = Math.atan2(nextNode.svg_y - curNode.svg_y, nextNode.svg_x - curNode.svg_x) * 180 / Math.PI;
   } else if (prevNode) {
     angle = Math.atan2(curNode.svg_y - prevNode.svg_y, curNode.svg_x - prevNode.svg_x) * 180 / Math.PI;
+  } else {
+    // このフロアにsvg_xノードが1つだけ — ワールド座標で進行方向を推定
+    // ワールド座標系↔SVG座標系の対応: SVG方向 = (world_dy, -world_dx)
+    const ahead  = pathCoords.slice(step + 1).find(n => Math.abs(n.x - curNode.x) + Math.abs(n.y - curNode.y) > 0.01);
+    const behind = [...pathCoords.slice(0, step)].reverse().find(n => Math.abs(n.x - curNode.x) + Math.abs(n.y - curNode.y) > 0.01);
+    const ref = ahead || behind;
+    if (ref) {
+      const dx = ahead ? ref.x - curNode.x : curNode.x - ref.x;
+      const dy = ahead ? ref.y - curNode.y : curNode.y - ref.y;
+      angle = Math.atan2(-dx, dy) * 180 / Math.PI;
+    }
   }
 
   const halo = document.createElementNS("http://www.w3.org/2000/svg", "circle");
