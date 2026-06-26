@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-CONFIG_FILE="/project/programs/html/config.js"
+CONFIG_FILE="/project/programs/html/navi/script/config.js"
 
 echo "const CONFIG = {" > "$CONFIG_FILE"
 echo "  GOOGLE_MAPS_API_KEY: \"${GOOGLE_MAPS_API_KEY}\"" >> "$CONFIG_FILE"
