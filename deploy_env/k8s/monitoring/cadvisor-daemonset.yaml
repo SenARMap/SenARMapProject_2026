@@ -27,6 +27,8 @@ spec:
             - --max_housekeeping_interval=15s
             - --event_storage_event_limit=default=0
             - --event_storage_age_limit=default=0
+            # k3s は containerd を使用するため socket パスを指定
+            - --containerd=/run/k3s/containerd/containerd.sock
           securityContext:
             privileged: true
           resources:
@@ -46,8 +48,8 @@ spec:
             - name: sys
               mountPath: /sys
               readOnly: true
-            - name: docker
-              mountPath: /var/lib/docker
+            - name: containerd
+              mountPath: /run/k3s/containerd
               readOnly: true
             - name: disk
               mountPath: /dev/disk
@@ -62,9 +64,9 @@ spec:
         - name: sys
           hostPath:
             path: /sys
-        - name: docker
+        - name: containerd
           hostPath:
-            path: /var/lib/docker
+            path: /run/k3s/containerd
         - name: disk
           hostPath:
             path: /dev/disk

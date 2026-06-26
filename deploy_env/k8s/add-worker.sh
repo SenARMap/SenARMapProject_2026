@@ -1,17 +1,21 @@
 #!/bin/bash
 # masterノードで実行する
-# 新しいworkerノードに渡すjoinコマンドを生成する
+# 新しいworkerノードに渡すjoinコマンドを生成する（k3s用）
 set -e
 
-echo "==> 新しいworkerノード用のjoinコマンドを生成します..."
+MASTER_IP="${1:-}"
+
+if [ -z "$MASTER_IP" ]; then
+  echo "使い方: bash add-worker.sh <masterの追加ネットワークIP>"
+  echo "  例:  bash add-worker.sh 10.10.10.208"
+  exit 1
+fi
+
+TOKEN=$(cat /var/lib/rancher/k3s/server/node-token)
+
+echo "【新しいVPSで以下を実行してください】"
 echo ""
-echo "【新しいVPSで以下を順番に実行してください】"
+echo "curl -sfL https://get.k3s.io | K3S_URL=https://${MASTER_IP}:6443 K3S_TOKEN=${TOKEN} sh -"
 echo ""
-echo "# 1. ノードのセットアップ（所要時間: 約3分）"
-echo "bash setup-node.sh"
-echo ""
-echo "# 2. クラスターに参加"
-kubeadm token create --print-join-command --ttl 1h
-echo ""
-echo "# 3. 参加を確認（masterで実行）"
+echo "【参加確認（masterで）】"
 echo "kubectl get nodes"

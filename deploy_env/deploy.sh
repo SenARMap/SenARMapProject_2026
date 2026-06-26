@@ -70,6 +70,7 @@ sudo apt-get install -y containerd kubeadm kubelet kubectl
 echo "==> Adding current user to the docker group..."
 sudo usermod -aG docker $USER
 
+<< COMMENTOUT
 echo "==> Creating 2GB swap space..."
 if [ ! -f /swapfile ]; then
     sudo fallocate -l 2G /swapfile
@@ -81,6 +82,7 @@ if [ ! -f /swapfile ]; then
 else
     echo "Swap space already exists."
 fi
+COMMENTOUT
 
 echo "=================================================="
 echo "Setup completed successfully!"
