@@ -16,6 +16,7 @@ resources:
   - app/counter-service.yaml
   - app/db-statefulset.yaml
   - app/db-service.yaml
+  - app/auto-update-cronjob.yaml
 
   # Cloudflare Tunnel
   - tunnel/cloudflared-deployment.yaml

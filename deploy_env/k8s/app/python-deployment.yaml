@@ -18,6 +18,7 @@ spec:
       containers:
         - name: python
           image: ghcr.io/senarmaporg/iki_project_2026_python:latest
+          imagePullPolicy: Always
           command: ["gunicorn", "-w", "4", "-b", "0.0.0.0:8000", "app:app"]
           ports:
             - containerPort: 8000
