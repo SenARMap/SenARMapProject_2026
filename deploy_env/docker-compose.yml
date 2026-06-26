@@ -12,7 +12,6 @@ services:
     build: ./nginx/
     container_name: 'iki_project_2026_nginx'
     volumes:
-      - ./nginx/ssl/:/etc/nginx/certs/
       - ../:/project/
     depends_on:
       - counter
