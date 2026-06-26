@@ -19,9 +19,18 @@ sudo kubeadm init \
   --pod-network-cidr=10.244.0.0/16
 
 echo "==> [2/3] kubectl の設定..."
-mkdir -p "$HOME/.kube"
-sudo cp /etc/kubernetes/admin.conf "$HOME/.kube/config"
-sudo chown "$(id -u):$(id -g)" "$HOME/.kube/config"
+# rootでも使えるように設定
+mkdir -p /root/.kube
+cp /etc/kubernetes/admin.conf /root/.kube/config
+
+# project-prod ユーザーでも kubectl を使えるように設定
+# 日常操作は project-prod で行うこと（rootは使わない）
+if id "project-prod" &>/dev/null; then
+  mkdir -p /home/project-prod/.kube
+  cp /etc/kubernetes/admin.conf /home/project-prod/.kube/config
+  chown -R project-prod:project-prod /home/project-prod/.kube
+  echo "project-prod ユーザーにも kubectl を設定しました"
+fi
 
 echo "==> [3/3] CNIプラグイン（Calico）インストール..."
 # Calico: Flannel と違い NetworkPolicy（Pod間の通信制限）に対応
