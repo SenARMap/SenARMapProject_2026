@@ -1,18 +1,12 @@
 services:
   python:
-    image: iki_project_2026_python
-    build: ./python/
+    image: ghcr.io/senarmaporg/iki_project_2026_python:6f6e0f9
     container_name: 'iki_project_2026_python'
-    volumes:
-      - ../:/project/
     command: gunicorn -w 10 -b 0.0.0.0:8000 app:app
     
   nginx:
-    image: iki_project_2026_nginx
-    build: ./nginx/
+    image: ghcr.io/senarmaporg/iki_project_2026_nginx:6f6e0f9
     container_name: 'iki_project_2026_nginx'
-    volumes:
-      - ../:/project/
     depends_on:
       - counter
       
