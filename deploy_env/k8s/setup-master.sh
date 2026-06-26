@@ -1,22 +1,61 @@
 #!/bin/bash
-# masterノードで実行するスクリプト（k3s用）
-# すでにk3sが入っている場合は不要
+# masterノードのみで実行するスクリプト
+# setup-node.sh を実行した後に実行すること
 set -e
 
-echo "==> [1/2] スワップを無効化（K8s必須要件）..."
-sudo swapoff -a
-sudo sed -i '/swap/d' /etc/fstab
+PRIVATE_IP="${1:-}"
 
-echo "==> [2/2] k3s（masterモード）をインストール..."
-curl -sfL https://get.k3s.io | sh -
+if [ -z "$PRIVATE_IP" ]; then
+  echo "使い方: bash setup-master.sh <追加ネットワークのIP>"
+  echo "  例:  bash setup-master.sh 10.10.10.208"
+  echo ""
+  echo "IPアドレスは「ip a」で eth1 のアドレスを確認してください"
+  exit 1
+fi
+
+echo "==> [1/3] K8sクラスターを初期化します (API endpoint: ${PRIVATE_IP})..."
+sudo kubeadm init \
+  --apiserver-advertise-address="${PRIVATE_IP}" \
+  --pod-network-cidr=10.244.0.0/16
+
+echo "==> [2/3] kubectl の設定..."
+mkdir -p "$HOME/.kube"
+sudo cp /etc/kubernetes/admin.conf "$HOME/.kube/config"
+sudo chown "$(id -u):$(id -g)" "$HOME/.kube/config"
+
+echo "==> [3/3] CNIプラグイン（Calico）インストール..."
+# Calico: Flannel と違い NetworkPolicy（Pod間の通信制限）に対応
+kubectl create -f \
+  https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/tigera-operator.yaml
+
+kubectl apply -f - <<EOF
+apiVersion: operator.tigera.io/v1
+kind: Installation
+metadata:
+  name: default
+spec:
+  calicoNetwork:
+    ipPools:
+      - name: default-ipv4-ippool
+        cidr: 10.244.0.0/16
+        encapsulation: VXLANCrossSubnet
+        natOutgoing: Enabled
+        nodeSelector: all()
+---
+apiVersion: operator.tigera.io/v1
+kind: APIServer
+metadata:
+  name: default
+spec: {}
+EOF
 
 echo ""
 echo "=================================================="
-echo "k3s masterセットアップ完了！"
+echo "masterセットアップ完了！"
 echo ""
-echo "クラスター確認:"
+echo "ノードのReady確認（1〜2分かかります）:"
 echo "  kubectl get nodes"
 echo ""
-echo "workerノードを追加する場合:"
-echo "  bash add-worker.sh <このサーバーの追加ネットワークIP>"
+echo "workerを追加する場合:"
+echo "  bash add-worker.sh"
 echo "=================================================="
