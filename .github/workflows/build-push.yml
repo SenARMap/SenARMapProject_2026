@@ -36,8 +36,8 @@ jobs:
           file: ./deploy_env/python/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/iki_project_2026_python:latest
-            ghcr.io/${{ github.repository_owner }}/iki_project_2026_python:${{ steps.vars.outputs.sha_short }}
+            ghcr.io/senarmaporg/iki_project_2026_python:latest
+            ghcr.io/senarmaporg/iki_project_2026_python:${{ steps.vars.outputs.sha_short }}
 
       - name: Build and push Nginx image
         uses: docker/build-push-action@v5
@@ -46,5 +46,5 @@ jobs:
           file: ./deploy_env/nginx/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/iki_project_2026_nginx:latest
-            ghcr.io/${{ github.repository_owner }}/iki_project_2026_nginx:${{ steps.vars.outputs.sha_short }}
+            ghcr.io/senarmaporg/iki_project_2026_nginx:latest
+            ghcr.io/senarmaporg/iki_project_2026_nginx:${{ steps.vars.outputs.sha_short }}
