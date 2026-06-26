@@ -1,6 +1,8 @@
 #!/bin/sh
 set -e
 
+mkdir /project/programs/html/navi/script/
+
 CONFIG_FILE="/project/programs/html/navi/script/config.js"
 
 echo "const CONFIG = {" > "$CONFIG_FILE"
