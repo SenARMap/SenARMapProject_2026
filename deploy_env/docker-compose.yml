@@ -29,9 +29,7 @@ services:
       retries: 15
 
   counter:
-    build:
-      context: ./Counters
-    container_name: 'iki_project_2026_counter'
+    image: ghcr.io/senarmaporg/iki_project_2026_counter:latest
     environment:
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
       DB_HOST: db
