@@ -9,4 +9,4 @@ RUN find /project -type d -exec chmod 755 {} \; && \
 
 COPY deploy_env/nginx/errors/ /etc/nginx/errors/
 
-COPY deploy_env/nginx/nginx.conf /etc/nginx/nginx.conf
+COPY deploy_env/nginx/nginx.conf /etc/nginx/conf.d/default.conf
