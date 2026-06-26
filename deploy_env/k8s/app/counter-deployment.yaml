@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: counter
+  namespace: iki-project
+  labels:
+    app: counter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: counter
+  template:
+    metadata:
+      labels:
+        app: counter
+    spec:
+      initContainers:
+        - name: wait-for-db
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - until nc -z db 3306; do echo "waiting for db..."; sleep 2; done
+      containers:
+        - name: counter
+          # docker-compose では ./Counters からビルドされます。
+          # GHCR にイメージをプッシュした後、このイメージ名を更新してください。
+          image: ghcr.io/senarmaporg/iki_project_2026_counter:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: SECRET_KEY_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: SECRET_KEY_BASE
+            - name: DB_HOST
+              value: "db"
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: DB_NAME
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: DB_PASSWORD
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /redirect/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /redirect/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30

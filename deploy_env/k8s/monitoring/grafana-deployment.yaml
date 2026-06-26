@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: iki-project
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      securityContext:
+        fsGroup: 472
+        runAsUser: 472
+      containers:
+        - name: grafana
+          image: grafana/grafana:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: GF_SECURITY_ADMIN_USER
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: GF_SECURITY_ADMIN_PASSWORD
+            - name: GF_PATHS_PROVISIONING
+              value: /etc/grafana/provisioning
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "300m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/grafana
+            - name: provisioning-datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: provisioning-dashboards
+              mountPath: /etc/grafana/provisioning/dashboards
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-data
+        - name: provisioning-datasources
+          configMap:
+            name: grafana-provisioning
+            items:
+              - key: datasource.yaml
+                path: datasource.yaml
+        - name: provisioning-dashboards
+          configMap:
+            name: grafana-provisioning
+            items:
+              - key: dashboard-provider.yaml
+                path: dashboard-provider.yaml
