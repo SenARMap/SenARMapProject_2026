@@ -51,5 +51,6 @@ spec:
                 - restart
                 - deployment/python
                 - deployment/nginx
+                - deployment/counter
                 - -n
                 - iki-project

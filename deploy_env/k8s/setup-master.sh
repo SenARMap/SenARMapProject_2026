@@ -13,12 +13,12 @@ if [ -z "$PRIVATE_IP" ]; then
   exit 1
 fi
 
-echo "==> [1/3] K8sクラスターを初期化します (API endpoint: ${PRIVATE_IP})..."
+echo "==> [1/4] K8sクラスターを初期化します (API endpoint: ${PRIVATE_IP})..."
 sudo kubeadm init \
   --apiserver-advertise-address="${PRIVATE_IP}" \
   --pod-network-cidr=10.244.0.0/16
 
-echo "==> [2/3] kubectl の設定..."
+echo "==> [2/4] kubectl の設定..."
 # rootでも使えるように設定
 mkdir -p /root/.kube
 cp /etc/kubernetes/admin.conf /root/.kube/config
@@ -32,7 +32,7 @@ if id "project-prod" &>/dev/null; then
   echo "project-prod ユーザーにも kubectl を設定しました"
 fi
 
-echo "==> [3/3] CNIプラグイン（Calico）インストール..."
+echo "==> [3/4] CNIプラグイン（Calico）インストール..."
 # Calico: Flannel と違い NetworkPolicy（Pod間の通信制限）に対応
 kubectl create -f \
   https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/tigera-operator.yaml
@@ -58,12 +58,23 @@ metadata:
 spec: {}
 EOF
 
+echo "==> [4/4] ストレージプロビジョナー（local-path）インストール..."
+# kubeadm はデフォルト StorageClass を持たないため PVC が Pending になる。
+# local-path-provisioner をデフォルト SC として設定する。
+kubectl apply -f \
+  https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.30/deploy/local-path-storage.yaml
+kubectl patch storageclass local-path \
+  -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+
 echo ""
 echo "=================================================="
 echo "masterセットアップ完了！"
 echo ""
 echo "ノードのReady確認（1〜2分かかります）:"
 echo "  kubectl get nodes"
+echo ""
+echo "デフォルト StorageClass 確認:"
+echo "  kubectl get storageclass"
 echo ""
 echo "workerを追加する場合:"
 echo "  bash add-worker.sh"
