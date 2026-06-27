@@ -37,6 +37,82 @@ Cloudflare Tunnel (cloudflared × 2)
 
 ---
 
+## 0. UFW ファイアウォール設定（全ノード共通・最初に実施）
+
+### なぜ最初に設定するか
+
+kubeadm + Calico は Pod ネットワークの転送に iptables を多用します。UFW のデフォルト設定（`DEFAULT_FORWARD_POLICY=DROP`）のままだと Pod 間通信がすべて遮断されます。**ノードセットアップ前に以下を適用してください。**
+
+### Step 1: forward ポリシーを ACCEPT に変更
+
+```bash
+# /etc/default/ufw の DEFAULT_FORWARD_POLICY を DROP → ACCEPT に変更
+sudo sed -i 's/^DEFAULT_FORWARD_POLICY=.*/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
+```
+
+### Step 2: UFW ルール設定
+
+```bash
+# リセット（既存ルールを削除）
+sudo ufw --force reset
+
+# デフォルトポリシー
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw default allow routed        # Pod ネットワークのルーティングを許可
+
+# ループバック（必須）
+sudo ufw allow in on lo
+sudo ufw allow out on lo
+
+# SSH（先に許可しないとロックアウトされる）
+sudo ufw allow 22/tcp
+
+# Kubernetes API サーバー（kubectl・worker ノードが使用）
+sudo ufw allow 6443/tcp
+
+# Calico VXLAN（ノード間 Pod ネットワーク通信）
+sudo ufw allow 4789/udp
+
+# kubelet API（kubectl logs / exec がノード間で使用）
+sudo ufw allow 10250/tcp
+
+# Pod ネットワーク CIDR からのトラフィックを許可
+sudo ufw allow from 10.244.0.0/16
+sudo ufw allow to   10.244.0.0/16
+
+# UFW を有効化
+sudo ufw --force enable
+sudo ufw status verbose
+```
+
+### worker ノードが存在する場合
+
+プライベートネットワーク（eth1）側からのトラフィックをすべて許可しておくと管理が楽です。
+
+```bash
+# プライベートネットワーク CIDR を確認
+ip a show eth1
+
+# そのセグメントをすべて許可（例: 10.10.10.0/24）
+sudo ufw allow in on eth1
+```
+
+### 許可ポート一覧
+
+| ポート | プロトコル | 用途 |
+|---|---|---|
+| 22 | TCP | SSH |
+| 6443 | TCP | Kubernetes API サーバー |
+| 4789 | UDP | Calico VXLAN（ノード間 Pod 通信） |
+| 10250 | TCP | kubelet API（kubectl exec/logs） |
+| 10.244.0.0/16 | — | Pod ネットワーク CIDR 全体 |
+
+> **このプロジェクトで HTTP/HTTPS ポートが不要な理由**  
+> 外部からのアクセスはすべて Cloudflare Tunnel（cloudflared）が担当するため、80 番・443 番をパブリックに開放する必要はありません。
+
+---
+
 ## 1. ノードのセットアップ（全ノード共通）
 
 master・worker 全台で実行します。
