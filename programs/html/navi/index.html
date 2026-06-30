@@ -820,6 +820,8 @@ let svgViewH       = 1000;
 
 let edgeImages  = {};
 let imgByStep = {};  // step_index → <img> DOM element
+let svgCache      = {};  // `${building}_${floor}` → SVG text or null (prefetched)
+let arrowBlobUrls = {};  // "straight"|"right"|"left" → blob: URL (prefetched)
 
 // ================================================================
 // 方向矢印: 閾値設定（後から変更しやすいように定数で管理）
@@ -836,6 +838,18 @@ const ARROW_URL = {
   right:    "https://cdn.iku-navi.net/right.png",
   left:     "https://cdn.iku-navi.net/left.png",
 };
+
+// 矢印画像をblob URLとして事前取得（オフライン時でも表示できるようにメモリに保持）
+async function prefetchArrowImages() {
+  await Promise.allSettled(
+    Object.entries(ARROW_URL).map(async ([key, url]) => {
+      try {
+        const res = await fetch(url);
+        if (res.ok) arrowBlobUrls[key] = URL.createObjectURL(await res.blob());
+      } catch {}
+    })
+  );
+}
 
 // ================================================================
 // Google Maps init
@@ -856,6 +870,7 @@ function initMap() {
 // Data loading
 // ================================================================
 async function loadAllData() {
+  prefetchArrowImages(); // ページ読み込み時に矢印画像を事前取得（fire-and-forget）
   try {
     const [dataRes, imgRes, cafRes] = await Promise.all([
       fetch(`${API_BASE}/api/all`),
@@ -1063,7 +1078,7 @@ async function doToiletSearch() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data.error) { alert("エラー: " + data.error); return; }
-    initRoute(data.path_coords);
+    await initRoute(data.path_coords);
   } catch {
     document.getElementById("step-label").textContent = "サーバーに接続できません";
     document.getElementById("step-count").textContent = "app.py が起動しているか確認してください";
@@ -1108,7 +1123,7 @@ async function doCafeteriaSearch() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data.error) { alert("エラー: " + data.error); return; }
-    initRoute(data.path_coords);
+    await initRoute(data.path_coords);
   } catch {
     document.getElementById("step-label").textContent = "サーバーに接続できません";
     document.getElementById("step-count").textContent = "app.py が起動しているか確認してください";
@@ -1323,7 +1338,7 @@ async function doSearch() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data.error) { alert("エラー: " + data.error); return; }
-    initRoute(data.path_coords);
+    await initRoute(data.path_coords);
   } catch {
     document.getElementById("step-label").textContent = "サーバーに接続できません";
     document.getElementById("step-count").textContent = "app.py が起動しているか確認してください";
@@ -1460,7 +1475,7 @@ function updateDirectionArrow(step) {
     return;
   }
 
-  arrowEl.src = ARROW_URL[dir];
+  arrowEl.src = arrowBlobUrls[dir] || ARROW_URL[dir];
   arrowEl.style.display = "block";
 }
 
@@ -1485,9 +1500,31 @@ function prefetchRouteImages(coords) {
 }
 
 // ================================================================
+// SVG prefetch — ルート上の全フロアのSVGをまとめて取得してメモリキャッシュ。
+// オフライン時でも loadSvg がキャッシュから即座に返せるようにする。
+// ================================================================
+async function prefetchSvgs(coords) {
+  const keys = new Set();
+  coords.forEach(n => {
+    if (n.building !== 0) keys.add(`${n.building}_${n.floor}`);
+  });
+
+  await Promise.allSettled([...keys].map(async key => {
+    if (svgCache[key] !== undefined) return; // すでにキャッシュ済み
+    const [building, floor] = key.split('_');
+    try {
+      const res = await fetch(`/svg/${building}_${floor}F.svg`);
+      svgCache[key] = res.ok ? await res.text() : null;
+    } catch {
+      svgCache[key] = null;
+    }
+  }));
+}
+
+// ================================================================
 // Route init
 // ================================================================
-function initRoute(coords) {
+async function initRoute(coords) {
   pathCoords  = coords;
   currentStep = 0;
   svgBuilding = null;
@@ -1497,7 +1534,8 @@ function initRoute(coords) {
   arHideView();
   clearMapOverlays();
   drawFullOutdoorRoute(coords);
-  prefetchRouteImages(coords);
+  prefetchRouteImages(coords);               // 写真: 並行ダウンロード開始（fire-and-forget）
+  await prefetchSvgs(coords);               // SVG:  全フロア一括取得を待機してからナビ開始
   collapseSearchPanel();  // ルート確定後にパネルを収納
   goToStep(0);
 }
@@ -1659,12 +1697,23 @@ async function loadSvg(building, floor) {
   const container = document.getElementById("svg-container");
   svgOverlay = null;
 
-  let text;
-  try {
-    const res = await fetch(`/svg/${building}_${floor}F.svg`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    text = await res.text();
-  } catch {
+  const key = `${building}_${floor}`;
+  let text = svgCache[key]; // プリフェッチ済みキャッシュを優先使用
+
+  if (text === undefined) {
+    // キャッシュ未命中（フォールバック: ネットから取得を試みる）
+    try {
+      const res = await fetch(`/svg/${building}_${floor}F.svg`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      text = await res.text();
+      svgCache[key] = text;
+    } catch {
+      svgCache[key] = null;
+      text = null;
+    }
+  }
+
+  if (!text) {
     container.innerHTML = `
       <div class="err-box">
         <div class="err-title">${building}号館 ${floor}階のマップが見つかりません</div>
@@ -1717,15 +1766,33 @@ function drawSvgBaseRoute(building, floor) {
 
   if (nodes.length < 2) return;
 
+  // 同じフロアを複数回通る場合に備え、pathCoords上で連続する区間ごとに
+  // polyline を分割する。全ノードを1本に繋ぐと別訪問のノード間に
+  // 不正な線が描画されてしまうため。
+  const segments = [];
+  let seg = [];
+  for (const n of pathCoords) {
+    if (n.building === building && n.floor === floor && n.svg_x != null) {
+      seg.push(n);
+    } else if (seg.length) {
+      segments.push(seg);
+      seg = [];
+    }
+  }
+  if (seg.length) segments.push(seg);
+
   const sw = Math.round(svgViewW / 70);
-  const pl = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-  pl.setAttribute("points",          nodes.map(n => `${n.svg_x},${n.svg_y}`).join(" "));
-  pl.setAttribute("stroke",          "#B0BEC5");
-  pl.setAttribute("stroke-width",    sw);
-  pl.setAttribute("fill",            "none");
-  pl.setAttribute("stroke-linecap",  "round");
-  pl.setAttribute("stroke-linejoin", "round");
-  svgOverlay.appendChild(pl);
+  for (const s of segments) {
+    if (s.length < 2) continue;
+    const pl = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    pl.setAttribute("points",          s.map(n => `${n.svg_x},${n.svg_y}`).join(" "));
+    pl.setAttribute("stroke",          "#B0BEC5");
+    pl.setAttribute("stroke-width",    sw);
+    pl.setAttribute("fill",            "none");
+    pl.setAttribute("stroke-linecap",  "round");
+    pl.setAttribute("stroke-linejoin", "round");
+    svgOverlay.appendChild(pl);
+  }
 }
 
 // ================================================================
@@ -1738,9 +1805,18 @@ function renderSvgStep(step) {
   const curNode = pathCoords[step];
   if (!curNode || curNode.building !== svgBuilding || curNode.floor !== svgFloor) return;
 
-  const floorNodes  = pathCoords.filter(n =>
-    n.building === svgBuilding && n.floor === svgFloor && n.svg_x != null
-  );
+  // 現在ステップが属する「連続した同一フロア区間」だけを対象にする。
+  // pathCoords.filter で全件取ると、同じフロアを複数回通るルートで
+  // 別訪問のノードまで巻き込んで不正な線・ドットが描画される。
+  let segStart = step, segEnd = step;
+  while (segStart > 0 &&
+         pathCoords[segStart - 1].building === svgBuilding &&
+         pathCoords[segStart - 1].floor    === svgFloor) segStart--;
+  while (segEnd < pathCoords.length - 1 &&
+         pathCoords[segEnd + 1].building === svgBuilding &&
+         pathCoords[segEnd + 1].floor    === svgFloor) segEnd++;
+
+  const floorNodes  = pathCoords.slice(segStart, segEnd + 1).filter(n => n.svg_x != null);
   const curFloorIdx = floorNodes.findIndex(n => n.id === curNode.id);
   if (curFloorIdx < 0) return;
 
