@@ -1,6 +1,6 @@
 # 技術説明書 — SenARMap 2026
 
-> 作成: 2026-06-02 / 最終更新: 2026-06-22
+> 作成: 2026-06-02 / 最終更新: 2026-06-30
 
 ---
 
@@ -40,7 +40,7 @@ AR 領域にはエッジ間の経路写真（CDN 配信）を表示し、屋外�
 |------|------|
 | 言語 | Python 3 |
 | Web フレームワーク | Flask |
-| WSGI サーバー | Gunicorn (`-w 10`) — ワーカー 3 プロセス |
+| WSGI サーバー | Gunicorn (`-w 4`) — 平常時 2レプリカ × 4 = 8並列 |
 | エントリポイント | `programs/3D_Graph/app.py` |
 
 ### 主なライブラリ
@@ -239,18 +239,40 @@ CDN_BASE = "https://cdn.iku-navi.net"
 
 ## 7. インフラ・デプロイ
 
-### Docker 構成（`deploy_env/docker-compose.yml`）
+### Docker Swarm 構成（`deploy_env/docker-compose.yml`）
+
+本番は Docker Swarm で運用。平常時は 2GB VPS 1台、イベント時に 4GB サーバーをワーカーとして追加する。
 
 ```
-python    — Flask + Gunicorn（ポート 8000、内部のみ）
-nginx     — Nginx リバースプロキシ（ポート 8080:80 / 4430:443）
-cloudflared — Cloudflare Tunnel（外部公開）
+[外部]
+  Cloudflare → cloudflared (Swarm: manager固定)
+                    ↓
+              nginx (Swarm: manager固定)
+              ├── /api/*, /3d/*  → python × 2レプリカ（gunicorn -w 4）
+              └── /redirect/*    → counter × 2レプリカ
+                                        ↓
+                                   db (MariaDB, manager固定)
+
+[監視]
+  cadvisor (global: 全ノード) → prometheus (manager固定) → grafana (manager固定)
 ```
+
+| サービス | 役割 | 配置 |
+|---------|------|------|
+| nginx | リバースプロキシ・静的ファイル配信 | manager固定 |
+| python | Flask + Gunicorn | 全ノード分散（2→4レプリカ） |
+| counter | アクセスカウンター（Rails） | 全ノード分散（2→4レプリカ） |
+| db | MariaDB 11 | manager固定（ボリュームあり） |
+| cloudflared | Cloudflare Tunnel | manager固定 |
+| prometheus | メトリクス収集（dockerswarm_sd） | manager固定 |
+| grafana | 監視ダッシュボード | manager固定 |
+| cadvisor | コンテナリソース監視 | global（全ノード自動展開） |
+
+詳細な運用手順は [`swarm.md`](./swarm.md) を参照。
 
 ### Nginx の役割
 
-- HTTP (80) → HTTPS (443) リダイレクト
-- TLS 終端（自己署名証明書を `/etc/nginx/certs/` に配置）
+- TLS 終端は Cloudflare 側で処理（cloudflared 経由）
 - 静的ファイル配信：`/` → `/project/programs/html/` を `try_files` で提供
 - API・3D プロキシ：`/api/*` `/3d/*` → `http://python:8000` へ転送
 - カスタムエラーページ：400/401/403/404/500/502/503/504
@@ -261,7 +283,7 @@ cloudflared — Cloudflare Tunnel（外部公開）
 ポートを直接インターネットに公開しないため、ファイアウォール設定が不要。
 
 ```
-# enviroments/.env
+# deploy_env/.env
 TUNNEL_TOKEN=<Cloudflare Tunnel のトークン>
 ```
 
