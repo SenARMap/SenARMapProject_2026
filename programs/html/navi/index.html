@@ -1766,15 +1766,33 @@ function drawSvgBaseRoute(building, floor) {
 
   if (nodes.length < 2) return;
 
+  // 同じフロアを複数回通る場合に備え、pathCoords上で連続する区間ごとに
+  // polyline を分割する。全ノードを1本に繋ぐと別訪問のノード間に
+  // 不正な線が描画されてしまうため。
+  const segments = [];
+  let seg = [];
+  for (const n of pathCoords) {
+    if (n.building === building && n.floor === floor && n.svg_x != null) {
+      seg.push(n);
+    } else if (seg.length) {
+      segments.push(seg);
+      seg = [];
+    }
+  }
+  if (seg.length) segments.push(seg);
+
   const sw = Math.round(svgViewW / 70);
-  const pl = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-  pl.setAttribute("points",          nodes.map(n => `${n.svg_x},${n.svg_y}`).join(" "));
-  pl.setAttribute("stroke",          "#B0BEC5");
-  pl.setAttribute("stroke-width",    sw);
-  pl.setAttribute("fill",            "none");
-  pl.setAttribute("stroke-linecap",  "round");
-  pl.setAttribute("stroke-linejoin", "round");
-  svgOverlay.appendChild(pl);
+  for (const s of segments) {
+    if (s.length < 2) continue;
+    const pl = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    pl.setAttribute("points",          s.map(n => `${n.svg_x},${n.svg_y}`).join(" "));
+    pl.setAttribute("stroke",          "#B0BEC5");
+    pl.setAttribute("stroke-width",    sw);
+    pl.setAttribute("fill",            "none");
+    pl.setAttribute("stroke-linecap",  "round");
+    pl.setAttribute("stroke-linejoin", "round");
+    svgOverlay.appendChild(pl);
+  }
 }
 
 // ================================================================
@@ -1787,9 +1805,18 @@ function renderSvgStep(step) {
   const curNode = pathCoords[step];
   if (!curNode || curNode.building !== svgBuilding || curNode.floor !== svgFloor) return;
 
-  const floorNodes  = pathCoords.filter(n =>
-    n.building === svgBuilding && n.floor === svgFloor && n.svg_x != null
-  );
+  // 現在ステップが属する「連続した同一フロア区間」だけを対象にする。
+  // pathCoords.filter で全件取ると、同じフロアを複数回通るルートで
+  // 別訪問のノードまで巻き込んで不正な線・ドットが描画される。
+  let segStart = step, segEnd = step;
+  while (segStart > 0 &&
+         pathCoords[segStart - 1].building === svgBuilding &&
+         pathCoords[segStart - 1].floor    === svgFloor) segStart--;
+  while (segEnd < pathCoords.length - 1 &&
+         pathCoords[segEnd + 1].building === svgBuilding &&
+         pathCoords[segEnd + 1].floor    === svgFloor) segEnd++;
+
+  const floorNodes  = pathCoords.slice(segStart, segEnd + 1).filter(n => n.svg_x != null);
   const curFloorIdx = floorNodes.findIndex(n => n.id === curNode.id);
   if (curFloorIdx < 0) return;
 
