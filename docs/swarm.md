@@ -100,14 +100,19 @@ echo <GHCR_TOKEN> | docker login ghcr.io -u <GITHUB_USERNAME> --password-stdin
 ### 3. スタックをデプロイ
 
 > **重要:** `docker stack deploy` は `.env` を自動で読み込まない。
-> `docker compose config` で変数を展開してからパイプで渡す。
+> `source .env` でシェルに読み込んでから deploy する。
+>
+> `docker compose config` を間に挟む方法は**使わない**こと。
+> Docker Compose v2 が `depends_on` をマップ形式に正規化するため、
+> `docker stack deploy` が "must be a list" エラーを出す。
 
 ```bash
 cd /srv/SenARMapProject_2026/deploy_env
 
-docker compose config | docker stack deploy \
+set -a && source .env && set +a
+docker stack deploy \
   --with-registry-auth \
-  -c - \
+  -c docker-compose.yml \
   iku
 ```
 
@@ -247,9 +252,10 @@ cd /srv/SenARMapProject_2026/deploy_env
 git pull
 
 # compose.yml の変更も含めて再デプロイ（設定変更 + イメージ更新を一括適用）
-docker compose config | docker stack deploy \
+set -a && source .env && set +a
+docker stack deploy \
   --with-registry-auth \
-  -c - \
+  -c docker-compose.yml \
   iku
 ```
 
@@ -275,9 +281,10 @@ prometheus.yml を更新した場合、Docker config を更新してサービス
 docker config rm iku_prometheus_config
 
 # スタック再デプロイで config が再作成される
-docker compose config | docker stack deploy \
+set -a && source .env && set +a
+docker stack deploy \
   --with-registry-auth \
-  -c - \
+  -c docker-compose.yml \
   iku
 ```
 
