@@ -99,6 +99,7 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
+    user: root
     configs:
       - source: prometheus_config
         target: /etc/prometheus/prometheus.yml
