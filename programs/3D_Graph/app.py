@@ -480,7 +480,8 @@ def _path_result(G, path, length):
 def index():
     nodes_df, edges_df = get_cached_data()
     node_ids  = sorted(nodes_df["id"].tolist())
-    buildings = sorted(nodes_df["building"].unique().tolist())
+    # building=0 (屋外) はフィルタの「すべての建物」(value=0) と衝突するため除外
+    buildings = sorted(int(b) for b in nodes_df["building"].unique() if int(b) != 0)
     return render_template("index.html", node_ids=node_ids, buildings=buildings)
 
 
