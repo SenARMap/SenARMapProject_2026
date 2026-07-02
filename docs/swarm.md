@@ -48,7 +48,6 @@
   - `7946/tcp,udp` — ノード間通信
   - `4789/udp` — オーバーレイネットワーク (VXLAN)
 - GHCR イメージの pull 権限があること（`docker login ghcr.io`）
-- `.env` に `TUNNEL_TOKEN` が設定されていること（cloudflared に必須）
 
 ---
 
@@ -101,10 +100,7 @@ echo <GHCR_TOKEN> | docker login ghcr.io -u <GITHUB_USERNAME> --password-stdin
 ### 3. スタックをデプロイ
 
 > **重要:** `docker stack deploy` は `.env` を自動で読み込まない。
-> `. .env`（ドット）でシェルに読み込んでから deploy する。
->
-> `source` は bash 専用コマンドで `/bin/sh` では動かない。
-> cron や sh から実行する場面に備えて必ず `. .env` を使うこと。
+> `source .env` でシェルに読み込んでから deploy する。
 >
 > `docker compose config` を間に挟む方法は**使わない**こと。
 > Docker Compose v2 が `depends_on` をマップ形式に正規化するため、
@@ -113,7 +109,7 @@ echo <GHCR_TOKEN> | docker login ghcr.io -u <GITHUB_USERNAME> --password-stdin
 ```bash
 cd /srv/SenARMapProject_2026/deploy_env
 
-set -a && . .env && set +a
+set -a && source .env && set +a
 docker stack deploy \
   --with-registry-auth \
   -c docker-compose.yml \
@@ -154,37 +150,6 @@ docker service ps iku_python
 docker stats $(docker ps -q)
 ```
 
-### モニタリング（cAdvisor + Prometheus）の動作確認
-
-```bash
-# cAdvisor がメトリクスを出しているか
-docker exec $(docker ps -q -f name=iku_cadvisor) wget -qO- http://localhost:8080/metrics | head -5
-
-# Prometheus が cadvisor を scrape できているか（"1" = UP）
-docker exec $(docker ps -q -f name=iku_prometheus) \
-  wget -qO- 'http://localhost:9090/api/v1/query?query=up' | python3 -m json.tool
-```
-
----
-
-## 自動更新の一時停止（本番中のメンテナンス）
-
-cron が30分ごとに `update.sh` を実行するため、本番中に予期しない再起動が起きる可能性がある。
-ロックファイルで手軽に無効化できる。
-
-```bash
-# 無効化（update.sh の先頭に [ -f ~/update.lock ] && exit 0 が必要）
-touch ~/update.lock
-
-# 有効化
-rm ~/update.lock
-```
-
-> **前提:** `update.sh` の先頭に以下を追記しておく:
-> ```bash
-> [ -f ~/update.lock ] && exit 0
-> ```
-
 ---
 
 ## イベント時：ワーカーの増設
@@ -193,13 +158,6 @@ rm ~/update.lock
 
 ```bash
 docker swarm join-token worker
-```
-
-Swarm のワーカートークンに有効期限はない（k8s の 24 時間制限に相当するものは存在しない）。
-ただしセキュリティ上の理由でトークンを再生成したい場合:
-
-```bash
-docker swarm join-token --rotate worker
 ```
 
 ### 手順2. ワーカー（4GB サーバー）の初期設定
@@ -294,7 +252,7 @@ cd /srv/SenARMapProject_2026/deploy_env
 git pull
 
 # compose.yml の変更も含めて再デプロイ（設定変更 + イメージ更新を一括適用）
-set -a && . .env && set +a
+set -a && source .env && set +a
 docker stack deploy \
   --with-registry-auth \
   -c docker-compose.yml \
@@ -323,10 +281,9 @@ prometheus.yml を更新した場合、Docker config を更新してサービス
 docker config rm iku_prometheus_config
 
 # スタック再デプロイで config が再作成される
-set -a && . .env && set +a
-docker stack deploy \
+docker compose config | docker stack deploy \
   --with-registry-auth \
-  -c docker-compose.yml \
+  -c - \
   iku
 ```
 
@@ -355,62 +312,6 @@ Swarm では `depends_on` が無視されるため、DB が起動する前に co
 docker service update --force iku_counter
 ```
 
-### cloudflared が起動しない / Cloudflare Tunnel error
-
-**原因:** `TUNNEL_TOKEN` が空のままデプロイされている。
-
-確認:
-
-```bash
-docker service inspect iku_cloudflared --format '{{json .Spec.TaskTemplate.ContainerSpec.Env}}'
-# ["TUNNEL_TOKEN="] ← 空なら問題
-```
-
-**原因1:** `.env` に `TUNNEL_TOKEN` が書かれていない → `.env` に追記する。
-
-**原因2:** `update.sh` で `. .env` が失敗している（`source` を使っている場合、`/bin/sh` では動かない）。
-
-```bash
-# update.sh の該当行を確認
-grep -n "source\|TUNNEL" ~/update.sh
-```
-
-`.env` を `. .env`（ドット）で読み込むように修正してから再デプロイ:
-
-```bash
-set -a && . ~/SenARMapProject_2026/deploy_env/.env && set +a
-docker stack deploy --with-registry-auth -c ~/SenARMapProject_2026/deploy_env/docker-compose.yml iku
-```
-
-### prometheus が cadvisor を scrape できない（permission denied）
-
-**原因:** prometheus コンテナがデフォルトの非rootユーザーで動いており、`docker.sock` にアクセスできない。
-
-`docker-compose.yml` の prometheus サービスに `user: root` が設定されているか確認する。
-設定されていない場合は即時修正:
-
-```bash
-docker service update --user root iku_prometheus
-```
-
-永続化するには `docker-compose.yml` の prometheus に `user: root` を追加してデプロイし直す。
-
-### cron から update.sh を実行すると環境変数が入らない
-
-**原因:** `/etc/crontab` の `SHELL=/bin/sh` 配下で `source` コマンドが使えない。
-
-`update.sh` の `.env` 読み込み行を修正:
-
-```bash
-# NG（bash専用）
-set -a && source .env && set +a
-
-# OK（POSIX準拠・sh/bash両対応）
-set -a && . /home/project-prod/SenARMapProject_2026/deploy_env/.env && set +a
-```
-
-絶対パスを使うことで、スクリプトがどのディレクトリから呼ばれても確実に読み込まれる。
-
 ### ワーカーノードが Pending のまま
 
 ファイアウォールのポート（2377/tcp, 7946/tcp+udp, 4789/udp）が開いているか確認:
@@ -432,11 +333,12 @@ docker service ps iku_cadvisor
 docker service logs iku_cadvisor
 ```
 
-### docker stack ps の履歴が多くて見づらい
+### prometheus が cadvisor を scrape できない
 
-`\_` 付きの行は過去の失敗タスクの履歴で、現在のコンテナには影響しない。
-現在実行中のもの（`\_` なし）だけ確認したい場合:
+prometheus が docker.sock にアクセスできているか確認:
 
 ```bash
-docker stack ps iku --filter "desired-state=running"
+# prometheus コンテナ内で確認
+docker exec $(docker ps -q -f name=iku_prometheus) \
+  wget -qO- http://localhost:9090/api/v1/targets | python3 -m json.tool | grep "job\|health"
 ```

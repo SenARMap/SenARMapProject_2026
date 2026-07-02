@@ -1,6 +1,6 @@
 # 技術説明書 — SenARMap 2026
 
-> 作成: 2026-06-02 / 最終更新: 2026-06-30
+> 作成: 2026-06-02 / 最終更新: 2026-07-02
 
 ---
 
@@ -73,7 +73,8 @@ AR 領域にはエッジ間の経路写真（CDN 配信）を表示し、屋外�
 ### キャッシュ
 
 起動後の初回リクエスト時に CSV をすべてロードしてメモリにキャッシュする（モジュールレベルのグローバル変数）。  
-エレベーター有り/無しのグラフを別々にキャッシュし、切り替えコストをゼロにしている。
+エレベーター有り/無しのグラフを別々にキャッシュし、切り替えコストをゼロにしている。  
+**CSV を更新した場合はコンテナ（gunicorn）を再起動しないと反映されない**点に注意。
 
 ```
 _cached_nodes_df           — pandas DataFrame
@@ -93,7 +94,7 @@ _cached_graph_without_ev   — networkx.DiGraph（エレベーターなし）
 | 言語 | HTML / CSS / Vanilla JavaScript（フレームワークなし） |
 | マップ | Google Maps JavaScript API（CDN 経由） |
 | SVG マップ | インライン SVG（`/svg/{建物}_{階}F.svg` を `fetch` してインジェクト） |
-| API キー | `programs/html/script/config.js` に `CONFIG.GOOGLE_MAPS_API_KEY` として記述 |
+| API キー | `programs/html/navi/script/config.js` に `CONFIG.GOOGLE_MAPS_API_KEY` として記述（Git 管理外。本番は nginx の entrypoint が環境変数から生成） |
 
 ### Google Maps CDN の読み込み方法
 
@@ -139,7 +140,7 @@ PC では `#sidebar` が通常の `display: flex` に切り替わる。
 
 ### GPS
 
-`navigator.geolocation.getCurrentPosition` で取得。精度（`accuracy`）が 30m を超えた場合は案内板を参照するよう警告を表示する。GPS 取得後は最近傍の屋外ノードを Haversine 距離で探索し、`from_node` パラメータとして API に渡す。
+`navigator.geolocation.getCurrentPosition` で取得。精度（`accuracy`）が 30m を超えた場合は案内板を参照するよう警告を表示する。GPS 取得後は最近傍の屋外ノードを Haversine 距離で探索し、`from_node` パラメータとして API に渡す。最寄りノードが **500m**（`MAX_GPS_NODE_DIST_M`）より遠い場合はキャンパス外とみなし、出発ノードとして採用しない。
 
 ---
 
@@ -192,6 +193,9 @@ PC では `#sidebar` が通常の `display: flex` に切り替わる。
 | 4 | エレベーター | 双方向（`use_elevator=0` で除外） |
 | 5 | 上りエスカレーター | 一方向（Z 低→高） |
 | 6 | 下りエスカレーター | 一方向（Z 高→低） |
+| 7 | 入口（屋内外接続、`anchors.csv` から自動生成） | 双方向（コストに入口ペナルティ +50 を加算） |
+
+全種別の一覧とデータ入力仕様は [`XYZ_Design.md`](./XYZ_Design.md) を参照。
 
 ### 座標系の変換
 
@@ -343,6 +347,12 @@ candidates = [
 
 切り替えは `updateRouteImage(step)` 内で判定し、屋外時は `arShowView()` / 屋内復帰時は `arHideView()` を呼ぶ。
 
+#### カメラ・GPS のライフサイクル（プライバシー・バッテリー対策）
+
+- **取得**: カメラはルート確定時の `arPrefetchCameraIfNeeded()` で、**ルートに屋外 AR 区間が含まれる場合のみ**先取りする。屋内のみのルートではカメラを一切起動しない。GPS の `watchPosition` は屋外 AR 表示時（`arShowView()`）に開始する。
+- **保持**: 屋外→屋内→屋外と続くルートの途中ではストリームを保持し、シームレスに切り替える。
+- **解放**: ステップ移動のたびに `releaseArIfUnneeded(step)` が「現在以降に AR を使う屋外区間が残っているか」を判定し、残っていなければ `arReleaseHardware()` でカメラストリーム停止（`track.stop()`）と `clearWatch` を行う。再び屋外区間に入れば `arShowView()` が取得し直す（許可ダイアログは再表示されない）。
+
 ---
 
 ### 9.2 屋内 AR — 経路写真 + 矢印オーバーレイ
@@ -374,7 +384,7 @@ imgByStep[step].classList.add("active");
 
 #### 方向矢印
 
-`#ar-area` 上に `position: absolute` で重畳した `<img id="direction-arrow">` に `ARROW_URL[dir]` を設定。`dir` は `"left"` / `"right"` / `"straight"` / `"goal"` で切り替える。
+`#ar-area` 上に `position: absolute` で重畳した `<img id="direction-arrow">` に `ARROW_URL[dir]` を設定。`dir` は `"left"` / `"right"` / `"straight"` の3種で、折れ角が `STRAIGHT_THRESHOLD_DEG`（±45°）以内なら直進とみなす。矢印画像はページ読み込み時に blob URL としてプリフェッチされる。
 
 ---
 
@@ -464,4 +474,4 @@ q.multiply(_q0.setFromAxisAngle(_zee, -orient));    // 画面の回転補正
 | `?flip=1` | コンパスの回転方向を反転（端末差の保険） | 0 |
 | `?dec=N` | 磁気偏角を手動指定（磁北→真北補正、度） | 0 |
 | `?fov=N` | Three.js カメラの垂直 FOV（度） | 65 |
-| `?tilt=N` | カメラのピッチを下方向にシフト（度） | 15 |
+| `?tilt=N` | カメラのピッチを下方向にシフト（度） | 5 |

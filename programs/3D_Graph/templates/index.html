@@ -97,27 +97,6 @@
       font-family: var(--font-mono);
     }
 
-    .viewer-link {
-      margin-left: auto;
-      display: flex; align-items: center; gap: 6px;
-      background: var(--accent-dim);
-      border: 1px solid rgba(0,192,238,0.35);
-      color: var(--accent);
-      padding: 6px 12px;
-      border-radius: 8px;
-      text-decoration: none;
-      font-size: 0.75rem;
-      font-weight: 600;
-      letter-spacing: 0.03em;
-      white-space: nowrap;
-      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
-    }
-    .viewer-link:hover {
-      background: rgba(0,192,238,0.2);
-      border-color: rgba(0,192,238,0.6);
-      box-shadow: 0 0 12px var(--accent-glow);
-    }
-
     /* ============================================================
        MAIN LAYOUT
     ============================================================ */
@@ -646,7 +625,6 @@
     <h1>大学 AR マップ</h1>
     <div class="sub">3D ROUTE VIEWER · DIJKSTRA</div>
   </div>
-  <a href="/3d/viewer" class="viewer-link">👁 一人称ビューア</a>
 </header>
 
 <div class="main-layout">
@@ -657,16 +635,16 @@
     <div class="sheet-drag-handle" id="sheet-handle"></div>
 
     <div class="tab-bar">
-      <div class="tab active" onclick="switchTab('room')">
+      <div class="tab active" data-tab="room" onclick="switchTab('room')">
         <span class="tab-icon">🏫</span>教室
       </div>
-      <div class="tab" onclick="switchTab('node')">
+      <div class="tab" data-tab="node" onclick="switchTab('node')">
         <span class="tab-icon">🔵</span>ノード
       </div>
-      <div class="tab" onclick="switchTab('toilet')">
+      <div class="tab" data-tab="toilet" onclick="switchTab('toilet')">
         <span class="tab-icon">🚻</span>トイレ
       </div>
-      <div class="tab" onclick="switchTab('info')">
+      <div class="tab" data-tab="info" onclick="switchTab('info')">
         <span class="tab-icon">ℹ</span>情報
       </div>
     </div>
@@ -845,7 +823,7 @@
 // ============================================================
 //  Globals
 // ============================================================
-const Z_SCALE   = 3.0;  // 高さ方向の倍率（viewer.htmlと共通）
+const Z_SCALE   = 3.0;  // 高さ方向の倍率（建物を厚く見せる）
 let graphData   = null;
 let currentPath = null;
 let startEdge   = null;
@@ -958,9 +936,8 @@ function initSheet() {
 //  Tab switching
 // ============================================================
 function switchTab(name) {
-  const names = ["room", "node", "toilet", "info"];
-  document.querySelectorAll(".tab").forEach((t, i) =>
-    t.classList.toggle("active", names[i] === name));
+  document.querySelectorAll(".tab").forEach(t =>
+    t.classList.toggle("active", t.dataset.tab === name));
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
   document.getElementById("tab-" + name).classList.add("active");
 
