@@ -1068,7 +1068,7 @@ async function doToiletSearch() {
   } else {
     if (!facGpsCoords) { alert("GPS位置を先に取得してください。"); return; }
     const nearest = findNearestNode(facGpsCoords.lat, facGpsCoords.lng);
-    if (!nearest) { alert("近くの出発ノードが見つかりません。"); return; }
+    if (!nearest) { alert("近くの出発ノードが見つかりません。\nキャンパスから離れすぎている可能性があります。"); return; }
     params.set("from_node", nearest.id);
   }
 
@@ -1114,7 +1114,7 @@ async function doCafeteriaSearch() {
   } else {
     if (!facGpsCoords) { alert("GPS位置を先に取得してください。"); return; }
     const nearest = findNearestNode(facGpsCoords.lat, facGpsCoords.lng);
-    if (!nearest) { alert("近くの出発ノードが見つかりません。"); return; }
+    if (!nearest) { alert("近くの出発ノードが見つかりません。\nキャンパスから離れすぎている可能性があります。"); return; }
     params.set("from_node", nearest.id);
   }
   setLoading(true);
@@ -1256,6 +1256,9 @@ function hideAccuracyWarn() {
   el.className = "";
 }
 
+// 最寄り屋外ノードがこの距離[m]より遠い場合はキャンパス外とみなして null を返す
+const MAX_GPS_NODE_DIST_M = 500;
+
 function findNearestNode(lat, lng) {
   const outdoor = allNodes.filter(n => n.building === 0 && n.lat != null && n.lng != null);
   if (!outdoor.length) return null;
@@ -1264,7 +1267,7 @@ function findNearestNode(lat, lng) {
     const d = haversine({ lat, lng }, { lat: n.lat, lng: n.lng });
     if (d < bestD) { bestD = d; best = n; }
   });
-  return best;
+  return bestD <= MAX_GPS_NODE_DIST_M ? best : null;
 }
 
 function haversine(a, b) {
@@ -1326,7 +1329,7 @@ async function doSearch() {
     if (!toInfo)              { alert("目的教室を入力してください。"); return; }
     if (toInfo === "ambiguous") { alert("目的教室が複数の号館に存在します。号館を指定してください。"); return; }
     const nearest = findNearestNode(gpsCoords.lat, gpsCoords.lng);
-    if (!nearest) { alert("近くの出発ノードが見つかりません。"); return; }
+    if (!nearest) { alert("近くの出発ノードが見つかりません。\nキャンパスから離れすぎている可能性があります。"); return; }
     params.set("from_node",   nearest.id);
     params.set("to_room",     toInfo.room);
     params.set("to_building", toInfo.building);
@@ -1532,6 +1535,7 @@ async function initRoute(coords) {
   svgOverlay  = null;
   arMarkersBuilt = false;
   arHideView();
+  arPrefetchCameraIfNeeded();  // 屋外AR区間がある場合のみカメラを先取り
   clearMapOverlays();
   drawFullOutdoorRoute(coords);
   prefetchRouteImages(coords);               // 写真: 並行ダウンロード開始（fire-and-forget）
@@ -1601,6 +1605,9 @@ async function goToStep(step) {
   updateRouteImage(step);
   if (!node) return;
 
+  // 現在以降にARを使う屋外区間が残っていなければカメラ・GPSを解放する
+  releaseArIfUnneeded(step);
+
   if (node.building === 0 && node.lat != null) {
     switchView("map");
     moveMapTo(node, step);
@@ -1629,6 +1636,20 @@ async function goToStep(step) {
 
 function prevStep() { if (currentStep > 0) goToStep(currentStep - 1); }
 function nextStep() { if (currentStep < pathCoords.length - 1) goToStep(currentStep + 1); }
+
+// ================================================================
+// AR ハードウェア解放判定
+// 屋外→屋内→屋外と続くルートの途中ではストリームを保持して
+// シームレスに切り替え、屋外区間を使い切ったら解放する。
+// （最終ステップは到着画面なので AR 不要とみなす）
+// ================================================================
+function releaseArIfUnneeded(step) {
+  for (let i = step; i < pathCoords.length - 1; i++) {
+    const n = pathCoords[i];
+    if (n && n.building === 0 && n.lat != null) return; // まだARを使う
+  }
+  arReleaseHardware();
+}
 
 // ================================================================
 // Completion modal
@@ -1985,6 +2006,8 @@ const AR_CAMERA_FOV = 65;
 const AR_TILT_DEG   = 5;
 
 let arPermissionsRequested = false;
+let arCamWanted      = false;  // カメラストリームを保持してよいか（解放後の遅延取得を防ぐ）
+let arCamRequesting  = false;  // getUserMedia 実行中フラグ（二重取得を防ぐ）
 let arOrientAttached = false;
 let arOrientCount    = 0;
 let arHaveAbsolute   = false;
@@ -2040,6 +2063,8 @@ function arAttachOrientation() {
 // 検索ボタン押下（ユーザー操作コンテキスト）で呼ぶ。
 // iOS の DeviceOrientationEvent.requestPermission は同期的に
 // ユーザー操作内で呼ばないと許可ダイアログが出ないため、ここで先取りする。
+// カメラはこの時点では取得しない（ルート確定後、屋外AR区間がある場合のみ
+// arPrefetchCameraIfNeeded() で取得する）。
 function arRequestPermissionsEarly() {
   if (arPermissionsRequested) return;
   arPermissionsRequested = true;
@@ -2056,13 +2081,30 @@ function arRequestPermissionsEarly() {
   } else {
     arAttachOrientation();
   }
+}
 
-  // カメラ許可の先取り（ストリームをキャッシュしておく）
-  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-      .then(stream => { arStream = stream; })
-      .catch(() => {});
+// ルートに屋外AR区間が含まれる場合のみカメラを先取りしてストリームを温める。
+// 屋内のみのルートではカメラを一切起動しない。initRoute() から呼ばれる。
+function arPrefetchCameraIfNeeded() {
+  let hasOutdoorAR = false;
+  for (let i = 0; i < pathCoords.length - 1; i++) {  // 最終ステップは到着画面なのでAR不要
+    const n = pathCoords[i];
+    if (n && n.building === 0 && n.lat != null) { hasOutdoorAR = true; break; }
   }
+  if (!hasOutdoorAR) return;
+
+  arCamWanted = true;
+  if (arStream || arCamRequesting) return;
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return;
+  arCamRequesting = true;
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+    .then(stream => {
+      arCamRequesting = false;
+      // 取得完了前に解放済みならすぐ止める
+      if (!arCamWanted) { stream.getTracks().forEach(t => t.stop()); return; }
+      arStream = stream;
+    })
+    .catch(() => { arCamRequesting = false; });
 }
 
 function arEnsureRenderer() {
@@ -2224,6 +2266,7 @@ function arAnimate() {
 
 async function arShowView() {
   if (arRunning || arBooting) return;
+  arCamWanted = true;
   arBooting = true;
 
   try {
@@ -2283,6 +2326,23 @@ function arHideView() {
   arRunning = false;
   document.getElementById("ar-bg-video").style.display = "none";
   document.getElementById("ar-gl-canvas").style.display = "none";
+}
+
+// カメラストリームと GPS 監視を完全に停止する。
+// 再度屋外区間に入れば arShowView() が取得し直す（許可ダイアログは再表示されない）。
+function arReleaseHardware() {
+  arCamWanted = false;
+  arHideView();
+  if (arStream) {
+    arStream.getTracks().forEach(t => t.stop());
+    arStream = null;
+  }
+  const video = document.getElementById("ar-bg-video");
+  if (video.srcObject) video.srcObject = null;
+  if (arGpsWatchId != null && navigator.geolocation) {
+    navigator.geolocation.clearWatch(arGpsWatchId);
+    arGpsWatchId = null;
+  }
 }
 </script>
 

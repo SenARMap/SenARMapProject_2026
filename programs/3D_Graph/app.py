@@ -475,17 +475,13 @@ def _path_result(G, path, length):
 #  Routes
 # ------------------------------------------------------------------ #
 
-@app.route("/3d/viewer")
-def viewer():
-    return render_template("viewer.html")
-
-
 @app.route("/3d/")
 @app.route("/3d")
 def index():
     nodes_df, edges_df = get_cached_data()
     node_ids  = sorted(nodes_df["id"].tolist())
-    buildings = sorted(nodes_df["building"].unique().tolist())
+    # building=0 (屋外) はフィルタの「すべての建物」(value=0) と衝突するため除外
+    buildings = sorted(int(b) for b in nodes_df["building"].unique() if int(b) != 0)
     return render_template("index.html", node_ids=node_ids, buildings=buildings)
 
 
@@ -742,14 +738,16 @@ def api_route():
     for (s_node, s_row) in start_candidates:
         for (d_node, d_row) in dest_candidates:
             if s_node == d_node:
-                continue
-            try:
-                l, p = nx.bidirectional_dijkstra(G, s_node, d_node, weight="weight")
-                if l < best_length:
-                    best_length, best_path = l, p
-                    best_start_edge, best_dest_edge = s_row, d_row
-            except (nx.NetworkXNoPath, nx.NodeNotFound):
-                continue
+                # 出発と目的が同一ノードを共有する場合は距離0の自明な経路
+                l, p = 0.0, [s_node]
+            else:
+                try:
+                    l, p = nx.bidirectional_dijkstra(G, s_node, d_node, weight="weight")
+                except (nx.NetworkXNoPath, nx.NodeNotFound):
+                    continue
+            if l < best_length:
+                best_length, best_path = l, p
+                best_start_edge, best_dest_edge = s_row, d_row
 
     if best_path is None:
         return jsonify({"error": "指定された出発点から目的地への経路が見つかりません"}), 404

@@ -12,6 +12,10 @@
 .env
 .env.*
 
+# Google Maps APIキー入り設定。
+# 本番イメージには焼き込まず、nginx の entrypoint が環境変数から生成する
+programs/html/navi/script/config.js
+
 # ========================
 # Python関連のキャッシュ・仮想環境
 # ========================
