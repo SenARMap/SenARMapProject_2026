@@ -1004,6 +1004,7 @@ function floorColor(f) {
   buildFloorFilter();
   renderMap();
   initNodePicker();
+  initMapResize();
   prefetchRooms();
 
   acStart = new RoomAutocomplete({
@@ -1498,18 +1499,9 @@ function buildBuildingBoxTraces(nodes, bounds) {
 
     const z0 = Math.min(...zs) - 0.5, z1 = Math.max(...zs) + 0.5;
 
-    const vx = [c0.x, c1.x, c2.x, c3.x,  c0.x, c1.x, c2.x, c3.x];
-    const vy = [c0.y, c1.y, c2.y, c3.y,  c0.y, c1.y, c2.y, c3.y];
-    const vz = [z0,z0,z0,z0, z1,z1,z1,z1];
-    const fi = [0,0, 4,4, 0,0, 2,2, 0,0, 1,1];
-    const fj = [1,2, 5,6, 1,5, 3,7, 3,7, 2,6];
-    const fk = [2,3, 6,7, 5,4, 7,6, 7,4, 6,5];
-
-    traces.push({
-      type:"mesh3d", x:vx, y:vy, z:vz, i:fi, j:fj, k:fk,
-      color, opacity:0.06, hoverinfo:"none", showlegend:false,
-    });
-
+    // 塗りつぶし面(mesh3d)は使わずワイヤーフレームのみ描画する。塗りつぶしメッシュは
+    // Plotlyの3Dピッキングで背後のノードマーカーより手前と判定されクリックを奪ってしまい
+    // (hoverinfoの設定では回避できない)、建物に囲まれたノードが選択できなくなるため。
     const ex = [c0.x, c1.x, null, c1.x, c2.x, null, c2.x, c3.x, null, c3.x, c0.x, null,
                 c0.x, c1.x, null, c1.x, c2.x, null, c2.x, c3.x, null, c3.x, c0.x, null,
                 c0.x, c0.x, null, c1.x, c1.x, null, c2.x, c2.x, null, c3.x, c3.x, null];
@@ -1521,7 +1513,7 @@ function buildBuildingBoxTraces(nodes, bounds) {
                 z0,z1,null, z0,z1,null, z0,z1,null, z0,z1,null];
     traces.push({
       type:"scatter3d", mode:"lines", x:ex, y:ey, z:ez,
-      line:{color, width:1.5}, hoverinfo:"none", showlegend:false,
+      line:{color, width:1.5}, hoverinfo:"skip", showlegend:false,
     });
 
     traces.push({
@@ -1529,7 +1521,7 @@ function buildBuildingBoxTraces(nodes, bounds) {
       x:[center.x], y:[center.y], z:[z1+0.4],
       text:[`B${b}`],
       textfont:{color, size:14, family:"Arial Black"},
-      hoverinfo:"none", showlegend:false,
+      hoverinfo:"skip", showlegend:false,
     });
   });
   return traces;
@@ -1555,14 +1547,16 @@ function buildFloorPlaneTraces(nodes, bounds) {
     if (!bData) return;
     const { c0, c1, c2, c3 } = bData;
 
+    // 塗りつぶし面(mesh3d)は使わずワイヤーフレームのみ描画する。塗りつぶしメッシュは
+    // 各フロアのノードとちょうど同じ高さに広がるため、Plotlyの3Dピッキングで
+    // ノードマーカーより手前と判定されクリックを奪ってしまうことがあるため。
     traces.push({
-      type:"mesh3d",
-      x:[c0.x, c1.x, c2.x, c3.x], y:[c0.y, c1.y, c2.y, c3.y],
-      z:[zVal,zVal,zVal,zVal],
-      i:[0,0], j:[1,2], k:[2,3],
-      color, opacity:0.15,
-      hovertemplate:`B${building} — ${floor}F<extra></extra>`,
-      showlegend:false,
+      type:"scatter3d", mode:"lines",
+      x:[c0.x, c1.x, c2.x, c3.x, c0.x], y:[c0.y, c1.y, c2.y, c3.y, c0.y],
+      z:[zVal,zVal,zVal,zVal,zVal],
+      line:{color, width:1, dash:"dot"},
+      opacity:0.5,
+      hoverinfo:"skip", showlegend:false,
     });
 
     traces.push({
@@ -1570,7 +1564,7 @@ function buildFloorPlaneTraces(nodes, bounds) {
       x:[c1.x], y:[c0.y], z:[zVal],
       text:[`${floor}F`],
       textfont:{color, size:9},
-      hoverinfo:"none", showlegend:false,
+      hoverinfo:"skip", showlegend:false,
     });
   });
   return traces;
@@ -1618,7 +1612,7 @@ function renderMap() {
       const ox=[],oy=[],oz=[];
       outdoorEdges.forEach(e=>{ox.push(e.x0,e.x1,null);oy.push(e.y0,e.y1,null);oz.push(e.z0,e.z1,null);});
       traces.push({ type:"scatter3d", mode:"lines", x:ox, y:oy, z:oz,
-        line:{color:"#5AFF5A", width:3, dash:"dot"}, hoverinfo:"none",
+        line:{color:"#5AFF5A", width:3, dash:"dot"}, hoverinfo:"skip",
         opacity: dimmed ? 0.25 : 1,
         name:"屋外通路", showlegend:true });
     }
@@ -1651,7 +1645,7 @@ function renderMap() {
     fEdges.forEach(e=>{ex.push(e.x0,e.x1,null);ey.push(e.y0,e.y1,null);ez.push(e.z0,e.z1,null);});
     traces.push({ type:"scatter3d", mode:"lines", x:ex, y:ey, z:ez,
       line:{color, width:3}, opacity: dimmed ? 0.22 : 1,
-      hoverinfo:"none", name:`${f}F 通路`, showlegend:false });
+      hoverinfo:"skip", name:`${f}F 通路`, showlegend:false });
   });
 
   [["2","#FFB347","階段"], ["3","#00CED1","エスカレーター"], ["4","#DA70D6","EV"], ["5","#00FF88","上りESC"], ["6","#FF4500","下りESC"]].forEach(([t, color, label]) => {
@@ -1661,7 +1655,7 @@ function renderMap() {
     typeEdges.forEach(e=>{ex.push(e.x0,e.x1,null);ey.push(e.y0,e.y1,null);ez.push(e.z0,e.z1,null);});
     traces.push({ type:"scatter3d", mode:"lines", x:ex, y:ey, z:ez,
       line:{color, width:5}, opacity: dimmed ? 0.25 : 1,
-      hoverinfo:"none", name:label, showlegend:false });
+      hoverinfo:"skip", name:label, showlegend:false });
   });
 
   const byFloor = {};
@@ -1692,7 +1686,7 @@ function renderMap() {
     const px=[],py=[],pz=[];
     currentPath.path_edges.forEach(e=>{px.push(e.x0,e.x1,null);py.push(e.y0,e.y1,null);pz.push(e.z0,e.z1,null);});
     traces.push({ type:"scatter3d", mode:"lines", x:px, y:py, z:pz,
-      line:{color:"#ffd700",width:6}, hoverinfo:"none", name:"最短経路" });
+      line:{color:"#ffd700",width:6}, hoverinfo:"skip", name:"最短経路" });
   }
 
   if (startEdge) {
@@ -1734,7 +1728,7 @@ function renderMap() {
         marker:{size:12, color:picked.map(n=>n.c), symbol:"circle", line:{color:"#fff", width:2}},
         text:picked.map(n=>n.t), textposition:"top center",
         textfont:{color:"#fff", size:10},
-        hoverinfo:"none", showlegend:false });
+        hoverinfo:"skip", showlegend:false });
     }
   }
 
@@ -1774,9 +1768,18 @@ function axisStyle(title) {
   };
 }
 
-document.getElementById("sidebar").addEventListener("transitionend", () => {
-  Plotly.Plots.resize(document.getElementById("map"));
-});
+// #map-container のサイズが変わるたび（初期レイアウト確定・サイドバー開閉・
+// ウィンドウリサイズ・フォント読み込み後のリフローなど）にPlotlyの
+// WebGLキャンバスを追従させる。初回描画時にコンテナサイズがまだ確定して
+// おらず、reloadを繰り返さないと3Dグラフが表示されない問題への対策。
+function initMapResize() {
+  const mapContainer = document.getElementById("map-container");
+  const mapEl = document.getElementById("map");
+  const observer = new ResizeObserver(() => {
+    Plotly.Plots.resize(mapEl);
+  });
+  observer.observe(mapContainer);
+}
 
 // ============================================================
 //  トップへ戻るボタン（モバイル）
