@@ -317,6 +317,7 @@ _cached_room_index = None   # {(教室名, building): [edge行, ...]}
 _cached_rooms_list = None   # api_rooms / api_all 用の整形済み教室リスト
 _cached_nodes_list = None   # api_all 用の整形済みノードリスト
 _cached_node_xyz   = None   # {node_id: (x, y, z)}
+_cached_graph_payload = None   # /api/graph レスポンス全体
 
 def get_cached_data():
     global _cached_nodes_df, _cached_edges_df
@@ -406,9 +407,57 @@ def get_cached_graph(use_elevator=True):
             _cached_graph_without_ev = build_graph(nodes_df, edges_df, use_elevator=False)
         return _cached_graph_without_ev
 
+def get_cached_graph_payload():
+    """/api/graph 用のノード・エッジ・変換設定を一度だけ構築して使い回す"""
+    global _cached_graph_payload
+    if _cached_graph_payload is None:
+        nodes_df, edges_df = get_cached_data()
+
+        nodes = []
+        for _, row in nodes_df.iterrows():
+            if any(pd.isna(row[c]) for c in ["id", "x", "y", "z", "building", "floor"]):
+                continue
+            bldg = int(row["building"])
+            if bldg == 0:
+                color = OUTDOOR_COLOR
+            else:
+                color = BUILDING_COLORS[(bldg - 1) % len(BUILDING_COLORS)]
+            node_dict = {
+                "id":       int(row["id"]),
+                "x":        float(row["x"]),
+                "y":        float(row["y"]),
+                "z":        float(row["z"]),
+                "building": bldg,
+                "floor":    int(row["floor"]),
+                "type":     int(row["type"]),
+                "color":    color,
+                "label":    f"Node {int(row['id'])}<br>{'屋外' if bldg == 0 else f'Building {bldg}'} / Floor {int(row['floor'])}",
+            }
+            if "lat" in row and pd.notna(row["lat"]):
+                node_dict["lat"] = float(row["lat"])
+            if "lng" in row and pd.notna(row["lng"]):
+                node_dict["lng"] = float(row["lng"])
+            nodes.append(node_dict)
+
+        valid_edges = edges_df.dropna(subset=["id", "from", "to", "building", "floor", "weight", "length"])
+        edges = [_edge_to_dict(row) for _, row in valid_edges.iterrows()]
+
+        config = _load_transform_config()
+        config.update(_calc_transforms_from_anchors())
+
+        _cached_graph_payload = {
+            "nodes": nodes,
+            "edges": edges,
+            "building_colors": BUILDING_COLORS,
+            "config": config,
+        }
+    return _cached_graph_payload
+
+
 def clear_cache():
     global _cached_nodes_df, _cached_edges_df, _cached_graph_with_ev, _cached_graph_without_ev
     global _cached_room_index, _cached_rooms_list, _cached_nodes_list, _cached_node_xyz
+    global _cached_graph_payload
     _cached_nodes_df = None
     _cached_edges_df = None
     _cached_graph_with_ev = None
@@ -417,6 +466,7 @@ def clear_cache():
     _cached_rooms_list = None
     _cached_nodes_list = None
     _cached_node_xyz = None
+    _cached_graph_payload = None
 
 
 def _edge_to_dict(row):
@@ -487,41 +537,7 @@ def index():
 
 @app.route("/api/graph")
 def api_graph():
-    nodes_df, edges_df = get_cached_data()
-
-    nodes = []
-    for _, row in nodes_df.iterrows():
-        if any(pd.isna(row[c]) for c in ["id", "x", "y", "z", "building", "floor"]):
-            continue
-        bldg = int(row["building"])
-        if bldg == 0:
-            color = OUTDOOR_COLOR
-        else:
-            color = BUILDING_COLORS[(bldg - 1) % len(BUILDING_COLORS)]
-        node_dict = {
-            "id":       int(row["id"]),
-            "x":        float(row["x"]),
-            "y":        float(row["y"]),
-            "z":        float(row["z"]),
-            "building": bldg,
-            "floor":    int(row["floor"]),
-            "type":     int(row["type"]),
-            "color":    color,
-            "label":    f"Node {int(row['id'])}<br>{'屋外' if bldg == 0 else f'Building {bldg}'} / Floor {int(row['floor'])}",
-        }
-        if "lat" in row and pd.notna(row["lat"]):
-            node_dict["lat"] = float(row["lat"])
-        if "lng" in row and pd.notna(row["lng"]):
-            node_dict["lng"] = float(row["lng"])
-        nodes.append(node_dict)
-
-    valid_edges = edges_df.dropna(subset=["id", "from", "to", "building", "floor", "weight", "length"])
-    edges = [_edge_to_dict(row) for _, row in valid_edges.iterrows()]
-
-    config = _load_transform_config()
-    config.update(_calc_transforms_from_anchors())
-
-    return jsonify({"nodes": nodes, "edges": edges, "building_colors": BUILDING_COLORS, "config": config})
+    return jsonify(get_cached_graph_payload())
 
 
 # ------------------------------------------------------------------ #
