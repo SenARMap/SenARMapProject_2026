@@ -134,7 +134,7 @@
 
 ## 5. 統合経路探索 (route)
 **エンドポイント:** `GET /api/route`
-**概要:** 出発点と目的地をそれぞれ「教室」または「ノードID」で柔軟に指定できる汎用的な経路探索APIです。
+**概要:** 出発点と目的地をそれぞれ「教室」または「ノードID」で柔軟に指定できる汎用的な経路探索APIです。出発と目的が同一ノードを共有する場合は、距離 0 の自明な経路（`path` が 1 ノード）を返します。
 **クエリパラメータ:**
 - **出発地 (A, Bのいずれかが必須):**
   - [A] 教室指定: `from_room` (string) & `from_building` (int)
@@ -255,53 +255,71 @@
 
 ---
 
-## 8. 建物変換パラメータ取得
-**エンドポイント:** `GET /api/building_config`
-**概要:** すべての建物の座標変換パラメータ（回転、Z軸オフセット等）を取得します。
+## 8. エッジ画像マッピング取得
+**エンドポイント:** `GET /api/edge_images`
+**概要:** エッジ（隣接ノード間）に対応する AR 経路画像の URL マッピングを返します。キー形式は `"fromNodeId_toNodeId"`、値は Cloudflare R2 CDN の完全 URL です。
 **クエリパラメータ:** なし
 **レスポンス例:**
 ```json
 {
-  "1": {
-    "rot_deg": 0.0,
-    "tz_offset": 0.0,
-    "tx": 10.0,
-    "ty": 20.0
-  },
-  "10": {
-    "rot_deg": 90.0,
-    "tz_offset": 1.5,
-    "tx": 0.0,
-    "ty": 0.0
-  }
+  "1000001_1000002": "https://cdn.iku-navi.net/1000001_to_1000002.jpg",
+  "1000002_1000001": "https://cdn.iku-navi.net/1000002_to_1000001.jpg"
 }
+```
+*(※ `data/edge_image.csv` に `from`, `to`, `image_name` が未登録のエッジはキーが含まれません)*
+
+---
+
+## 9. 食堂一覧取得
+**エンドポイント:** `GET /api/cafeterias`
+**概要:** `data/cafeteria_edge.csv` に登録された食堂の一覧を返します。フロントエンドの食堂検索ドロップダウンの初期化に使用します。
+**クエリパラメータ:** なし
+**レスポンス例:**
+```json
+[
+  { "name": "Sky_Terrace", "building": "10", "display_name": "スカイテラス" },
+  { "name": "SUBWAY",      "building": "10", "display_name": "サブウェイ" }
+]
 ```
 
 ---
 
-## 9. 建物変換パラメータ更新
-**エンドポイント:** `POST /api/building_config/<int:building_id>`
-**概要:** 指定した建物IDの変換パラメータ（回転、Z軸オフセット）を更新し、`buildings.json` に保存します。更新後はキャッシュがクリアされます。
-**パスパラメータ:**
-- `building_id` (必須, int): 対象の建物ID
-**リクエストボディ (JSON形式):**
-```json
-{
-  "rot_deg": 45.0,
-  "tz_offset": -1.0
-}
-```
-*(※更新したい項目のみの指定で構いません)*
+## 10. 最寄り食堂検索
+**エンドポイント:** `GET /api/nearest_cafeteria`
+**概要:** 出発点から、指定された食堂（または全食堂）への最短経路を計算して返します。
+**クエリパラメータ:**
+- **出発地 (A, Bのいずれかが必須):**
+  - [A] 教室指定: `from_room` (string) & `from_building` (int)
+  - [B] ノード指定: `from_node` (int)
+- **食堂指定:**
+  - `name` (任意, string): 食堂の `name`（`/api/cafeterias` で取得できる値）。省略または `"all"` ですべての食堂を対象に最短を探索。
+- **オプション:**
+  - `use_elevator` (任意, string): `"0"` でエレベーター除外。省略時 `"1"`。
 **レスポンス例:**
 ```json
 {
-  "ok": true,
-  "building": 10,
-  "config": {
-    "rot_deg": 45.0,
-    "tz_offset": -1.0,
-    "tx": 0.0,
-    "ty": 0.0
+  "path": [100001, 100002, 100010],
+  "total_weight": 20.0,
+  "path_coords": [
+    { "id": 100001, "x": 1.0, "y": 2.0, "z": 0.0 }
+  ],
+  "path_edges": [
+    {
+      "from": 100001, "to": 100010,
+      "name": "廊下", "length": 20.0,
+      "x0": 1.0, "y0": 2.0, "z0": 0.0,
+      "x1": 10.0, "y1": 2.0, "z1": 0.0
+    }
+  ],
+  "cafeteria_building": 10,
+  "cafeteria_floor": 1,
+  "cafeteria_edge": {
+    "id": 20, "name": "Sky_Terrace", "from": 100009, "to": 100010
+  },
+  "from_room": "101A",
+  "from_edge": {
+    "id": 1, "name": "101A", "from": 100001, "to": 100002
   }
 }
 ```
+*(※出発地にノードを指定した場合は `from_room` および `from_edge` は含まれません)*

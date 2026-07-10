@@ -1,0 +1,43 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: iki-project
+
+resources:
+  # Namespace (先に適用すること)
+  - namespace.yaml
+
+  # アプリケーション
+  - app/python-deployment.yaml
+  - app/python-service.yaml
+  - app/nginx-deployment.yaml
+  - app/nginx-service.yaml
+  - app/counter-deployment.yaml
+  - app/counter-service.yaml
+  - app/db-statefulset.yaml
+  - app/db-service.yaml
+  - app/auto-update-cronjob.yaml
+
+  # Cloudflare Tunnel
+  - tunnel/cloudflared-deployment.yaml
+
+  # 監視基盤
+  - monitoring/prometheus-rbac.yaml
+  - monitoring/prometheus-configmap.yaml
+  - monitoring/prometheus-pvc.yaml
+  - monitoring/prometheus-deployment.yaml
+  - monitoring/prometheus-service.yaml
+  - monitoring/grafana-provisioning-configmap.yaml
+  - monitoring/grafana-pvc.yaml
+  - monitoring/grafana-deployment.yaml
+  - monitoring/grafana-service.yaml
+  - monitoring/cadvisor-daemonset.yaml
+  - monitoring/cadvisor-service.yaml
+  - monitoring/node-exporter-daemonset.yaml
+  - monitoring/node-exporter-service.yaml
+  - monitoring/kube-state-metrics-rbac.yaml
+  - monitoring/kube-state-metrics-deployment.yaml
+  - monitoring/kube-state-metrics-service.yaml
+
+# secrets.yaml は Git 管理外のため kustomization には含めない。
+# deploy.sh の手順に従って別途適用してください。

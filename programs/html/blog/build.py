@@ -9,6 +9,7 @@ import os
 import json
 import re
 import sys
+from html import escape
 from pathlib import Path
 
 BLOG_DIR = Path(__file__).parent
@@ -91,8 +92,10 @@ POST_HTML_TEMPLATE = """\
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
     <title>{title} | IKU NAVI ブログ</title>
     <link rel="stylesheet" href="../style.css">
+    <link rel="icon" href="../../images/favicon.ico">
 </head>
 <body>
     <header class="site-header">
@@ -148,17 +151,18 @@ def build_post(md_path: Path) -> dict | None:
 
     body_html = md_to_html(body_md)
 
-    author_html = f'<span class="post-author">{author}</span>' if author else ""
+    # frontmatter 由来の値は HTML エスケープして埋め込む（本文は Markdown 変換済みなので除く）
+    author_html = f'<span class="post-author">{escape(author)}</span>' if author else ""
     thumbnail_html = (
-        f'<div class="post-thumbnail"><img src="{thumbnail}" alt="{title}"></div>'
+        f'<div class="post-thumbnail"><img src="{escape(thumbnail)}" alt="{escape(title)}"></div>'
         if thumbnail
         else ""
     )
 
     html = POST_HTML_TEMPLATE.format(
-        title=title,
-        date=date,
-        date_ja=format_date_ja(date),
+        title=escape(title),
+        date=escape(date),
+        date_ja=escape(format_date_ja(date)),
         author_html=author_html,
         thumbnail_html=thumbnail_html,
         body=body_html,
