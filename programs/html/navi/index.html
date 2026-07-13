@@ -1902,24 +1902,29 @@ function renderSvgStep(step) {
     }
   }
 
+  // 最終到達点では方向矢印を出さない（現在地ハローのみ中心に表示）
+  const isGoal = step >= pathCoords.length - 1;
+
   const halo = document.createElementNS("http://www.w3.org/2000/svg", "circle");
   halo.classList.add("dyn");
-  const haloOffset = Math.round(12 * sz);
+  const haloOffset = isGoal ? 0 : Math.round(12 * sz);
   const angleRad = angle * Math.PI / 180;
   halo.setAttribute("cx", curNode.svg_x + Math.round(Math.cos(angleRad) * haloOffset));
   halo.setAttribute("cy", curNode.svg_y + Math.round(Math.sin(angleRad) * haloOffset));
   halo.setAttribute("r", rH); halo.setAttribute("fill", "#32CD32"); halo.setAttribute("fill-opacity", "0.5");
   svgOverlay.appendChild(halo);
 
-  const arrow = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-  arrow.classList.add("dyn");
-  arrow.setAttribute("points", `0,${-aR} ${-aW},${aT} 0,${-Math.round(aR*0.2)} ${aW},${aT}`);
-  arrow.setAttribute("fill",   "#EF4444");
-  arrow.setAttribute("stroke", "white");
-  arrow.setAttribute("stroke-width", aSW);
-  arrow.setAttribute("stroke-linejoin", "round");
-  arrow.setAttribute("transform", `translate(${curNode.svg_x},${curNode.svg_y}) rotate(${angle + 90})`);
-  svgOverlay.appendChild(arrow);
+  if (!isGoal) {
+    const arrow = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    arrow.classList.add("dyn");
+    arrow.setAttribute("points", `0,${-aR} ${-aW},${aT} 0,${-Math.round(aR*0.2)} ${aW},${aT}`);
+    arrow.setAttribute("fill",   "#EF4444");
+    arrow.setAttribute("stroke", "white");
+    arrow.setAttribute("stroke-width", aSW);
+    arrow.setAttribute("stroke-linejoin", "round");
+    arrow.setAttribute("transform", `translate(${curNode.svg_x},${curNode.svg_y}) rotate(${angle + 90})`);
+    svgOverlay.appendChild(arrow);
+  }
 
   if (svgOrigViewBox) panSvgTo(curNode.svg_x, curNode.svg_y);
 }
