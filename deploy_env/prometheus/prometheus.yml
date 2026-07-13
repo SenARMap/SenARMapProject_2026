@@ -25,3 +25,18 @@ scrape_configs:
       # Grafana で「どのノードか」判別できるようにホスト名をラベルに
       - source_labels: [__meta_dockerswarm_node_hostname]
         target_label: instance
+    metric_relabel_configs:
+      # Swarmサービスに属さないコンテナの系列を捨てる。
+      # systemdスライス等は cadvisor 側の --docker_only で除外済みなので、
+      # ここでは単発 docker run などの非Swarmコンテナを除外する。
+      # id="/" のノード全体合計はサービスラベルを持たないがidが /docker/ で
+      # 始まらないため残る。
+      - source_labels: [id, container_label_com_docker_swarm_service_name]
+        regex: '/docker/.+;'
+        action: drop
+      # ダッシュボードで使いやすい短い service ラベルを付与（例: iku_python）。
+      # コンテナ名（タスクIDつき）でグラフを作るとローリングアップデートの
+      # たびに系列が増えるため、集計は service ラベルで行うこと。
+      - source_labels: [container_label_com_docker_swarm_service_name]
+        regex: '(.+)'
+        target_label: service

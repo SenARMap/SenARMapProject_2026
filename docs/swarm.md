@@ -169,6 +169,58 @@ docker exec $(docker ps -q -f name=iku_prometheus) \
 
 ---
 
+## コンテナのお掃除（ハウスキーピング）
+
+「ゴミコンテナ」は主に3種類あり、それぞれ対策が異なる。
+
+### 1. 監視に映るsystemdスライス等（cadvisor の設定で解決済み）
+
+cadvisor はデフォルトで Docker 以外の cgroup（`system.slice/*` など）も「コンテナ」として
+収集してしまう。`docker-compose.yml` の cadvisor に `--docker_only=true` を設定済みで、
+さらに prometheus.yml の `metric_relabel_configs` で Swarm サービス以外の系列を除外している。
+Grafana でのグラフ集計は、ローリングアップデートで増えないよう **`service` ラベル**
+（例: `iku_python`）で行うこと。コンテナ名ラベルは世代ごとに変わるため使わない。
+
+### 2. 停止済みタスクコンテナの残骸（1回だけ実行）
+
+Swarm はローリングアップデート・再起動のたびに古いタスクコンテナを既定で **5世代** 残す
+（`docker stack ps` の `\_` 行、`docker ps -a` の Exited コンテナの正体）。
+マネージャーで1回実行すれば、以後クラスタ全体で直近1世代だけ残す設定になる:
+
+```bash
+docker swarm update --task-history-limit 1
+```
+
+※ 0 にすると障害調査時に直前のコンテナのログが追えなくなるため 1 を推奨。
+
+### 3. 溜まっていく停止コンテナ・宙ぶらりんイメージ（定期実行）
+
+イメージ更新のたびに古いイメージレイヤーがディスクに溜まる。週1回程度の cron で掃除する:
+
+```bash
+# 停止コンテナ・未使用ネットワーク・danglingイメージを削除（volumeと稼働中には触れない）
+docker system prune -f
+```
+
+> **注意:** `docker image prune -a` は「現在使われていない全イメージ」を消すため、
+> ロールバック用の旧イメージも消える。`-a` は付けないこと。
+> `--volumes` も db_data 等を守るため付けないこと。
+
+### 設定変更の反映方法（cadvisor / prometheus.yml を更新した場合）
+
+```bash
+cd /srv/SenARMapProject_2026/deploy_env
+git pull
+
+# prometheus.yml は Docker config 経由なので削除→再作成が必要
+docker config rm iku_prometheus_config
+
+set -a && . .env && set +a
+docker stack deploy --with-registry-auth -c docker-compose.yml iku
+```
+
+---
+
 ## 自動更新の一時停止（本番中のメンテナンス）
 
 cron が30分ごとに `update.sh` を実行するため、本番中に予期しない再起動が起きる可能性がある。
@@ -442,3 +494,5 @@ docker service logs iku_cadvisor
 ```bash
 docker stack ps iku --filter "desired-state=running"
 ```
+
+履歴の保持数自体を減らすには「コンテナのお掃除」の §2（`--task-history-limit 1`）を参照。

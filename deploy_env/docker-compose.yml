@@ -127,6 +127,12 @@ services:
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
+    command:
+      # Dockerコンテナ以外のcgroup（system.slice等のsystemdスライス）を
+      # 「コンテナ」として収集しない — Grafanaのゴミコンテナ対策
+      - --docker_only=true
+      # 収集間隔を既定1秒→15秒（Prometheusのscrape間隔と同じ）に広げてCPU負荷を削減
+      - --housekeeping_interval=15s
     privileged: true
     volumes:
       - /:/rootfs:ro
