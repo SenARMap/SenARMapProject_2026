@@ -472,6 +472,22 @@
       z-index: 10;
       filter: drop-shadow(0 3px 10px rgba(0,0,0,0.65));
     }
+    /* 最終区間（目的地エッジ上）で矢印の代わりに出すバッジ */
+    #near-goal-badge {
+      display: none;
+      position: absolute;
+      left: 50%;
+      top: 80%;
+      transform: translate(-50%, -50%);
+      background: rgba(30, 64, 175, 0.92);
+      color: #fff;
+      font-size: 16px; font-weight: 700;
+      padding: 10px 22px; border-radius: 999px;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 10;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.45);
+    }
 
     /* ================================================================
        Completion modal
@@ -756,6 +772,7 @@
     </div>
     <div id="ar-label">進行方向</div>
     <img id="direction-arrow" src="" alt="方向矢印">
+    <div id="near-goal-badge">&#127937; この通路沿いが目的地周辺です</div>
   </div>
 
 </div><!-- /#sidebar -->
@@ -1371,6 +1388,7 @@ function updateRouteImage(step) {
     phEl.style.display  = "none";
     label.style.display = "none";
     document.getElementById("direction-arrow").style.display = "none";
+    document.getElementById("near-goal-badge").style.display = "none";
     arShowView();
     return;
   }
@@ -1464,7 +1482,17 @@ function calcTurnDirection(step) {
 
 function updateDirectionArrow(step) {
   const arrowEl = document.getElementById("direction-arrow");
+  const nearEl  = document.getElementById("near-goal-badge");
   if (!arrowEl) return;
+
+  // 最終区間（目的地エッジを歩く区間）は矢印だと「まだ先へ進む」と誤解されるため、
+  // 矢印の代わりに「目的地周辺です」バッジを表示する
+  const isFinalSegment = step === pathCoords.length - 2;
+  if (nearEl) nearEl.style.display = isFinalSegment ? "block" : "none";
+  if (isFinalSegment) {
+    arrowEl.style.display = "none";
+    return;
+  }
 
   // 画像が存在する区間でのみ矢印を表示
   const img = imgByStep[step];
