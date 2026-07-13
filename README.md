@@ -29,7 +29,7 @@ SenARMapProject_2026/
 ├── programs/
 │   ├── Website/        # プロジェクト紹介 Web ページ（IKU NAVI）
 │   ├── 3D_Graph/       # Flask バックエンド + 3D 経路ビューア (app.py)
-│   ├── html/           # ナビゲーション UI (navi/index.html, ar.html 等)
+│   ├── html/           # ナビゲーション UI (navi/index.html 等)
 │   ├── SVG_Pointer/    # SVG 矢印合成ツール
 │   ├── Human_Remover/  # 人物モザイク処理ツール
 │   └── Image_Renamer/  # 画像リネームツール

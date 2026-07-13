@@ -44,7 +44,7 @@
 
 | # | 変更 | ファイル |
 |---|------|---------|
-| 1 | `API_BASE` をホスト名で自動切替（localhost → 同一オリジン、それ以外 → `https://api.iku-navi.net`） | `programs/html/navi/index.html` / `ar.html` / `ar-outdoor.html` |
+| 1 | `API_BASE` をホスト名で自動切替（localhost → 同一オリジン、それ以外 → `https://api.iku-navi.net`） | `programs/html/navi/index.html` |
 | 2 | Flask に CORS ヘッダ追加（`iku-navi.net` / `www` / `*.pages.dev` を許可） | `programs/3D_Graph/app.py` |
 | 3 | Pages 用キャッシュ制御 | `programs/html/_headers` |
 | 4 | 旧 `/redirect/`・`/3d/` URL の 301 転送（QRコード救済） | `programs/html/_redirects` |
@@ -132,7 +132,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.iku-navi.net/3d/
    - [ ] トップページ・ブログ・navi UI が表示される
    - [ ] `/navi/script/config.js` にキーが入っている（Google Maps が表示される）
    - [ ] 教室検索 → ルート表示（`api.iku-navi.net` への CORS fetch 成功）
-   - [ ] AR ページ（`/navi/ar.html` / `/navi/ar-outdoor.html`）で API 取得成功
+   - [ ] navi UI 内の屋外 AR モードで API 取得成功
    - [ ] `/svg/10_1F.svg` が返る
    - [ ] 存在しないパスで 404.html が出る
    - [ ] `/redirect/<既存パス>` が `api.iku-navi.net` へ 301 → counter の遷移が流れる
