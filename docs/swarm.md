@@ -8,7 +8,6 @@
 平常時                          イベント時
 ┌─────────────────────┐         ┌─────────────────────┐
 │  Manager (2GB VPS)  │         │  Manager (2GB VPS)  │
-│  ・nginx            │         │  ・nginx            │
 │  ・db               │   ───→  │  ・db               │
 │  ・python ×1        │         │  ・python ×2        │
 │  ・counter ×1       │         │  ・counter ×2       │
@@ -25,6 +24,10 @@
                                 └─────────────────────┘
 ```
 
+> **注:** 静的コンテンツは Cloudflare Pages が配信し、nginx はスタックから撤去済み。
+> `api.iku-navi.net` へのリクエストは cloudflared が python / counter に直接振り分ける
+> （詳細: `docs/cloudflare_pages_migration.md`）。
+
 ### サービスの配置ルール
 
 | サービス | 配置 | 理由 |
@@ -32,7 +35,6 @@
 | python | 全ノードに分散 | スケール対象 |
 | counter | 全ノードに分散 | スケール対象 |
 | cadvisor | 全ノード（global） | 各ノードのメトリクス収集 |
-| nginx | マネージャー固定 | cloudflared と同居 |
 | db | マネージャー固定 | ボリュームデータがある |
 | prometheus | マネージャー固定 | docker.sock 参照 + ボリューム |
 | grafana | マネージャー固定 | ボリュームデータがある |

@@ -22,7 +22,7 @@
 
 大学構内を対象にした AR 対応ナビゲーション Web アプリ。  
 屋外は Google Maps、屋内は SVG フロアマップでルートを表示し、スマートフォンの GPS と組み合わせてステップ ナビゲーションを行う。  
-AR 領域にはエッジ間の経路写真（CDN 配信）を表示し、屋外ナビ用の `ar.html` / `ar-outdoor.html` も併用している。
+AR 領域にはエッジ間の経路写真（CDN 配信）を表示する。
 
 ---
 
@@ -390,7 +390,7 @@ imgByStep[step].classList.add("active");
 
 ### 9.3 屋外 AR — Three.js + GPS + ジャイロ
 
-`navi/index.html` の 2 番目の `<script>` タグ（`AR Outdoor Integration` ブロック）に実装されている。`ar-outdoor.html` はこれと同じアーキテクチャのスタンドアロン版。
+`navi/index.html` の 2 番目の `<script>` タグ（`AR Outdoor Integration` ブロック）に実装されている。
 
 #### レイヤー構成
 
@@ -455,23 +455,6 @@ q.multiply(_q0.setFromAxisAngle(_zee, -orient));    // 画面の回転補正
 
 ---
 
-### 9.4 スタンドアロン AR ページ
+### 9.4 スタンドアロン AR ページ（廃止）
 
-| ファイル | ライブラリ | 目的 |
-|---------|-----------|------|
-| `ar.html` | A-Frame 1.3.0 + AR.js 3.4.5 | ロケーションベース AR の動作検証 |
-| `ar-outdoor.html` | Three.js r137（生） | 屋外ルート網 AR のスタンドアロン版 |
-
-**`ar.html`** は A-Frame の `gps-new-entity-place` コンポーネントで GPS 座標に 3D エンティティを配置する。現在地基準のテストマーカー（北 10m に赤ボックス・東 10m に青ボックス）と `/api/all` から取得した屋外ノードを表示する。A-Frame 標準フォントは日本語非対応のためラベルは英数字のみ（`face-camera` カスタムコンポーネントでビルボード表示）。
-
-**`ar-outdoor.html`** は `navi/index.html` の屋外 AR 統合と同じアーキテクチャをページ単体で動かせるようにしたもの。URL パラメータで動作を細かくチューニングできる：
-
-| パラメータ | 説明 | デフォルト |
-|-----------|------|-----------|
-| `?lat=X&lng=Y` | GPS をシミュレート（実機 GPS 不要） | — |
-| `?debug=0` | 画面下部のデバッグログを非表示 | 表示 |
-| `?yaw=N` | 方位に N° のオフセットを加算（現場合わせ） | 0 |
-| `?flip=1` | コンパスの回転方向を反転（端末差の保険） | 0 |
-| `?dec=N` | 磁気偏角を手動指定（磁北→真北補正、度） | 0 |
-| `?fov=N` | Three.js カメラの垂直 FOV（度） | 65 |
-| `?tilt=N` | カメラのピッチを下方向にシフト（度） | 5 |
+動作検証用のスタンドアロン AR ページ `ar.html`（A-Frame + AR.js）と `ar-outdoor.html`（Three.js 単体版）は、検証完了に伴い削除した。屋外 AR は `navi/index.html` 内の統合実装（§9.3）のみが実運用機能である。必要になった場合は Git 履歴から復元できる。

@@ -19,8 +19,8 @@ AR 領域にはエッジ間の経路写真（Cloudflare R2 CDN 配信）を表�
 
 - **バックエンド:** Python 3 / Flask / Gunicorn / NetworkX / pandas
 - **フロントエンド:** HTML / CSS / Vanilla JavaScript / Google Maps API / Inline SVG
-- **インフラ:** Docker / Docker Compose / Nginx / ConoHa VPS
-- **ネットワーク:** Cloudflare Tunnels（外部公開）/ Cloudflare R2（画像 CDN）
+- **インフラ:** Docker (Swarm) / ConoHa VPS / Cloudflare Pages（静的配信）
+- **ネットワーク:** Cloudflare Tunnels（API 公開）/ Cloudflare R2（画像 CDN）
 
 ## ディレクトリ構成
 
@@ -29,7 +29,7 @@ SenARMapProject_2026/
 ├── programs/
 │   ├── Website/        # プロジェクト紹介 Web ページ（IKU NAVI）
 │   ├── 3D_Graph/       # Flask バックエンド + 3D 経路ビューア (app.py)
-│   ├── html/           # ナビゲーション UI (navi/index.html, ar.html 等)
+│   ├── html/           # ナビゲーション UI (navi/index.html 等)
 │   ├── SVG_Pointer/    # SVG 矢印合成ツール
 │   ├── Human_Remover/  # 人物モザイク処理ツール
 │   └── Image_Renamer/  # 画像リネームツール

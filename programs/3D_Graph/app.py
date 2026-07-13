@@ -9,6 +9,25 @@ from flask import Flask, render_template, jsonify, request
 
 app = Flask(__name__)
 
+# Cloudflare Pages (iku-navi.net) から api.iku-navi.net へのクロスオリジン fetch を許可する。
+# nginx 撤去後は cloudflared → Flask 直結のため、CORS ヘッダはここで返す。
+# API は GET のみ・カスタムヘッダなしの「単純リクエスト」なのでプリフライト対応は不要。
+CORS_ALLOWED_ORIGINS = {
+    "https://iku-navi.net",
+    "https://www.iku-navi.net",
+}
+CORS_ORIGIN_PATTERN = re.compile(r"^https://[a-z0-9.-]+\.pages\.dev$")  # Pages プレビュー用
+
+
+@app.after_request
+def add_cors_headers(response):
+    origin = request.headers.get("Origin", "")
+    if origin in CORS_ALLOWED_ORIGINS or CORS_ORIGIN_PATTERN.match(origin):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+    return response
+
+
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR        = os.path.join(BASE_DIR, "../../data")
 BUILDINGS_JSON  = os.path.join(DATA_DIR, "buildings.json")
@@ -489,6 +508,28 @@ def _edge_to_dict(row):
     }
 
 
+def _extend_to_far_endpoint(G, path, length, dest_edge_row):
+    """
+    目的地がエッジ（教室・トイレ・食堂）の場合、最寄り端点で止めず、
+    そのエッジのもう一方の端点まで経路を延長する。
+    教室はエッジ区間に面しているため、区間そのものを歩かせることで
+    必ずドアの前を通る案内になる。
+    直前ノードが反対側端点（＝既に目的エッジを歩いて到着）の場合は延長しない。
+    """
+    if dest_edge_row is None or not path:
+        return path, length
+    u, v = int(dest_edge_row["from"]), int(dest_edge_row["to"])
+    last = path[-1]
+    far = v if last == u else u if last == v else None
+    if far is None:
+        return path, length
+    if len(path) >= 2 and path[-2] == far:
+        return path, length
+    if not G.has_edge(last, far):
+        return path, length
+    return path + [far], length + G.edges[last, far].get("weight", 0.0)
+
+
 def _path_result(G, path, length):
     """Dijkstraの結果をJSON用dictに整形するヘルパー"""
     path_coords = []
@@ -667,6 +708,7 @@ def api_navigate_to_room():
         label = f"'{start_room}'" if start_room else f"ノード {start_node}"
         return jsonify({"error": f"{label} から教室 '{room_name}' への経路が見つかりません"}), 404
 
+    best_path, best_length = _extend_to_far_endpoint(G, best_path, best_length, best_dest_edge)
     result = _path_result(G, best_path, best_length)
     result["destination_room"] = room_name
     result["destination_edge"] = _edge_to_dict(best_dest_edge)
@@ -768,6 +810,7 @@ def api_route():
     if best_path is None:
         return jsonify({"error": "指定された出発点から目的地への経路が見つかりません"}), 404
 
+    best_path, best_length = _extend_to_far_endpoint(G, best_path, best_length, best_dest_edge)
     result = _path_result(G, best_path, best_length)
     if best_start_edge is not None:
         result["from_room"]  = from_room
@@ -907,6 +950,7 @@ def api_nearest_toilet():
     t_names = [n.strip() for n in str(best_toilet_row["name"]).split(";")]
     found_key = next((t for t in ["M_Toilet", "F_Toilet", "C_Toilet"] if t in t_names), "")
 
+    best_path, best_length = _extend_to_far_endpoint(G, best_path, best_length, best_toilet_row)
     result = _path_result(G, best_path, best_length)
     result["toilet_type"]     = found_key.split("_")[0] if found_key else ""
     result["toilet_name"]     = found_key
@@ -1011,6 +1055,7 @@ def api_nearest_cafeteria():
     if best_path is None:
         return jsonify({"error": "食堂への経路が見つかりません"}), 404
 
+    best_path, best_length = _extend_to_far_endpoint(G, best_path, best_length, best_caf_row)
     result = _path_result(G, best_path, best_length)
     result["cafeteria_building"] = int(best_caf_row["building"])
     result["cafeteria_floor"]    = int(best_caf_row["floor"])

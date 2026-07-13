@@ -1,0 +1,11 @@
+# Cloudflare Pages のキャッシュ制御
+# https://developers.cloudflare.com/pages/configuration/headers/
+
+/svg/*
+  Cache-Control: public, max-age=86400
+
+/images/*
+  Cache-Control: public, max-age=86400
+
+/navi/script/config.js
+  Cache-Control: no-cache
