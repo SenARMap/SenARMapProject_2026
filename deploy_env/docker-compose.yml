@@ -33,19 +33,10 @@ services:
         delay: 5s
         max_attempts: 3
 
-  nginx:
-    image: ghcr.io/senarmaporg/iki_project_2026_nginx:latest
-    environment:
-      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
-    networks:
-      - app_net
-    deploy:
-      replicas: 1
-      placement:
-        constraints:
-          - node.role == manager  # cloudflared と同居させるためマネージャー固定
-      restart_policy:
-        condition: on-failure
+  # nginx は Cloudflare Pages 移行に伴い撤去済み。
+  # 静的配信は Pages、/api・/3d → python、/redirect → counter は
+  # cloudflared の Public Hostname（パスルーティング）が直接振り分ける。
+  # 詳細: docs/cloudflare_pages_migration.md
 
   db:
     image: mariadb:11

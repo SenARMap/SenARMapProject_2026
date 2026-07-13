@@ -9,6 +9,25 @@ from flask import Flask, render_template, jsonify, request
 
 app = Flask(__name__)
 
+# Cloudflare Pages (iku-navi.net) から api.iku-navi.net へのクロスオリジン fetch を許可する。
+# nginx 撤去後は cloudflared → Flask 直結のため、CORS ヘッダはここで返す。
+# API は GET のみ・カスタムヘッダなしの「単純リクエスト」なのでプリフライト対応は不要。
+CORS_ALLOWED_ORIGINS = {
+    "https://iku-navi.net",
+    "https://www.iku-navi.net",
+}
+CORS_ORIGIN_PATTERN = re.compile(r"^https://[a-z0-9.-]+\.pages\.dev$")  # Pages プレビュー用
+
+
+@app.after_request
+def add_cors_headers(response):
+    origin = request.headers.get("Origin", "")
+    if origin in CORS_ALLOWED_ORIGINS or CORS_ORIGIN_PATTERN.match(origin):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+    return response
+
+
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR        = os.path.join(BASE_DIR, "../../data")
 BUILDINGS_JSON  = os.path.join(DATA_DIR, "buildings.json")

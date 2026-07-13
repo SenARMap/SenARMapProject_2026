@@ -791,7 +791,8 @@
 // ================================================================
 // State
 // ================================================================
-const API_BASE = "";
+// ローカル開発（nginx/Flask 同居）では同一オリジン、本番（Cloudflare Pages）では api サブドメインへ
+const API_BASE = ["localhost", "127.0.0.1"].includes(location.hostname) ? "" : "https://api.iku-navi.net";
 
 let map;
 let searchMode    = "room";

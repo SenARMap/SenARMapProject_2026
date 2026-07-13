@@ -19,8 +19,8 @@ AR 領域にはエッジ間の経路写真（Cloudflare R2 CDN 配信）を表�
 
 - **バックエンド:** Python 3 / Flask / Gunicorn / NetworkX / pandas
 - **フロントエンド:** HTML / CSS / Vanilla JavaScript / Google Maps API / Inline SVG
-- **インフラ:** Docker / Docker Compose / Nginx / ConoHa VPS
-- **ネットワーク:** Cloudflare Tunnels（外部公開）/ Cloudflare R2（画像 CDN）
+- **インフラ:** Docker (Swarm) / ConoHa VPS / Cloudflare Pages（静的配信）
+- **ネットワーク:** Cloudflare Tunnels（API 公開）/ Cloudflare R2（画像 CDN）
 
 ## ディレクトリ構成
 

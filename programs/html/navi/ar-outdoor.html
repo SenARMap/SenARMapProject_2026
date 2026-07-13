@@ -142,7 +142,8 @@ const DEBUG_ON  = QS.get("debug") !== "0";
 // ================================================================
 // 定数
 // ================================================================
-const API_BASE   = "";
+// ローカル開発（nginx/Flask 同居）では同一オリジン、本番（Cloudflare Pages）では api サブドメインへ
+const API_BASE   = ["localhost", "127.0.0.1"].includes(location.hostname) ? "" : "https://api.iku-navi.net";
 // 磁気偏角[度]（磁北→真北の補正）。0で無効。?dec=N で上書き可能。
 // 例: 東京付近は約 -7.5（西偏）。現場で方位が一定角ズレる場合に調整する。
 const MAGNETIC_DECLINATION_DEG = 0;
