@@ -208,13 +208,22 @@ docker system prune -f
 
 ### 設定変更の反映方法（cadvisor / prometheus.yml を更新した場合）
 
+> **注意:** Docker config はサービスが参照している間は `docker config rm` できない
+> （`config 'iku_prometheus_config' is in use` エラーになる）。
+> **先にサービスを削除**する。メトリクスデータは `prometheus_data` ボリュームに
+> あるため消えない（監視が数十秒止まるだけ）。
+
 ```bash
 cd /srv/SenARMapProject_2026/deploy_env
 git pull
 
-# prometheus.yml は Docker config 経由なので削除→再作成が必要
+# 1. config を掴んでいるサービスを先に削除
+docker service rm iku_prometheus
+
+# 2. config を削除（1の後なら成功する）
 docker config rm iku_prometheus_config
 
+# 3. 再デプロイで config とサービスが新しい内容で再作成される
 set -a && . .env && set +a
 docker stack deploy --with-registry-auth -c docker-compose.yml iku
 ```
@@ -370,19 +379,9 @@ docker service update --image ghcr.io/senarmaporg/iki_project_2026_python:latest
 
 ## prometheus の設定変更
 
-prometheus.yml を更新した場合、Docker config を更新してサービスを再起動:
-
-```bash
-# config の更新は削除→再作成が必要
-docker config rm iku_prometheus_config
-
-# スタック再デプロイで config が再作成される
-set -a && . .env && set +a
-docker stack deploy \
-  --with-registry-auth \
-  -c docker-compose.yml \
-  iku
-```
+prometheus.yml を更新した場合の反映手順は「コンテナのお掃除」内の
+**「設定変更の反映方法」** を参照（サービス削除 → config 削除 → 再デプロイの順。
+config はサービスが参照中だと削除できない点に注意）。
 
 ---
 
