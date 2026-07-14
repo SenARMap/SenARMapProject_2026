@@ -9,3 +9,7 @@
 
 /navi/script/config.js
   Cache-Control: no-cache
+
+# ブログは検索エンジンにインデックスさせない
+/blog/*
+  X-Robots-Tag: noindex
