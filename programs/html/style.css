@@ -343,6 +343,16 @@ body {
   padding: 2px 8px;
 }
 
+.info-link {
+  color: var(--blue-dark);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.info-link:hover {
+  color: var(--blue);
+}
+
 .faq {
   display: flex;
   flex-direction: column;
