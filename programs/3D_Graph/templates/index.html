@@ -432,7 +432,7 @@
       background: var(--bg);
       min-width: 0;
     }
-    #map { width: 100%; height: 100%; }
+    #map { width: 100%; height: 100%; touch-action: none; }
 
     .map-hint {
       position: absolute;
@@ -617,6 +617,12 @@
     .map-tool:hover {
       border-color: var(--accent);
       color: var(--accent);
+    }
+    #zoom-btns { display: flex; gap: 6px; }
+    #zoom-btns .map-tool {
+      width: 34px; padding: 7px 0;
+      font-size: 0.85rem; line-height: 1;
+      text-align: center;
     }
     #zoom-route-btn { display: none; }
     #zoom-route-btn.available { display: block; }
@@ -932,6 +938,10 @@
     <div id="map-tools">
       <button class="map-tool" onclick="setTopView()">俯瞰 ↑</button>
       <button class="map-tool" id="zoom-route-btn" onclick="toggleRouteZoom()">ルートを拡大</button>
+      <div id="zoom-btns">
+        <button class="map-tool" onclick="zoomCamera(0.72)" aria-label="拡大">＋</button>
+        <button class="map-tool" onclick="zoomCamera(1.4)"  aria-label="縮小">−</button>
+      </div>
     </div>
 
     <div id="boot-error">
@@ -1005,6 +1015,7 @@ function floorColor(f) {
   renderMap();
   initNodePicker();
   initMapResize();
+  initPinchZoom();
   prefetchRooms();
 
   acStart = new RoomAutocomplete({
@@ -1961,6 +1972,79 @@ function resetRouteZoom() {
   const b = document.getElementById("zoom-route-btn");
   b.textContent = "ルートを拡大";
   b.classList.remove("zoomed");
+}
+
+// ============================================================
+//  カメラズーム — ＋/−ボタン と 2本指ピンチ（タブレット対応）
+//  Plotly gl3d のタッチ操作は回転しか効かないため、ピンチは
+//  キャプチャ段階で横取りしてカメラの注視点との距離を直接変える。
+// ============================================================
+const ZOOM_DIST_MIN = 0.25;  // 注視点へ寄れる最小距離（最大ズームイン）
+const ZOOM_DIST_MAX = 12;    // 引ける最大距離（最大ズームアウト）
+
+// 現在のカメラ状態を取得（回転中の内部状態を優先し、無ければレイアウト値）
+function getLiveCamera() {
+  const gd = document.getElementById("map");
+  const scene = gd._fullLayout?.scene?._scene;
+  if (scene?.getCamera) return scene.getCamera();
+  return gd.layout?.scene?.camera || { eye: { x: 1.8, y: 1.8, z: 1.4 } };
+}
+
+// factor < 1 で拡大（注視点へ近づく）、> 1 で縮小
+function zoomCamera(factor, baseCam) {
+  const cam    = baseCam || getLiveCamera();
+  const center = cam.center || { x: 0, y: 0, z: 0 };
+  const eye    = cam.eye;
+  const dx = eye.x - center.x, dy = eye.y - center.y, dz = eye.z - center.z;
+  const dist = Math.hypot(dx, dy, dz);
+  if (!dist) return;
+  const newDist = Math.max(ZOOM_DIST_MIN, Math.min(dist * factor, ZOOM_DIST_MAX));
+  const s = newDist / dist;
+  Plotly.relayout("map", {
+    "scene.camera": {
+      eye:    { x: center.x + dx * s, y: center.y + dy * s, z: center.z + dz * s },
+      center: { ...center },
+      up:     cam.up || { x: 0, y: 0, z: 1 },
+    },
+  });
+}
+
+function initPinchZoom() {
+  const mapEl = document.getElementById("map");
+  let pinch    = null;   // { d0, cam0 } ピンチ開始時の指間距離とカメラ
+  let blocking = false;  // ピンチ中〜全指が離れるまで Plotly へのタッチ伝播を止める
+
+  const touchDist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  const block = e => { e.preventDefault(); e.stopPropagation(); };
+
+  // capture:true — Plotly がキャンバスで受け取る前に横取りする
+  mapEl.addEventListener("touchstart", e => {
+    if (e.touches.length >= 2) {
+      pinch    = { d0: touchDist(e.touches), cam0: getLiveCamera() };
+      blocking = true;
+      block(e);
+    } else if (blocking) {
+      block(e);
+    }
+  }, { capture: true, passive: false });
+
+  mapEl.addEventListener("touchmove", e => {
+    if (pinch && e.touches.length >= 2) {
+      const d = touchDist(e.touches);
+      if (d >= 1) zoomCamera(pinch.d0 / d, pinch.cam0);
+      block(e);
+    } else if (blocking) {
+      block(e);
+    }
+  }, { capture: true, passive: false });
+
+  const endTouch = e => {
+    if (!blocking) return;
+    if (e.touches.length < 2)   pinch = null;
+    if (e.touches.length === 0) blocking = false;  // 全指が離れたら通常操作へ復帰
+  };
+  mapEl.addEventListener("touchend",    endTouch, { capture: true });
+  mapEl.addEventListener("touchcancel", endTouch, { capture: true });
 }
 
 // ============================================================
