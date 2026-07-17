@@ -1119,6 +1119,7 @@ function resolveRoom(inputId, bldgSelectId) {
 // Search mode toggle
 // ================================================================
 function setMode(mode) {
+  if (mode !== searchMode) syncDestination(mode);
   searchMode = mode;
   document.getElementById("panel-room").style.display = mode === "room" ? "block" : "none";
   document.getElementById("panel-gps").style.display  = mode === "gps"  ? "block" : "none";
@@ -1126,6 +1127,18 @@ function setMode(mode) {
   document.getElementById("tab-gps").classList.toggle("active",  mode === "gps");
   // タブ切り替え時にパネルが閉じていれば自動で開く
   if (!searchPanelOpen && window.innerWidth < 768) toggleSearchPanel();
+}
+
+// 「教室→教室」と「現在地→教室」で目的地欄は別 input のため、
+// タブ切替時に切替元の値を切替先へコピーして1つの目的地として振る舞わせる
+function syncDestination(toMode) {
+  const [srcInp, srcBldg, dstInp, dstBldg] = toMode === "gps"
+    ? ["to-input", "to-bldg", "to-input-gps", "gps-to-bldg"]
+    : ["to-input-gps", "gps-to-bldg", "to-input", "to-bldg"];
+  document.getElementById(dstInp).value = document.getElementById(srcInp).value;
+  const src = document.getElementById(srcBldg);
+  const dst = document.getElementById(dstBldg);
+  if ([...dst.options].some(o => o.value === src.value)) dst.value = src.value;
 }
 
 function setFacMode(mode) {
