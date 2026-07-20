@@ -292,6 +292,17 @@
       color: #64748B; cursor: pointer; transition: all 0.2s;
     }
     .category-tab.active { background: #3B82F6; border-color: #3B82F6; color: white; }
+
+    /* イベントモード (?event=1) のときだけ表示されるバッジ */
+    #event-badge {
+      display: none;
+      align-items: center;
+      font-size: 11px; font-weight: 700;
+      color: #B45309; background: #FEF3C7;
+      border: 1px solid #FCD34D;
+      padding: 3px 8px; border-radius: 10px;
+      white-space: nowrap; flex-shrink: 0;
+    }
     #btn-fac-search {
       flex: 1; height: 40px; border: none; border-radius: 10px;
       background: linear-gradient(135deg, #3B82F6, #1D4ED8);
@@ -624,6 +635,7 @@
         <button class="category-tab active" id="cat-room"     onclick="setCategory('room')">教室</button>
         <button class="category-tab"        id="cat-facility" onclick="setCategory('facility')">設備検索</button>
       </div>
+      <span id="event-badge">&#127914; イベント</span>
       <button id="search-toggle" onclick="toggleSearchPanel()" aria-label="検索パネルを開閉">
         <span id="search-chevron" class="open">▾</span>
       </button>
@@ -813,13 +825,24 @@
 // ローカル開発（nginx/Flask 同居）では同一オリジン、本番（Cloudflare Pages）では api サブドメインへ
 const API_BASE = ["localhost", "127.0.0.1"].includes(location.hostname) ? "" : "https://api.iku-navi.net";
 
+// イベントモード: navi/?event=1 で有効化。
+// event.csv に登録されたイベント名（屋台など）を検索候補に加え、イベント名でルート検索できる。
+const EVENT_MODE = new URLSearchParams(location.search).get("event") === "1";
+if (EVENT_MODE) {
+  document.getElementById("event-badge").style.display = "inline-flex";
+  ["from-input", "to-input", "to-input-gps", "fac-from-input"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.placeholder = "教室名・屋台名";
+  });
+}
+
 let map;
 let searchMode    = "room";
 let facSearchMode = "room";
 let gpsCoords     = null;
 let facGpsCoords  = null;
 let allNodes   = [];
-let allRooms   = [];        // [{room, building}, ...]
+let allRooms   = [];        // [{room, display, building, isEvent?}, ...] roomはAPI用の生の名前、displayは表示名
 let roomsByBuilding = {};   // {"10": ["101A", ...], ...}
 
 let pathCoords  = [];
@@ -892,10 +915,11 @@ function initMap() {
 async function loadAllData() {
   prefetchArrowImages(); // ページ読み込み時に矢印画像を事前取得（fire-and-forget）
   try {
-    const [dataRes, imgRes, cafRes] = await Promise.all([
+    const [dataRes, imgRes, cafRes, evRes] = await Promise.all([
       fetch(`${API_BASE}/api/all`),
       fetch(`${API_BASE}/api/edge_images`),
       fetch(`${API_BASE}/api/cafeterias`),
+      EVENT_MODE ? fetch(`${API_BASE}/api/events`) : Promise.resolve(null),
     ]);
     if (dataRes.ok) {
       const data = await dataRes.json();
@@ -903,6 +927,13 @@ async function loadAllData() {
       initRoomData(data.rooms || []);
     } else {
       console.warn("API unavailable — room autocomplete disabled");
+    }
+    // イベントモード: イベント名（屋台など）を検索候補プールに追加
+    if (evRes && evRes.ok) {
+      const events = await evRes.json();
+      events.forEach(ev => allRooms.push({
+        room: ev.title, display: ev.title, building: ev.building, isEvent: true,
+      }));
     }
     if (imgRes.ok) edgeImages = await imgRes.json();
     if (cafRes.ok) {
@@ -988,12 +1019,16 @@ function applyUrlParams() {
   if (to && !from) {
     document.getElementById("step-label").textContent = "出発教室を入力してルート検索してください";
     document.getElementById("step-count").textContent =
-      toInfo && toInfo !== "ambiguous" ? `目的地: ${toInfo.building}号館 ${toInfo.room}` : `目的地: ${to}`;
+      toInfo && toInfo !== "ambiguous" ? `目的地: ${bldgLabel(toInfo.building)} ${toInfo.display}` : `目的地: ${to}`;
   }
 }
 
+function bldgLabel(b) {
+  return Number(b) === 0 ? "屋外" : `${b}号館`;
+}
+
 function initRoomData(rooms) {
-  allRooms = rooms.map(r => ({ room: r.room, building: r.building }));
+  allRooms = rooms.map(r => ({ room: r.room, display: r.display || r.room, building: r.building }));
   roomsByBuilding = {};
   rooms.forEach(r => {
     const key = String(r.building);
@@ -1042,7 +1077,8 @@ function setupAutocomplete(inputId, suggId, bldgSelectId) {
     let candidates = selectedBldg
       ? allRooms.filter(r => String(r.building) === selectedBldg)
       : allRooms;
-    if (query) candidates = candidates.filter(r => r.room.toLowerCase().includes(query));
+    if (query) candidates = candidates.filter(r =>
+      r.room.toLowerCase().includes(query) || r.display.toLowerCase().includes(query));
     return candidates.slice(0, 20);
   }
 
@@ -1053,10 +1089,11 @@ function setupAutocomplete(inputId, suggId, bldgSelectId) {
     matches.forEach(r => {
       const item = document.createElement("div");
       item.className = "item";
-      item.textContent = selectedBldg ? r.room : `${r.building}号館 ${r.room}`;
+      const label = r.isEvent ? `\u{1F3AA} ${r.display}` : r.display;
+      item.textContent = selectedBldg ? label : `${bldgLabel(r.building)} ${label}`;
       item.addEventListener("mousedown", e => {
         e.preventDefault();
-        input.value = r.room;
+        input.value = r.display;
         if (bldg && !bldg.value) bldg.value = String(r.building);
         sugg.style.display = "none";
       });
@@ -1097,11 +1134,13 @@ function resolveRoom(inputId, bldgSelectId) {
   const roomQuery = inputEl.value.trim();
   const bldgVal   = bldgEl ? bldgEl.value : "";
   if (!roomQuery) return null;
+  // 生の名前 (room) と表示名 (display) のどちらで入力されてもマッチさせる
   let matches;
   if (bldgVal) {
-    matches = allRooms.filter(r => String(r.building) === bldgVal && r.room === roomQuery);
+    matches = allRooms.filter(r => String(r.building) === bldgVal
+      && (r.room === roomQuery || r.display === roomQuery));
   } else {
-    matches = allRooms.filter(r => r.room === roomQuery);
+    matches = allRooms.filter(r => r.room === roomQuery || r.display === roomQuery);
   }
   if (matches.length === 0) return null;
   if (matches.length > 1)   return "ambiguous";
@@ -1168,8 +1207,12 @@ async function doToiletSearch() {
     const fromInfo = resolveRoom("fac-from-input", "fac-from-bldg");
     if (!fromInfo)               { alert("出発教室を入力してください。"); return; }
     if (fromInfo === "ambiguous") { alert("出発教室が複数の号館に存在します。号館を指定してください。"); return; }
-    params.set("from_room",     fromInfo.room);
-    params.set("from_building", fromInfo.building);
+    if (fromInfo.isEvent) {
+      params.set("from_event", fromInfo.room);
+    } else {
+      params.set("from_room",     fromInfo.room);
+      params.set("from_building", fromInfo.building);
+    }
   } else {
     if (!facGpsCoords) { alert("GPS位置を先に取得してください。"); return; }
     const nearest = findNearestNode(facGpsCoords.lat, facGpsCoords.lng);
@@ -1214,8 +1257,12 @@ async function doCafeteriaSearch() {
     const fromInfo = resolveRoom("fac-from-input", "fac-from-bldg");
     if (!fromInfo)               { alert("出発教室を入力してください。"); return; }
     if (fromInfo === "ambiguous") { alert("出発教室が複数の号館に存在します。号館を指定してください。"); return; }
-    params.set("from_room",     fromInfo.room);
-    params.set("from_building", fromInfo.building);
+    if (fromInfo.isEvent) {
+      params.set("from_event", fromInfo.room);
+    } else {
+      params.set("from_room",     fromInfo.room);
+      params.set("from_building", fromInfo.building);
+    }
   } else {
     if (!facGpsCoords) { alert("GPS位置を先に取得してください。"); return; }
     const nearest = findNearestNode(facGpsCoords.lat, facGpsCoords.lng);
@@ -1424,10 +1471,18 @@ async function doSearch() {
     if (fromInfo === "ambiguous") { alert("出発教室が複数の号館に存在します。号館を指定してください。"); return; }
     if (!toInfo)                { alert("目的教室を入力してください。"); return; }
     if (toInfo   === "ambiguous") { alert("目的教室が複数の号館に存在します。号館を指定してください。"); return; }
-    params.set("from_room",     fromInfo.room);
-    params.set("from_building", fromInfo.building);
-    params.set("to_room",       toInfo.room);
-    params.set("to_building",   toInfo.building);
+    if (fromInfo.isEvent) {
+      params.set("from_event", fromInfo.room);
+    } else {
+      params.set("from_room",     fromInfo.room);
+      params.set("from_building", fromInfo.building);
+    }
+    if (toInfo.isEvent) {
+      params.set("to_event", toInfo.room);
+    } else {
+      params.set("to_room",       toInfo.room);
+      params.set("to_building",   toInfo.building);
+    }
   } else {
     if (!gpsCoords) { alert("GPS位置を先に取得してください。"); return; }
     const toInfo = resolveRoom("to-input-gps", "gps-to-bldg");
@@ -1436,8 +1491,12 @@ async function doSearch() {
     const nearest = findNearestNode(gpsCoords.lat, gpsCoords.lng);
     if (!nearest) { alert("近くの出発ノードが見つかりません。\nキャンパスから離れすぎている可能性があります。"); return; }
     params.set("from_node",   nearest.id);
-    params.set("to_room",     toInfo.room);
-    params.set("to_building", toInfo.building);
+    if (toInfo.isEvent) {
+      params.set("to_event", toInfo.room);
+    } else {
+      params.set("to_room",     toInfo.room);
+      params.set("to_building", toInfo.building);
+    }
   }
 
   setLoading(true);
