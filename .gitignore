@@ -220,3 +220,6 @@ config.js
 
 # Kubernetes Secrets (絶対にコミットしないこと)
 deploy_env/k8s/secrets.yaml
+
+# Map_Editor で撮影したAR経路写真（CDNへは手動アップロード。リポジトリには含めない）
+captured_photos/
