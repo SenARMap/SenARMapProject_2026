@@ -86,9 +86,13 @@
       "id": 100001, "building": 10, "floor": 1, "type": 1
     }
   ],
-  "buildings": [1, 10]
+  "buildings": [
+    { "id": 1, "display_name": "1号館" },
+    { "id": 10, "display_name": "10号館" }
+  ]
 }
 ```
+`buildings[].display_name` は `data/building_name.csv` で設定した表示名（未設定時は `"{id}号館"`、`id=0` は `"屋外"`）。詳細は `NameDB_EventMode.md` を参照。
 
 ---
 

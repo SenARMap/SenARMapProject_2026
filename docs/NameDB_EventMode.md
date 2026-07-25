@@ -1,7 +1,7 @@
-# 名前データベース（name.csv）とイベントモード（event.csv）
+# 名前データベース（name.csv / building_name.csv）とイベントモード（event.csv）
 
-`data/name.csv` と `data/event.csv` を編集するだけで、コード変更なしに表示名やイベント検索を設定できます。
-どちらも Flask（`programs/3D_Graph/app.py`）が起動時に読み込みます。編集後はサーバーの再起動（またはキャッシュクリア）が必要です。
+`data/name.csv`・`data/building_name.csv`・`data/event.csv` を編集するだけで、コード変更なしに表示名やイベント検索を設定できます。
+いずれも Flask（`programs/3D_Graph/app.py`）が起動時に読み込みます。編集後はサーバーの再起動（またはキャッシュクリア）が必要です。
 
 ---
 
@@ -37,7 +37,36 @@ building,name,display_name
 
 ---
 
-## 2. イベントモード — data/event.csv + navi/?event=1
+## 2. 建物名データベース — data/building_name.csv
+
+建物ID（号館番号）に、任意の表示名（正式名称・愛称など）を割り当てます。未登録の建物は従来どおり
+`{building}号館`（building=0 は `屋外`）がそのまま表示されます。
+
+### 列
+
+| 列 | 必須 | 説明 |
+|---|---|---|
+| `building` | 必須 | 号館番号（屋外は `0`） |
+| `display_name` | 必須 | ナビ画面に表示する建物名 |
+
+### 記入例
+
+```csv
+building,display_name
+10,10号館(130年記念館)
+1,1号館
+```
+
+### 挙動
+
+- API的には `/api/all` の `buildings` が `[1, 2, ...]` のような数値配列ではなく、
+  `[{ "id": 1, "display_name": "1号館" }, ...]` のオブジェクト配列になります（`display_name` は本DB由来、未登録時は自動フォールバック値）。
+- ナビ画面（`navi/`）の建物選択プルダウン・現在地表示（「◯号館 ◯階」）・食堂プルダウンなど、建物名を表示する箇所は全てこの値を使います。
+- `building_name.csv` に登録がない建物は従来どおり `{building}号館` がそのまま表示されます。
+
+---
+
+## 3. イベントモード — data/event.csv + navi/?event=1
 
 学園祭などのイベント開催時に、`https://iku-navi.net/navi/?event=1` でナビを開くと、
 教室名に加えて event.csv に登録した屋台などのタイトルで出発地・目的地を指定できます。

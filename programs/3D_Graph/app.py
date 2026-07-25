@@ -37,6 +37,7 @@ GLOBAL_EDGE_CSV  = os.path.join(DATA_DIR, "global_edge.csv")
 EDGE_IMAGE_CSV      = os.path.join(DATA_DIR, "edge_image.csv")
 CAFETERIA_CSV       = os.path.join(DATA_DIR, "cafeteria_edge.csv")
 NAME_CSV            = os.path.join(DATA_DIR, "name.csv")
+BUILDING_NAME_CSV   = os.path.join(DATA_DIR, "building_name.csv")
 EVENT_CSV           = os.path.join(DATA_DIR, "event.csv")
 CDN_BASE         = "https://cdn.iku-navi.net"
 
@@ -378,6 +379,39 @@ def _display_name(building, name):
     """name.csv の表示名を返す。建物指定 → 全建物共通 → 生の名前 の順で解決"""
     name_map = get_cached_name_map()
     return name_map.get((int(building), name)) or name_map.get((None, name)) or name
+
+
+_cached_building_name_map = None   # building_name.csv: {building: display_name}
+
+
+def get_cached_building_name_map():
+    """
+    building_name.csv（列: building,display_name）を読み込み、
+    {building: display_name} の辞書を返す。
+    """
+    global _cached_building_name_map
+    if _cached_building_name_map is None:
+        name_map = {}
+        if os.path.exists(BUILDING_NAME_CSV):
+            df = pd.read_csv(BUILDING_NAME_CSV, dtype=str).fillna("")
+            df.columns = df.columns.str.strip()
+            for _, row in df.iterrows():
+                bldg    = str(row.get("building", "")).strip()
+                display = str(row.get("display_name", "")).strip()
+                if not bldg or not display:
+                    continue
+                name_map[int(float(bldg))] = display
+        _cached_building_name_map = name_map
+    return _cached_building_name_map
+
+
+def _building_display_name(building):
+    """building_name.csv の表示名を返す。未登録なら 屋外/{building}号館 にフォールバック"""
+    building = int(building)
+    display = get_cached_building_name_map().get(building)
+    if display:
+        return display
+    return "屋外" if building == 0 else f"{building}号館"
 
 
 def _build_room_index(edges_df):
@@ -731,13 +765,15 @@ def api_all():
       {
         "rooms":     [ { "room", "building", "floor", "edge_id", "from", "to" }, ... ],
         "nodes":     [ { "id", "building", "floor", "type" }, ... ],
-        "buildings": [ 1, 2, ... ]
+        "buildings": [ { "id": 1, "display_name": "1号館" }, ... ]
       }
+    display_name は data/building_name.csv で設定した表示名（未設定なら "{id}号館" / building=0 は "屋外"）。
     """
     nodes_df, _ = get_cached_data()
     _, rooms = get_cached_room_index()
     nodes    = get_cached_nodes_list()
-    buildings = sorted(nodes_df["building"].dropna().astype(int).unique().tolist())
+    building_ids = sorted(nodes_df["building"].dropna().astype(int).unique().tolist())
+    buildings = [{"id": b, "display_name": _building_display_name(b)} for b in building_ids]
 
     return jsonify({"rooms": rooms, "nodes": nodes, "buildings": buildings})
 

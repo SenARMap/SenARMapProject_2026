@@ -16,6 +16,21 @@
   <link rel="icon" href="../images/favicon.ico">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --accent:             #3B82F6;
+      --accent-dark:        #1D4ED8;
+      --accent-darker:      #1E40AF;
+      --accent-light:       #EFF6FF;
+      --accent-border-light: #BFDBFE;
+    }
+    /* イベントモード (?event=1): アクセントカラーを暖色系に切り替える */
+    body.event-mode {
+      --accent:             #EA580C;
+      --accent-dark:        #9A3412;
+      --accent-darker:      #7C2D12;
+      --accent-light:       #FFF7ED;
+      --accent-border-light: #FDBA74;
+    }
     html { height: 100%; overscroll-behavior: none; }
     body {
       height: 100%; overflow: hidden;
@@ -136,11 +151,11 @@
         letter-spacing: 0.03em;
         text-decoration: none;
       }
-      #app-header .hdr-title:hover { color: #3B82F6; }
+      #app-header .hdr-title:hover { color: var(--accent); }
       #app-header .hdr-badge {
         font-size: 11px;
-        color: #3B82F6;
-        background: #EFF6FF;
+        color: var(--accent);
+        background: var(--accent-light);
         padding: 2px 9px;
         border-radius: 10px;
         font-weight: 600;
@@ -181,7 +196,7 @@
       background: white; font-size: 13px; font-weight: 600;
       color: #64748B; cursor: pointer; transition: all 0.2s;
     }
-    .search-tab.active { background: #3B82F6; border-color: #3B82F6; color: white; }
+    .search-tab.active { background: var(--accent); border-color: var(--accent); color: white; }
 
     .route-row {
       display: flex;
@@ -209,7 +224,7 @@
       flex-shrink: 0;
       cursor: pointer;
     }
-    .building-select:focus { outline: none; border-color: #3B82F6; }
+    .building-select:focus { outline: none; border-color: var(--accent); }
 
     .ac-wrap { flex: 1; position: relative; }
     .ac-wrap input {
@@ -223,7 +238,7 @@
       outline: none;
       -webkit-appearance: none;
     }
-    .ac-wrap input:focus { border-color: #3B82F6; }
+    .ac-wrap input:focus { border-color: var(--accent); }
 
     .suggestions {
       display: none;
@@ -247,7 +262,7 @@
     }
     .suggestions .item:last-child { border-bottom: none; }
     .suggestions .item:active,
-    .suggestions .item:hover { background: #EFF6FF; color: #1D4ED8; }
+    .suggestions .item:hover { background: var(--accent-light); color: var(--accent-dark); }
 
     .bottom-row {
       display: flex;
@@ -267,7 +282,7 @@
     .ev-label input[type="checkbox"] {
       width: 16px;
       height: 16px;
-      accent-color: #3B82F6;
+      accent-color: var(--accent);
       cursor: pointer;
     }
     #btn-search {
@@ -275,7 +290,7 @@
       height: 40px;
       border: none;
       border-radius: 10px;
-      background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
       color: white;
       font-size: 15px;
       font-weight: 700;
@@ -291,7 +306,7 @@
       background: white; font-size: 13px; font-weight: 600;
       color: #64748B; cursor: pointer; transition: all 0.2s;
     }
-    .category-tab.active { background: #3B82F6; border-color: #3B82F6; color: white; }
+    .category-tab.active { background: var(--accent); border-color: var(--accent); color: white; }
 
     /* イベントモード (?event=1) のときだけ表示されるバッジ */
     #event-badge {
@@ -305,34 +320,34 @@
     }
     #btn-fac-search {
       flex: 1; height: 40px; border: none; border-radius: 10px;
-      background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
       color: white; font-size: 15px; font-weight: 700;
       cursor: pointer; transition: opacity 0.15s;
     }
     #btn-fac-search:hover { opacity: 0.9; }
 
     .gps-wrapper {
-      border: 1.5px solid #BFDBFE; border-radius: 8px;
+      border: 1.5px solid var(--accent-border-light); border-radius: 8px;
       margin-bottom: 6px; overflow: hidden;
     }
     .gps-row {
       display: flex; gap: 8px; align-items: center;
-      padding: 8px 12px; background: #EFF6FF;
+      padding: 8px 12px; background: var(--accent-light);
     }
-    .gps-row span { flex: 1; font-size: 13px; color: #1E40AF; word-break: break-all; }
+    .gps-row span { flex: 1; font-size: 13px; color: var(--accent-darker); word-break: break-all; }
     .btn-gps {
       height: 32px; padding: 0 14px; border: none; border-radius: 6px;
-      background: #3B82F6; color: white; font-size: 13px;
+      background: var(--accent); color: white; font-size: 13px;
       font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0;
     }
     .btn-swap {
       display: block; width: 28px; height: 28px;
       margin: 0 0 4px 0;
       background: white; border: 1.5px solid #E2E8F0; border-radius: 50%;
-      font-size: 16px; line-height: 1; cursor: pointer; color: #3B82F6;
+      font-size: 16px; line-height: 1; cursor: pointer; color: var(--accent);
       transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
-    .btn-swap:hover { background: #EFF6FF; color: #3B82F6; border-color: #3B82F6; }
+    .btn-swap:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
 
     #accuracy-warn {
       display: none;
@@ -450,7 +465,7 @@
       letter-spacing: 0.1em;
     }
     #ar-placeholder.arrival {
-      background: linear-gradient(160deg, #EFF6FF 0%, #F0FDF4 100%);
+      background: linear-gradient(160deg, var(--accent-light) 0%, #F0FDF4 100%);
       gap: 12px;
     }
     #ar-placeholder.arrival .arrival-icon {
@@ -458,7 +473,7 @@
       line-height: 1;
     }
     #ar-placeholder.arrival .arrival-title {
-      font-size: 18px; font-weight: 700; color: #1E40AF;
+      font-size: 18px; font-weight: 700; color: var(--accent-darker);
     }
     #ar-placeholder.arrival .arrival-desc {
       font-size: 13px; color: #475569; text-align: center; line-height: 1.6;
@@ -538,7 +553,7 @@
     .modal-icon {
       width: 60px; height: 60px;
       border-radius: 50%;
-      background: #EFF6FF;
+      background: var(--accent-light);
       display: flex; align-items: center; justify-content: center;
       font-size: 26px;
       margin-bottom: 4px;
@@ -555,7 +570,7 @@
     .modal-btn-survey {
       width: 100%; height: 48px;
       border: none; border-radius: 12px;
-      background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
       color: white; font-size: 15px; font-weight: 700;
       cursor: pointer; transition: opacity 0.15s;
       text-decoration: none;
@@ -828,7 +843,10 @@ const API_BASE = ["localhost", "127.0.0.1"].includes(location.hostname) ? "" : "
 // イベントモード: navi/?event=1 で有効化。
 // event.csv に登録されたイベント名（屋台など）を検索候補に加え、イベント名でルート検索できる。
 const EVENT_MODE = new URLSearchParams(location.search).get("event") === "1";
+// 経路の線・ドットなど、CSS(var(--accent))を参照できないJS描画箇所で使うアクセントカラー
+const ACCENT_COLOR = EVENT_MODE ? "#EA580C" : "#3B82F6";
 if (EVENT_MODE) {
+  document.body.classList.add("event-mode");
   document.getElementById("event-badge").style.display = "inline-flex";
   ["from-input", "to-input", "to-input-gps", "fac-from-input"].forEach(id => {
     const el = document.getElementById(id);
@@ -844,6 +862,7 @@ let facGpsCoords  = null;
 let allNodes   = [];
 let allRooms   = [];        // [{room, display, building, isEvent?}, ...] roomはAPI用の生の名前、displayは表示名
 let roomsByBuilding = {};   // {"10": ["101A", ...], ...}
+let buildingNames = {};     // {10: "10号館", ...} data/building_name.csv 由来（未登録は "{id}号館"）
 
 let pathCoords  = [];
 let currentStep = 0;
@@ -924,6 +943,7 @@ async function loadAllData() {
     if (dataRes.ok) {
       const data = await dataRes.json();
       allNodes = data.nodes || [];
+      initBuildingNames(data.buildings || []);
       initRoomData(data.rooms || []);
     } else {
       console.warn("API unavailable — room autocomplete disabled");
@@ -942,7 +962,7 @@ async function loadAllData() {
       cafList.forEach(c => {
         const opt = document.createElement("option");
         opt.value       = c.name;
-        opt.textContent = `${c.display_name}(${c.building}号館)`;
+        opt.textContent = `${c.display_name}(${bldgLabel(c.building)})`;
         sel.appendChild(opt);
       });
     }
@@ -1024,7 +1044,12 @@ function applyUrlParams() {
 }
 
 function bldgLabel(b) {
-  return Number(b) === 0 ? "屋外" : `${b}号館`;
+  return buildingNames[Number(b)] || (Number(b) === 0 ? "屋外" : `${b}号館`);
+}
+
+function initBuildingNames(buildings) {
+  buildingNames = {};
+  buildings.forEach(b => { buildingNames[Number(b.id)] = b.display_name; });
 }
 
 function initRoomData(rooms) {
@@ -1043,7 +1068,7 @@ function initRoomData(rooms) {
     buildings.forEach(b => {
       const opt = document.createElement("option");
       opt.value = b;
-      opt.textContent = `${b}号館`;
+      opt.textContent = bldgLabel(b);
       sel.appendChild(opt);
     });
   });
@@ -1756,7 +1781,7 @@ function updateOutdoorPolylines(step) {
     if (aheadFrom < seg.length - 1) {
       outdoorPolylines.push(new google.maps.Polyline({
         path: seg.slice(aheadFrom).map(n => ({ lat: n.lat, lng: n.lng })),
-        strokeColor: "#3B82F6", strokeOpacity: 0.85, strokeWeight: 5, geodesic: true, map,
+        strokeColor: ACCENT_COLOR, strokeOpacity: 0.85, strokeWeight: 5, geodesic: true, map,
       }));
     }
 
@@ -1846,7 +1871,7 @@ document.getElementById("completion-modal").addEventListener("click", e => {
 
 function updateNavBar(node, step, total) {
   let label = "—";
-  if (node) label = node.building === 0 ? "屋外を移動中" : `${node.building}号館 ${node.floor}階`;
+  if (node) label = node.building === 0 ? "屋外を移動中" : `${bldgLabel(node.building)} ${node.floor}階`;
   document.getElementById("step-label").textContent = label;
   document.getElementById("step-count").textContent = total ? `${step + 1} / ${total - 1}` : "";
   document.getElementById("prev-btn").disabled = step <= 0;
@@ -1892,7 +1917,7 @@ function moveMapTo(node, step) {
 // SVG — load floor plan
 // ================================================================
 async function loadSvg(building, floor) {
-  document.getElementById("floor-badge").textContent = `${building}号館 ${floor}階`;
+  document.getElementById("floor-badge").textContent = `${bldgLabel(building)} ${floor}階`;
   const container = document.getElementById("svg-container");
   svgOverlay = null;
 
@@ -1915,7 +1940,7 @@ async function loadSvg(building, floor) {
   if (!text) {
     container.innerHTML = `
       <div class="err-box">
-        <div class="err-title">${building}号館 ${floor}階のマップが見つかりません</div>
+        <div class="err-title">${bldgLabel(building)} ${floor}階のマップが見つかりません</div>
         <div class="err-desc">このフロアのSVGデータはまだ登録されていません。</div>
         <div class="err-hint">◀ ▶ で他のステップに進んでください</div>
       </div>`;
@@ -2036,7 +2061,7 @@ function renderSvgStep(step) {
     const ahead = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
     ahead.classList.add("dyn");
     ahead.setAttribute("points",          floorNodes.slice(curFloorIdx).map(n => `${n.svg_x},${n.svg_y}`).join(" "));
-    ahead.setAttribute("stroke",          "#3B82F6");
+    ahead.setAttribute("stroke",          ACCENT_COLOR);
     ahead.setAttribute("stroke-width",    sw);
     ahead.setAttribute("fill",            "none");
     ahead.setAttribute("stroke-linecap",  "round");
@@ -2054,7 +2079,7 @@ function renderSvgStep(step) {
       c.setAttribute("r", rF); c.setAttribute("fill", "#9E9E9E"); c.setAttribute("fill-opacity", "0.6");
     } else {
       // これから: 青ドット
-      c.setAttribute("r", rF); c.setAttribute("fill", "#3B82F6"); c.setAttribute("fill-opacity", "0.75");
+      c.setAttribute("r", rF); c.setAttribute("fill", ACCENT_COLOR); c.setAttribute("fill-opacity", "0.75");
     }
     svgOverlay.appendChild(c);
   });
