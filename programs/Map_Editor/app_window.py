@@ -4,14 +4,14 @@
 import cv2
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont, QPixmap, QImage
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QAbstractItemView, QButtonGroup, QComboBox, QFileDialog, QFrame,
+    QButtonGroup, QComboBox, QFileDialog,
     QHBoxLayout, QLabel, QListWidget, QMainWindow, QMessageBox,
     QPushButton, QSpinBox, QSplitter, QStackedWidget, QVBoxLayout, QWidget,
 )
 
-from camera_panel import CameraPanel
+from camera_panel import bgr_frame_to_pixmap, CameraPanel
 from data_store import (
     EDGE_TYPE_LABELS, EdgeImageStore, BuildingData, NODE_TYPE_LABELS,
     PHOTO_DIR, global_id, list_buildings, svg_path_for, to_int,
@@ -243,6 +243,10 @@ class MainWindow(QMainWindow):
         lbl.setStyleSheet("color:#CBD5E1;")
         return lbl
 
+    def _confirm_yes(self, title: str, msg: str) -> bool:
+        """はい/いいえの確認ダイアログを表示し、「はい」が選ばれたかを返す"""
+        return QMessageBox.question(self, title, msg) == QMessageBox.StandardButton.Yes
+
     # ------------------------------------------------------------------
     # 建物・階の切り替え
     # ------------------------------------------------------------------
@@ -360,9 +364,7 @@ class MainWindow(QMainWindow):
             return
         v = dlg.values()
         if v["id"] in self.building_data.nodes:
-            if QMessageBox.question(
-                self, "上書き確認", f"ノードID {v['id']} は既に存在します。上書きしますか？",
-            ) != QMessageBox.StandardButton.Yes:
+            if not self._confirm_yes("上書き確認", f"ノードID {v['id']} は既に存在します。上書きしますか？"):
                 return
         self.building_data.add_node(
             v["x"], v["y"], v["z"], v["floor"], v["type"], svg_x=sx, svg_y=sy, node_id=v["id"],
@@ -392,9 +394,7 @@ class MainWindow(QMainWindow):
             return
         v = dlg.values()
         if v["id"] in self.building_data.edges:
-            if QMessageBox.question(
-                self, "上書き確認", f"エッジID {v['id']} は既に存在します。上書きしますか？",
-            ) != QMessageBox.StandardButton.Yes:
+            if not self._confirm_yes("上書き確認", f"エッジID {v['id']} は既に存在します。上書きしますか？"):
                 return
         self.building_data.add_edge(
             v["name"], a_id, b_id, v["floor"], v["weight"], v["length"], v["type"], edge_id=v["id"],
@@ -408,7 +408,7 @@ class MainWindow(QMainWindow):
         msg = f"ノード {node_id} を削除しますか？"
         if touching:
             msg += f"\n関連する {len(touching)} 件のエッジも同時に削除されます。"
-        if QMessageBox.question(self, "削除確認", msg) != QMessageBox.StandardButton.Yes:
+        if not self._confirm_yes("削除確認", msg):
             return
         self.building_data.delete_node(node_id)
         self._after_data_change()
@@ -419,7 +419,7 @@ class MainWindow(QMainWindow):
         row = self.building_data.edges.get(edge_id, {})
         name = row.get("name", "")
         msg = f"エッジ {edge_id}" + (f"（{name}）" if name else "") + " を削除しますか？"
-        if QMessageBox.question(self, "削除確認", msg) != QMessageBox.StandardButton.Yes:
+        if not self._confirm_yes("削除確認", msg):
             return
         self.building_data.delete_edge(edge_id)
         if self.selected_edge_id == edge_id:
@@ -548,24 +548,14 @@ class MainWindow(QMainWindow):
         out_path = PHOTO_DIR / filename
 
         if out_path.exists():
-            if QMessageBox.question(
-                self, "上書き確認", f"{filename} は既に存在します。上書きしますか？",
-            ) != QMessageBox.StandardButton.Yes:
+            if not self._confirm_yes("上書き確認", f"{filename} は既に存在します。上書きしますか？"):
                 return
 
         PHOTO_DIR.mkdir(parents=True, exist_ok=True)
         cv2.imwrite(str(out_path), frame)
         self.edge_image_store.upsert(g_a, g_b, filename)
 
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        h, w, _ = rgb.shape
-        qimg = QImage(rgb.data, w, h, w * 3, QImage.Format.Format_RGB888).copy()
-        self.last_photo_label.setPixmap(
-            QPixmap.fromImage(qimg).scaled(
-                self.last_photo_label.size(), Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-        )
+        self.last_photo_label.setPixmap(bgr_frame_to_pixmap(frame, self.last_photo_label.size()))
 
         self.statusBar().showMessage(f"撮影しました: {filename}（保存ボタンで edge_image.csv に反映）", 6000)
         self._update_camera_edge_info()

@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QProgressBar, QFileDialog, QAbstractItemView,
     QMessageBox, QSizePolicy,
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QUrl
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
 from PyQt6.QtGui import (
     QPixmap, QImage, QIcon, QColor, QPainter, QBrush,
     QDragEnterEvent, QDropEvent,
@@ -614,6 +614,13 @@ class MainWindow(QMainWindow):
             self._output_dir = d
             self.lbl_out.setText(d)
 
+    def _find_item_by_path(self, path: str) -> Optional[QListWidgetItem]:
+        for i in range(self.file_list.count()):
+            item = self.file_list.item(i)
+            if item.data(Qt.ItemDataRole.UserRole) == path:
+                return item
+        return None
+
     # ── プレビュー更新 ────────────────────────────────────────────────
     def _on_select(self, row: int):
         item = self.file_list.item(row)
@@ -648,24 +655,23 @@ class MainWindow(QMainWindow):
             self.lbl_info.setText(f"{name}  ─  ❌ エラーが発生しました")
 
     # ── スライダー ────────────────────────────────────────────────────
+    @staticmethod
+    def _strength_text(idx: int, v: int) -> str:
+        if idx == 0:
+            return f"ぼかし強度: {(v // 2) * 2 + 1}"
+        if idx == 1:
+            return f"ブロックサイズ: {max(v // 5, 4)}px"
+        return "消去モード (強度設定なし)"
+
     def _on_strength_change(self, v: int):
         idx = self.combo_mode.currentIndex()
-        if idx == 0:
-            self.lbl_strength.setText(f"ぼかし強度: {(v // 2) * 2 + 1}")
-        elif idx == 1:
-            self.lbl_strength.setText(f"ブロックサイズ: {max(v // 5, 4)}px")
+        if idx in (0, 1):
+            self.lbl_strength.setText(self._strength_text(idx, v))
 
     def _on_mode_change(self, idx: int):
         v = self.slider_strength.value()
-        if idx == 0:
-            self.lbl_strength.setText(f"ぼかし強度: {(v // 2) * 2 + 1}")
-            self.slider_strength.setEnabled(True)
-        elif idx == 1:
-            self.lbl_strength.setText(f"ブロックサイズ: {max(v // 5, 4)}px")
-            self.slider_strength.setEnabled(True)
-        else:  # inpaint
-            self.lbl_strength.setText("消去モード (強度設定なし)")
-            self.slider_strength.setEnabled(False)
+        self.lbl_strength.setText(self._strength_text(idx, v))
+        self.slider_strength.setEnabled(idx != 2)
 
     # ── 処理 ─────────────────────────────────────────────────────────
     def _get_mode(self) -> str:
@@ -736,15 +742,13 @@ class MainWindow(QMainWindow):
         data["status"]    = STATUS_OK if n > 0 else STATUS_SKIP
 
         # リストアイテム更新
-        for i in range(self.file_list.count()):
-            item = self.file_list.item(i)
-            if item.data(Qt.ItemDataRole.UserRole) == path:
-                item.setIcon(make_dot_icon(data["status"]))
-                label = Path(path).name
-                if n > 0:
-                    label += f"  ({n}人)"
-                item.setText(label)
-                break
+        item = self._find_item_by_path(path)
+        if item:
+            item.setIcon(make_dot_icon(data["status"]))
+            label = Path(path).name
+            if n > 0:
+                label += f"  ({n}人)"
+            item.setText(label)
 
         # 保存
         self._save(path, processed)
@@ -762,12 +766,10 @@ class MainWindow(QMainWindow):
         data = self._file_data.get(path)
         if data:
             data["status"] = STATUS_ERROR
-        for i in range(self.file_list.count()):
-            item = self.file_list.item(i)
-            if item.data(Qt.ItemDataRole.UserRole) == path:
-                item.setIcon(make_dot_icon(STATUS_ERROR))
-                item.setText(f"❌  {Path(path).name}")
-                break
+        item = self._find_item_by_path(path)
+        if item:
+            item.setIcon(make_dot_icon(STATUS_ERROR))
+            item.setText(f"❌  {Path(path).name}")
 
     def _on_finished(self):
         self.btn_run.setEnabled(True)
@@ -786,7 +788,7 @@ class MainWindow(QMainWindow):
         else:
             out_dir = p.parent / "output"
         out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / (p.name)
+        out_path = out_dir / p.name
         if out_path.exists():
             out_path = out_dir / (p.stem + "_processed" + p.suffix)
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)

@@ -31,8 +31,6 @@ EDGE_TYPE_LABELS = {
     6: "下りエスカレータ",
     7: "入口(屋内外接続)",
 }
-# 階をまたぐことが多いエッジ種別（EdgeDialog の初期値選択に使用）
-VERTICAL_EDGE_TYPES = {2, 3, 4, 5, 6}
 
 
 def to_int(v, default=None):
@@ -67,6 +65,31 @@ def list_buildings() -> list:
         if m:
             ids.append(int(m.group(1)))
     return ids
+
+
+def _read_csv_by_id(path: Path) -> dict:
+    """id列をキーとする辞書として CSV を読み込む（存在しなければ空の辞書を返す）"""
+    rows = {}
+    if not path.exists():
+        return rows
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            rid = to_int(row.get("id"))
+            if rid is None:
+                continue
+            rows[rid] = dict(row)
+    return rows
+
+
+def _write_csv(path: Path, cols: list, rows: dict):
+    """id をキーとする辞書の内容を、id昇順でCSVに書き出す"""
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=cols)
+        w.writeheader()
+        for key in sorted(rows):
+            row = rows[key]
+            w.writerow({c: row.get(c, "") for c in cols})
 
 
 class BuildingData:
@@ -107,14 +130,7 @@ class BuildingData:
         if "svg_x" not in self._node_cols:
             self._node_cols = self._node_cols + ["svg_x", "svg_y"]
 
-        if self.edge_path.exists():
-            with open(self.edge_path, newline="", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    eid = to_int(row.get("id"))
-                    if eid is None:
-                        continue
-                    self.edges[eid] = dict(row)
+        self.edges.update(_read_csv_by_id(self.edge_path))
 
     # ------------------------------------------------------------------
     # 参照系
@@ -225,18 +241,8 @@ class BuildingData:
     # ------------------------------------------------------------------
     def save(self):
         self.dir.mkdir(parents=True, exist_ok=True)
-        with open(self.node_path, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=self._node_cols)
-            w.writeheader()
-            for nid in sorted(self.nodes):
-                row = self.nodes[nid]
-                w.writerow({c: row.get(c, "") for c in self._node_cols})
-        with open(self.edge_path, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=self.EDGE_COLS)
-            w.writeheader()
-            for eid in sorted(self.edges):
-                row = self.edges[eid]
-                w.writerow({c: row.get(c, "") for c in self.EDGE_COLS})
+        _write_csv(self.node_path, self._node_cols, self.nodes)
+        _write_csv(self.edge_path, self.EDGE_COLS, self.edges)
         self.dirty = False
 
 
@@ -254,14 +260,7 @@ class EdgeImageStore:
     def load(self):
         self.rows.clear()
         self.dirty = False
-        if self.path.exists():
-            with open(self.path, newline="", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    rid = to_int(row.get("id"))
-                    if rid is None:
-                        continue
-                    self.rows[rid] = dict(row)
+        self.rows.update(_read_csv_by_id(self.path))
 
     def find(self, from_id: int, to_id: int):
         for row in self.rows.values():
@@ -282,10 +281,5 @@ class EdgeImageStore:
 
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.path, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=self.COLS)
-            w.writeheader()
-            for rid in sorted(self.rows):
-                row = self.rows[rid]
-                w.writerow({c: row.get(c, "") for c in self.COLS})
+        _write_csv(self.path, self.COLS, self.rows)
         self.dirty = False

@@ -55,7 +55,7 @@
                         ? `<img class="post-card-thumb" src="${escHtml(post.thumbnail)}" alt="${escHtml(post.title)}">`
                         : '';
                     const authorHtml = post.author
-                        ? `<span class="post-author" style="background:#eff6ff;color:#2563eb;padding:2px 10px;border-radius:20px;font-weight:600;">${escHtml(post.author)}</span>`
+                        ? `<span class="post-author">${escHtml(post.author)}</span>`
                         : '';
                     return `
                         <a class="post-card" href="${escHtml(post.path)}">

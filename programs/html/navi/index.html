@@ -349,19 +349,13 @@
     }
     .btn-swap:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
 
-    #accuracy-warn {
-      display: none;
-      padding: 6px 12px; font-size: 12px; line-height: 1.6;
-    }
-    #accuracy-warn.warn-low  { background: #FFFBEB; color: #78350F; }
-    #accuracy-warn.warn-high { background: #FEF2F2; color: #7F1D1D; }
-
+    #accuracy-warn,
     #fac-accuracy-warn {
       display: none;
       padding: 6px 12px; font-size: 12px; line-height: 1.6;
     }
-    #fac-accuracy-warn.warn-low  { background: #FFFBEB; color: #78350F; }
-    #fac-accuracy-warn.warn-high { background: #FEF2F2; color: #7F1D1D; }
+    #accuracy-warn.warn-low,  #fac-accuracy-warn.warn-low  { background: #FFFBEB; color: #78350F; }
+    #accuracy-warn.warn-high, #fac-accuracy-warn.warn-high { background: #FEF2F2; color: #7F1D1D; }
 
     /* ================================================================
        Map / SVG
@@ -866,7 +860,6 @@ let buildingNames = {};     // {10: "10号館", ...} data/building_name.csv 由�
 
 let pathCoords  = [];
 let currentStep = 0;
-let currentView = "map";
 
 let outdoorPolylines = [];
 let stepMarker       = null;
@@ -1221,17 +1214,13 @@ function setCategory(cat) {
 // ================================================================
 // Facility autocomplete
 // ================================================================
-async function doToiletSearch() {
-  arRequestPermissionsEarly();
-  const params = new URLSearchParams({
-    type:         document.getElementById("fac-toilet-type").value,
-    use_elevator: document.getElementById("fac-use-elevator").checked ? "1" : "0",
-  });
-
+// facSearchMode ("room"/"gps") から設備検索の出発地点を解決して params に埋め込む。
+// 失敗時はエラーを alert して false を返す（呼び出し元はそのまま return する）。
+function resolveFacFromParams(params) {
   if (facSearchMode === "room") {
     const fromInfo = resolveRoom("fac-from-input", "fac-from-bldg");
-    if (!fromInfo)               { alert("出発教室を入力してください。"); return; }
-    if (fromInfo === "ambiguous") { alert("出発教室が複数の号館に存在します。号館を指定してください。"); return; }
+    if (!fromInfo)               { alert("出発教室を入力してください。"); return false; }
+    if (fromInfo === "ambiguous") { alert("出発教室が複数の号館に存在します。号館を指定してください。"); return false; }
     if (fromInfo.isEvent) {
       params.set("from_event", fromInfo.room);
     } else {
@@ -1239,15 +1228,19 @@ async function doToiletSearch() {
       params.set("from_building", fromInfo.building);
     }
   } else {
-    if (!facGpsCoords) { alert("GPS位置を先に取得してください。"); return; }
+    if (!facGpsCoords) { alert("GPS位置を先に取得してください。"); return false; }
     const nearest = findNearestNode(facGpsCoords.lat, facGpsCoords.lng);
-    if (!nearest) { alert("近くの出発ノードが見つかりません。\nキャンパスから離れすぎている可能性があります。"); return; }
+    if (!nearest) { alert("近くの出発ノードが見つかりません。\nキャンパスから離れすぎている可能性があります。"); return false; }
     params.set("from_node", nearest.id);
   }
+  return true;
+}
 
+// 検索APIを叩いてルート表示まで行う共通処理（doSearch / doToiletSearch / doCafeteriaSearch で共用）
+async function fetchRouteAndNavigate(url) {
   setLoading(true);
   try {
-    const res = await fetch(`${API_BASE}/api/nearest_toilet?${params}`);
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data.error) { alert("エラー: " + data.error); return; }
@@ -1258,6 +1251,16 @@ async function doToiletSearch() {
   } finally {
     setLoading(false);
   }
+}
+
+async function doToiletSearch() {
+  arRequestPermissionsEarly();
+  const params = new URLSearchParams({
+    type:         document.getElementById("fac-toilet-type").value,
+    use_elevator: document.getElementById("fac-use-elevator").checked ? "1" : "0",
+  });
+  if (!resolveFacFromParams(params)) return;
+  await fetchRouteAndNavigate(`${API_BASE}/api/nearest_toilet?${params}`);
 }
 
 function onFacCategoryChange() {
@@ -1278,35 +1281,8 @@ async function doCafeteriaSearch() {
     use_elevator: document.getElementById("fac-use-elevator").checked ? "1" : "0",
     name:         document.getElementById("fac-cafeteria-name").value,
   });
-  if (facSearchMode === "room") {
-    const fromInfo = resolveRoom("fac-from-input", "fac-from-bldg");
-    if (!fromInfo)               { alert("出発教室を入力してください。"); return; }
-    if (fromInfo === "ambiguous") { alert("出発教室が複数の号館に存在します。号館を指定してください。"); return; }
-    if (fromInfo.isEvent) {
-      params.set("from_event", fromInfo.room);
-    } else {
-      params.set("from_room",     fromInfo.room);
-      params.set("from_building", fromInfo.building);
-    }
-  } else {
-    if (!facGpsCoords) { alert("GPS位置を先に取得してください。"); return; }
-    const nearest = findNearestNode(facGpsCoords.lat, facGpsCoords.lng);
-    if (!nearest) { alert("近くの出発ノードが見つかりません。\nキャンパスから離れすぎている可能性があります。"); return; }
-    params.set("from_node", nearest.id);
-  }
-  setLoading(true);
-  try {
-    const res = await fetch(`${API_BASE}/api/nearest_cafeteria?${params}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (data.error) { alert("エラー: " + data.error); return; }
-    await initRoute(data.path_coords);
-  } catch {
-    document.getElementById("step-label").textContent = "サーバーに接続できません";
-    document.getElementById("step-count").textContent = "app.py が起動しているか確認してください";
-  } finally {
-    setLoading(false);
-  }
+  if (!resolveFacFromParams(params)) return;
+  await fetchRouteAndNavigate(`${API_BASE}/api/nearest_cafeteria?${params}`);
 }
 
 // ================================================================
@@ -1524,19 +1500,7 @@ async function doSearch() {
     }
   }
 
-  setLoading(true);
-  try {
-    const res = await fetch(`${API_BASE}/api/route?${params}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (data.error) { alert("エラー: " + data.error); return; }
-    await initRoute(data.path_coords);
-  } catch {
-    document.getElementById("step-label").textContent = "サーバーに接続できません";
-    document.getElementById("step-count").textContent = "app.py が起動しているか確認してください";
-  } finally {
-    setLoading(false);
-  }
+  await fetchRouteAndNavigate(`${API_BASE}/api/route?${params}`);
 }
 
 function setLoading(on) {
@@ -1737,7 +1701,7 @@ async function initRoute(coords) {
   arHideView();
   arPrefetchCameraIfNeeded();  // 屋外AR区間がある場合のみカメラを先取り
   clearMapOverlays();
-  drawFullOutdoorRoute(coords);
+  drawFullOutdoorRoute();
   prefetchRouteImages(coords);               // 写真: 並行ダウンロード開始（fire-and-forget）
   await prefetchSvgs(coords);               // SVG:  全フロア一括取得を待機してからナビ開始
   collapseSearchPanel();  // ルート確定後にパネルを収納
@@ -1882,7 +1846,6 @@ function updateNavBar(node, step, total) {
 // View switching
 // ================================================================
 function switchView(view) {
-  currentView = view;
   document.getElementById("map").style.display      = view === "map" ? "block" : "none";
   document.getElementById("svg-area").style.display = view === "svg" ? "block" : "none";
   if (view === "map" && map) google.maps.event.trigger(map, "resize");
@@ -2287,7 +2250,6 @@ let arPermissionsRequested = false;
 let arCamWanted      = false;  // カメラストリームを保持してよいか（解放後の遅延取得を防ぐ）
 let arCamRequesting  = false;  // getUserMedia 実行中フラグ（二重取得を防ぐ）
 let arOrientAttached = false;
-let arOrientCount    = 0;
 let arHaveAbsolute   = false;
 let arGOrient        = null;
 
@@ -2327,12 +2289,10 @@ function arAttachOrientation() {
     if (e.alpha == null) return;
     arHaveAbsolute = true;
     arGOrient = e;
-    arOrientCount++;
   };
   const onRelative = (e) => {
     if (arHaveAbsolute && typeof e.webkitCompassHeading !== "number") return;
     arGOrient = e;
-    arOrientCount++;
   };
   window.addEventListener("deviceorientationabsolute", onAbsolute);
   window.addEventListener("deviceorientation",         onRelative);

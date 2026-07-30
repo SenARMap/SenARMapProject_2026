@@ -216,8 +216,7 @@ def load_data():
         ge_raw.columns = ge_raw.columns.str.strip()
         ge_raw = ge_raw.dropna(subset=["id", "from", "to"])
         if not ge_raw.empty:
-            _gni = global_node_ids
-            def _resolve(x, _ids=_gni):
+            def _resolve(x, _ids=global_node_ids):
                 xi = int(x)
                 return xi + GLOBAL_NODE_OFFSET if xi in _ids else xi
             ge_raw = ge_raw.copy()
@@ -240,10 +239,10 @@ def load_data():
                 bldg_id = int(row["building"])
                 l_id = int(row["local_node_id"])
                 g_id = int(row["global_node_id"])
-                
+
                 local_global_id = bldg_id * ID_OFFSET + l_id
                 outdoor_global_id = g_id + GLOBAL_NODE_OFFSET
-                
+
                 anchor_edges.append({
                     "id": 8000000 + idx,
                     "from": local_global_id,
@@ -563,6 +562,7 @@ def get_cached_nodes_list():
         _cached_nodes_list = nodes
     return _cached_nodes_list
 
+
 def get_cached_graph(use_elevator=True):
     global _cached_graph_with_ev, _cached_graph_without_ev
     nodes_df, edges_df = get_cached_data()
@@ -574,6 +574,7 @@ def get_cached_graph(use_elevator=True):
         if _cached_graph_without_ev is None:
             _cached_graph_without_ev = build_graph(nodes_df, edges_df, use_elevator=False)
         return _cached_graph_without_ev
+
 
 def get_cached_graph_payload():
     """/api/graph 用のノード・エッジ・変換設定を一度だけ構築して使い回す"""
@@ -921,6 +922,13 @@ def _resolve_start_candidates(G, from_room, from_building, from_node_id, from_ev
     return [(from_node_id, None)], None, None
 
 
+def _require_from_spec(from_room, from_event, from_node_id):
+    """from_room・from_event・from_node のいずれも指定されていない場合はエラーレスポンスを返す（未指定エラー無しなら None）"""
+    if not from_room and not from_event and from_node_id is None:
+        return jsonify({"error": "from_room（＋from_building）・from_event・from_node のいずれかを指定してください"}), 400
+    return None
+
+
 # ------------------------------------------------------------------ #
 #  統合ルーティング API
 # ------------------------------------------------------------------ #
@@ -955,8 +963,9 @@ def api_route():
     to_node_id    = request.args.get("to_node",       type=int)
     to_event      = request.args.get("to_event",      "").strip()
 
-    if not from_room and not from_event and from_node_id is None:
-        return jsonify({"error": "from_room（＋from_building）・from_event・from_node のいずれかを指定してください"}), 400
+    err = _require_from_spec(from_room, from_event, from_node_id)
+    if err:
+        return err
     if not to_room and not to_event and to_node_id is None:
         return jsonify({"error": "to_room（＋to_building）・to_event・to_node のいずれかを指定してください"}), 400
 
@@ -1068,6 +1077,45 @@ def api_cafeterias():
     return jsonify(_CAFETERIA_LIST)
 
 
+def _edges_by_names(names):
+    """room_index から name が names に含まれるエッジ行を収集する（複数種別併記のエッジはIDで重複排除）"""
+    room_index, _ = get_cached_room_index()
+    edges, seen_ids = [], set()
+    for (name, _bldg), rows in room_index.items():
+        if name not in names:
+            continue
+        for row in rows:
+            eid = int(row["id"])
+            if eid in seen_ids:
+                continue
+            seen_ids.add(eid)
+            edges.append(row)
+    return edges
+
+
+def _best_route_to_candidates(G, start_candidates, dest_candidates):
+    """
+    出発候補×目的候補の全組み合わせでDijkstraを実行し、最短経路を採用する。
+    出発と目的が同一ノードの組み合わせはスキップする（最寄りトイレ・食堂検索では、
+    出発点自体が目的地そのものである場合を経路として扱わないため）。
+    戻り値: (best_path, best_length, best_start_row, best_dest_row)
+    """
+    best_path, best_length = None, float("inf")
+    best_start_row = best_dest_row = None
+    for (s_node, s_row) in start_candidates:
+        for (d_node, d_row) in dest_candidates:
+            if s_node == d_node:
+                continue
+            try:
+                l, p = nx.bidirectional_dijkstra(G, s_node, d_node, weight="weight")
+                if l < best_length:
+                    best_length, best_path = l, p
+                    best_start_row, best_dest_row = s_row, d_row
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
+                continue
+    return best_path, best_length, best_start_row, best_dest_row
+
+
 @app.route("/api/nearest_toilet")
 def api_nearest_toilet():
     """
@@ -1091,8 +1139,9 @@ def api_nearest_toilet():
     from_node_id  = request.args.get("from_node",     type=int)
     from_event    = request.args.get("from_event",    "").strip()
 
-    if not from_room and not from_event and from_node_id is None:
-        return jsonify({"error": "from_room（＋from_building）・from_event・from_node のいずれかを指定してください"}), 400
+    err = _require_from_spec(from_room, from_event, from_node_id)
+    if err:
+        return err
 
     targets = _TOILET_TYPE_MAP.get(toilet_type, _TOILET_TYPE_MAP["ALL"])
 
@@ -1105,18 +1154,7 @@ def api_nearest_toilet():
         return jsonify({"error": err}), status
 
     # トイレエッジを全建物から収集（教室名索引から引く。複数種別併記のエッジはIDで重複排除）
-    room_index, _ = get_cached_room_index()
-    toilet_edges, seen_ids = [], set()
-    for (name, _bldg), rows in room_index.items():
-        if name not in targets:
-            continue
-        for row in rows:
-            eid = int(row["id"])
-            if eid in seen_ids:
-                continue
-            seen_ids.add(eid)
-            toilet_edges.append(row)
-
+    toilet_edges = _edges_by_names(targets)
     if not toilet_edges:
         return jsonify({"error": "該当するトイレがデータ内に見つかりません"}), 404
 
@@ -1127,20 +1165,8 @@ def api_nearest_toilet():
     ]
 
     # 全組み合わせでDijkstra、最短を採用
-    best_path, best_length = None, float("inf")
-    best_start_row = best_toilet_row = None
-
-    for (s_node, s_row) in start_candidates:
-        for (d_node, d_row) in dest_candidates:
-            if s_node == d_node:
-                continue
-            try:
-                l, p = nx.bidirectional_dijkstra(G, s_node, d_node, weight="weight")
-                if l < best_length:
-                    best_length, best_path = l, p
-                    best_start_row, best_toilet_row = s_row, d_row
-            except (nx.NetworkXNoPath, nx.NodeNotFound):
-                continue
+    best_path, best_length, best_start_row, best_toilet_row = _best_route_to_candidates(
+        G, start_candidates, dest_candidates)
 
     if best_path is None:
         return jsonify({"error": "指定された出発点から該当するトイレへの経路が見つかりません"}), 404
@@ -1188,8 +1214,9 @@ def api_nearest_cafeteria():
     from_node_id  = request.args.get("from_node",     type=int)
     from_event    = request.args.get("from_event",    "").strip()
 
-    if not from_room and not from_event and from_node_id is None:
-        return jsonify({"error": "from_room（＋from_building）・from_event・from_node のいずれかを指定してください"}), 400
+    err = _require_from_spec(from_room, from_event, from_node_id)
+    if err:
+        return err
 
     if not _CAFETERIA_NAMES:
         return jsonify({"error": "cafeteria_edge.csv が見つかりません"}), 500
@@ -1206,18 +1233,7 @@ def api_nearest_cafeteria():
         return jsonify({"error": err}), status
 
     # 食堂エッジを room_index から収集
-    room_index, _ = get_cached_room_index()
-    caf_edges, seen_ids = [], set()
-    for (name, _bldg), rows in room_index.items():
-        if name not in targets:
-            continue
-        for row in rows:
-            eid = int(row["id"])
-            if eid in seen_ids:
-                continue
-            seen_ids.add(eid)
-            caf_edges.append(row)
-
+    caf_edges = _edges_by_names(targets)
     if not caf_edges:
         return jsonify({"error": "食堂エッジがデータ内に見つかりません"}), 404
 
@@ -1227,20 +1243,8 @@ def api_nearest_cafeteria():
         if nid in G.nodes
     ]
 
-    best_path, best_length = None, float("inf")
-    best_start_row = best_caf_row = None
-
-    for (s_node, s_row) in start_candidates:
-        for (d_node, d_row) in dest_candidates:
-            if s_node == d_node:
-                continue
-            try:
-                l, p = nx.bidirectional_dijkstra(G, s_node, d_node, weight="weight")
-                if l < best_length:
-                    best_length, best_path = l, p
-                    best_start_row, best_caf_row = s_row, d_row
-            except (nx.NetworkXNoPath, nx.NodeNotFound):
-                continue
+    best_path, best_length, best_start_row, best_caf_row = _best_route_to_candidates(
+        G, start_candidates, dest_candidates)
 
     if best_path is None:
         return jsonify({"error": "食堂への経路が見つかりません"}), 404
@@ -1286,11 +1290,6 @@ def api_shortest_path():
         return jsonify({"error": f"ノード {start} から {goal} への経路が見つかりません"}), 404
     except nx.NodeNotFound as e:
         return jsonify({"error": str(e)}), 404
-
-
-# ------------------------------------------------------------------ #
-
-
 
 
 @app.route("/api/edge_images")

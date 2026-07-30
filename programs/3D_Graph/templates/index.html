@@ -383,8 +383,7 @@
     }
 
     /* Distance value highlight */
-    .success br + b,
-    .dist-value {
+    .success br + b {
       font-family: var(--font-mono);
     }
 
@@ -1444,7 +1443,7 @@ function computeBuildingBounds(nodes) {
   const bounds = {};
   Object.entries(byBuilding).forEach(([b, bNodes]) => {
     const cfg = graphData.config?.[b] || {};
-    
+
     const localNodes = bNodes.map(n => {
       const { lx, ly } = getLocalCoords(n.x, n.y, cfg);
       return { ...n, lx, ly };
@@ -1453,7 +1452,7 @@ function computeBuildingBounds(nodes) {
     const lxs = localNodes.map(n => n.lx);
     const lys = localNodes.map(n => n.ly);
     const zs  = localNodes.map(n => n.z);
-    
+
     const rangeXY = Math.max(Math.max(...lxs) - Math.min(...lxs), Math.max(...lys) - Math.min(...lys));
     const padXY = Math.max(rangeXY * 0.04, 1);
 
@@ -1463,7 +1462,7 @@ function computeBuildingBounds(nodes) {
     let maxLy = Math.max(...lys);
 
     const doorways = localNodes.filter(n => String(n.type) === "2");
-    
+
     let lx0 = minLx - padXY;
     let lx1 = maxLx + padXY;
     let ly0 = minLy - padXY;
@@ -1474,7 +1473,7 @@ function computeBuildingBounds(nodes) {
       const doorMaxLx = Math.max(...doorways.map(n => n.lx));
       const doorMinLy = Math.min(...doorways.map(n => n.ly));
       const doorMaxLy = Math.max(...doorways.map(n => n.ly));
-      
+
       const EPS = 0.001;
       if (doorMinLx <= minLx + EPS) lx0 = doorMinLx;
       if (doorMaxLx >= maxLx - EPS) lx1 = doorMaxLx;
@@ -1487,10 +1486,10 @@ function computeBuildingBounds(nodes) {
     const c2 = getGlobalCoords(lx1, ly1, cfg);
     const c3 = getGlobalCoords(lx0, ly1, cfg);
     const center = getGlobalCoords((lx0+lx1)/2, (ly0+ly1)/2, cfg);
-    
+
     bounds[b] = { c0, c1, c2, c3, center, zs };
   });
-  
+
   return bounds;
 }
 

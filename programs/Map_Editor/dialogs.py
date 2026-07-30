@@ -9,6 +9,16 @@ from PyQt6.QtWidgets import (
 from data_store import EDGE_TYPE_LABELS, NODE_TYPE_LABELS
 
 
+def _add_ok_cancel_buttons(dialog: QDialog, form: QFormLayout):
+    """OK/キャンセルの QDialogButtonBox をフォームの最後の行として追加する"""
+    buttons = QDialogButtonBox(
+        QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+    )
+    buttons.accepted.connect(dialog.accept)
+    buttons.rejected.connect(dialog.reject)
+    form.addRow(buttons)
+
+
 class NodeDialog(QDialog):
     """入力モードでSVGをクリックした際、実座標(x,y,z)を入力するダイアログ"""
 
@@ -47,12 +57,7 @@ class NodeDialog(QDialog):
         hint.setWordWrap(True)
         form.addRow(hint)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        form.addRow(buttons)
+        _add_ok_cancel_buttons(self, form)
 
     @staticmethod
     def _make_coord_spin() -> QDoubleSpinBox:
@@ -129,12 +134,7 @@ class EdgeDialog(QDialog):
         hint.setWordWrap(True)
         form.addRow(hint)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        form.addRow(buttons)
+        _add_ok_cancel_buttons(self, form)
 
     def values(self) -> dict:
         return {

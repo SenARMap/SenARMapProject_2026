@@ -16,7 +16,7 @@ SVGフロアマップを表示し、モードに応じてクリックを解釈�
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
-from PyQt6.QtWidgets import QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsScene, QGraphicsView
+from PyQt6.QtWidgets import QGraphicsLineItem, QGraphicsScene, QGraphicsView
 
 NODE_COLOR = {1: QColor("#3B82F6"), 2: QColor("#EF4444")}
 NODE_COLOR_DEFAULT = QColor("#3B82F6")
@@ -111,7 +111,7 @@ class SvgCanvas(QGraphicsView):
 
     def clear_pending(self):
         self._pending_node_id = None
-        self._set_highlight(None)
+        self.highlight_edge(None)
         self.pendingNodeChanged.emit(None)
 
     # ------------------------------------------------------------------
@@ -177,9 +177,6 @@ class SvgCanvas(QGraphicsView):
         rect = self._svg_item.boundingRect()
         diag = (rect.width() ** 2 + rect.height() ** 2) ** 0.5
         return max(8.0, diag / 160)
-
-    def _set_highlight(self, edge_id):
-        self.highlight_edge(edge_id)
 
     # ------------------------------------------------------------------
     # イベント

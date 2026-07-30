@@ -18,8 +18,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QColor, QPainter, QKeySequence, QShortcut, QIntValidator
 
-IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp',
-              '.tiff', '.tif', '.webp', '.heic', '.heif'}
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp",
+              ".tiff", ".tif", ".webp", ".heic", ".heif"}
 
 
 class DropListWidget(QListWidget):
@@ -309,6 +309,22 @@ class MainWindow(QMainWindow):
 
         return box
 
+    # ── shared dialogs ───────────────────────────────────────────────
+
+    def _confirm(self, message: str) -> bool:
+        reply = QMessageBox.question(
+            self, "確認", message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        return reply == QMessageBox.StandardButton.Yes
+
+    def _show_result(self, ok: int, errors: list[str], success_message: str):
+        if errors:
+            QMessageBox.warning(self, "完了（エラーあり）",
+                f"{ok} 件成功 / {len(errors)} 件失敗:\n\n" + "\n".join(errors))
+        else:
+            QMessageBox.information(self, "完了", success_message)
+
     # ── resize hint ──────────────────────────────────────────────────
 
     def _refresh_resize_hint(self):
@@ -347,12 +363,9 @@ class MainWindow(QMainWindow):
         else:
             mode_desc = f"高さ {new_h} px 基準でリスケール（縦横比維持）"
 
-        reply = QMessageBox.question(
-            self, "確認",
-            f"{len(paths)} 件の画像を上書きリスケールします。\n\nモード: {mode_desc}\n\nよろしいですか？",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if reply != QMessageBox.StandardButton.Yes:
+        if not self._confirm(
+            f"{len(paths)} 件の画像を上書きリスケールします。\n\nモード: {mode_desc}\n\nよろしいですか？"
+        ):
             return
 
         ok, errors = 0, []
@@ -374,11 +387,7 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 errors.append(f"{os.path.basename(path)}: {e}")
 
-        if errors:
-            QMessageBox.warning(self, "完了（エラーあり）",
-                f"{ok} 件成功 / {len(errors)} 件失敗:\n\n" + "\n".join(errors))
-        else:
-            QMessageBox.information(self, "完了", f"{ok} 件の画像をリスケールしました。")
+        self._show_result(ok, errors, f"{ok} 件の画像をリスケールしました。")
 
     # ── rename logic ─────────────────────────────────────────────────
 
@@ -438,12 +447,7 @@ class MainWindow(QMainWindow):
                 "変更できるファイルがありません。\n画像をドロップして名前リストを入力してください。")
             return
 
-        reply = QMessageBox.question(
-            self, "確認",
-            f"{len(pairs)} 件のファイル名を変更します。よろしいですか？",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if reply != QMessageBox.StandardButton.Yes:
+        if not self._confirm(f"{len(pairs)} 件のファイル名を変更します。よろしいですか？"):
             return
 
         ok, errors = 0, []
@@ -458,11 +462,7 @@ class MainWindow(QMainWindow):
             except OSError as e:
                 errors.append(f"{os.path.basename(orig_path)}: {e}")
 
-        if errors:
-            QMessageBox.warning(self, "完了（エラーあり）",
-                f"{ok} 件成功 / {len(errors)} 件失敗:\n\n" + "\n".join(errors))
-        else:
-            QMessageBox.information(self, "完了", f"{ok} 件のファイルをリネームしました。")
+        self._show_result(ok, errors, f"{ok} 件のファイルをリネームしました。")
 
         self.drop_list.clear_all()
         self.name_edit.clear()

@@ -7,16 +7,24 @@ OpenCV (cv2.VideoCapture) でライブプレビューを表示し、ボタン押
 
 import cv2
 import numpy as np
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 MAX_DEVICE_INDEX = 4
 
 
-class CameraPanel(QWidget):
+def bgr_frame_to_pixmap(frame: np.ndarray, target_size) -> QPixmap:
+    """OpenCV の BGR numpy フレームを、指定サイズに収まるよう縮小した QPixmap に変換する"""
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    h, w, _ = rgb.shape
+    qimg = QImage(rgb.data, w, h, w * 3, QImage.Format.Format_RGB888).copy()
+    return QPixmap.fromImage(qimg).scaled(
+        target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation,
+    )
 
-    frameReady = pyqtSignal()   # 内部プレビュー更新用（外部からの利用は不要）
+
+class CameraPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -96,15 +104,7 @@ class CameraPanel(QWidget):
         if not ok:
             return
         self._last_frame = frame
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        h, w, _ = rgb.shape
-        qimg = QImage(rgb.data, w, h, w * 3, QImage.Format.Format_RGB888).copy()
-        pix = QPixmap.fromImage(qimg).scaled(
-            self.preview_label.size(),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        self.preview_label.setPixmap(pix)
+        self.preview_label.setPixmap(bgr_frame_to_pixmap(frame, self.preview_label.size()))
 
     def capture(self) -> np.ndarray | None:
         """現在のフレーム(BGR numpy array)を返す。未接続・未取得なら None"""
