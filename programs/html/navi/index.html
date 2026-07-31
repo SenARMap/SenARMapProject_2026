@@ -1515,8 +1515,13 @@ function updateRouteImage(step) {
   const label  = document.getElementById("ar-label");
   const phEl   = document.getElementById("ar-placeholder");
   const node   = pathCoords[step];
+  const next   = pathCoords[step + 1];
   const isLast = step >= pathCoords.length - 1;
-  const isOutdoor = node && node.building === 0 && node.lat != null && !isLast;
+  // 建物内最終ノード（次が屋外ノード＝出口エッジ）も屋外扱いにして、
+  // 出口専用の連結写真を用意しなくてもそのままカメラARへ移行する。
+  const entersOutdoor = !!next && next.building === 0 && next.lat != null;
+  const isOutdoor = node && !isLast &&
+    ((node.building === 0 && node.lat != null) || entersOutdoor);
 
   if (isOutdoor) {
     Object.values(imgByStep).forEach(img => img.classList.remove("active"));
