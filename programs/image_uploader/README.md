@@ -5,7 +5,7 @@ Cloudflare Pages + R2 を使った、特定メンバー専用の大量一括画�
 
 - **バックエンド**: Cloudflare Pages Functions（Hono）— `/api/upload-urls` が Presigned PUT URL を発行するだけで、画像本体はサーバーを経由しない
 - **フロントエンド**: Vite + Vanilla TypeScript — 同時アップロード数を5〜10件に制限したキュー処理 + 進捗表示
-- **認証**: アプリ内ログインなし。**Cloudflare Zero Trust Access** でこのPagesプロジェクト全体を保護し、`@senshu-u.jp` の Google アカウントのみ通過させる（下記手順3）
+- **認証**: アプリ内ログインなし。**Cloudflare Zero Trust Access** でこのPagesプロジェクト全体を保護する（下記手順3）
 
 ---
 
@@ -29,8 +29,8 @@ R2への実アップロードをローカルで試す場合は、`programs/image
 以下を設定する（`.gitignore` 済みなのでコミットされない）。
 
 ```
-R2_ACCOUNT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-R2_BUCKET_NAME=senarmap-image-uploads
+R2_ACCOUNT_ID=0d5559e76d5c94e9b66352830d2b86b2
+R2_BUCKET_NAME=iku-navi-image
 R2_ACCESS_KEY_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 R2_SECRET_ACCESS_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
@@ -43,8 +43,8 @@ R2_SECRET_ACCESS_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ### 2-1. R2バケットを作成
 
-Cloudflareダッシュボード → R2 → バケット作成（例: `senarmap-image-uploads`）。
-`wrangler.toml` の `bucket_name` / `[vars].R2_BUCKET_NAME` を実際の名前に合わせる。
+Cloudflareダッシュボード → R2 → バケット作成。実運用では `iku-navi-image` というバケット名で作成済み
+（`wrangler.toml` の `bucket_name` / `[vars].R2_BUCKET_NAME` も合わせて設定済み）。
 
 ### 2-2. R2 APIトークン（S3互換認証情報）を発行
 
@@ -71,31 +71,35 @@ R2バケット側でCORSを許可しないとブラウザにブロックされ�
 `r2-cors.json` の `AllowedOrigins` を実際のPagesドメイン（下記手順4で決まるURL）に書き換えてから:
 
 ```bash
-npx wrangler r2 bucket cors set senarmap-image-uploads --rules r2-cors.json
+npx wrangler r2 bucket cors set iku-navi-image --rules r2-cors.json
 ```
 
 ダッシュボードから設定する場合は R2 → 対象バケット → 設定 → CORSポリシー でも同じ内容を登録できる。
 
 ---
 
-## 3. Zero Trust Access で `@senshu-u.jp` のGoogleアカウントのみに制限
+## 3. Zero Trust Access でのアクセス制限
 
 このアプリ自体にはログイン機能を実装していない。アクセス制御は Cloudflare Zero Trust 側で行う。
 
-1. Cloudflare One（Zero Trust）ダッシュボード → **Settings → Authentication** で
-   ログインメソッドに **Google** を追加していない場合は追加する
-   （Google Workspace の場合は「Google Workspace」タイプを選ぶとドメイン単位の絞り込みがしやすい）
-2. **Access → Applications → Add an application** → 「Self-hosted」
-   - Application domain: このPagesプロジェクトのドメイン（例: `image-uploader.senarmap.pages.dev` または独自ドメイン）
-3. **Policies** で以下のようなポリシーを作成する
-   - Action: `Allow`
-   - Include: `Emails ending in` → `@senshu-u.jp`
-     （もしくは Login Methods を Google に限定した上で `Email domain` ルールを併用するとより厳密）
-4. 保存すると、このPagesドメインへのアクセス時にGoogleログイン画面が挟まり、
-   `@senshu-u.jp` 以外のアカウントは弾かれるようになる
+**現在の実運用設定（IDP: GitHub）:**
 
-> 個人のGoogleアカウント（Gmailなど）でも `@senshu-u.jp` のメールアドレスでなければブロックされる。
-> 大学のGoogle Workspace配下のアカウントであることが前提。
+- アプリケーション名: 画像一括アップローダー
+- 保護する宛先: `image-upload.iku-navi.net`
+- IDP: GitHub
+- ポリシー `GitHubAuth`: Allow / Include = GitHub Organization が `SenARMapOrg`
+
+> 当初の要望は「`@senshu-u.jp` のGoogleアカウントのみ許可」だったが、大学アカウント縛りではなく
+> 開発チーム（GitHub Org `SenARMapOrg` 所属者）縛りに変更する方針で確定。
+> 将来Googleアカウント制限に戻したくなった場合は以下の手順で設定し直せる。
+
+**（参考）Googleアカウント（`@senshu-u.jp`）制限にする場合:**
+
+1. Cloudflare One（Zero Trust）ダッシュボード → **Settings → Authentication** で
+   ログインメソッドに **Google**（Google Workspaceの場合は「Google Workspace」タイプ）を追加する
+2. **Access → Applications** → 対象アプリケーションの **Policies** で
+   Include: `Emails ending in` → `@senshu-u.jp` のルールに変更する
+   （もしくは Login Methods を Google に限定した上で `Email domain` ルールを併用するとより厳密）
 
 ---
 
@@ -128,11 +132,29 @@ Root directory を `programs/image_uploader` に設定すると、Cloudflareは�
 
 ### 4-2. 初回デプロイ後にやること
 
-初回デプロイでプロジェクトのURL（`*.pages.dev`、または独自ドメインを割り当てた場合はそちら）が決まる。
-そのURLを 2-4 の `r2-cors.json` の `AllowedOrigins` と、3. の Access Application domain に反映すること。
+**実運用の設定値（確定済み）:**
 
-独自ドメインを使うかどうか・パスは運用側で検討中のため、上記はあくまで `*.pages.dev` 前提の暫定手順。
-ドメインが決まったら本READMEとCORS設定を更新する。
+- Pagesプロジェクト名: `senarmapproject-2026-image-uploader`
+- カスタムドメイン: `image-upload.iku-navi.net`（`*.pages.dev` のデフォルトURLでもアクセス可能）
+
+カスタムドメインは **Pagesプロジェクト → Custom domains → Add a custom domain** から追加する。
+ここから追加すると、正しい種類・プロキシ設定のDNSレコードがCloudflare側で自動生成される
+（DNSレコードタブから手動でCNAME/Aレコードを作らないこと。手動で作ると設定ミスの元）。
+
+### 4-2-1. トラブルシューティング: カスタムドメインで 522 (Connection timed out) になる場合
+
+Pagesはサーバーレスなのでオリジンサーバーがダウンして522になることは基本的にない。
+ほぼ確実に **DNS側の設定ミス** が原因。Cloudflareダッシュボード → `iku-navi.net` → DNS → レコード で
+`image-upload` の行を確認する。
+
+- **原因1（よくある）**: `A`レコードなど、Pages以外を指す古いレコードが残っている（例: 旧VPSのIP）。
+  → 削除する。
+- **原因2**: レコードは `CNAME` → `senarmapproject-2026-image-uploader.pages.dev` で正しいが、
+  プロキシ状態が **「DNSのみ」(グレークラウド)** になっている。Pagesのカスタムドメインは
+  **「プロキシ済み」(オレンジクラウド)** である必要がある。
+- 上記どちらであっても、DNSレコードを直接編集するより、一度そのレコードを削除してから
+  4-2 の「Custom domains → Add a custom domain」でやり直すのが一番確実
+  （Cloudflareが正しいCNAME + プロキシ状態を自動生成するため）。
 
 ### 4-3. 以降の更新
 
@@ -146,7 +168,7 @@ PRごとにプレビューURL（`*.pages.dev`）も自動発行される。
 
 ## 5. 使い方（利用者向け）
 
-1. Zero Trust の認証画面で大学のGoogleアカウント（`@senshu-u.jp`）でログイン
+1. Zero Trust の認証画面で許可されたアカウント（現状: `SenARMapOrg` のGitHubアカウント）でログイン
 2. 「ここをクリックして画像を選択」から数百〜数千枚をまとめて選択
 3. 同時アップロード数（デフォルト6）を必要に応じて変更し、「アップロード開始」を押す
 4. 進捗バーと「◯◯ / ◯◯ 件完了」が表示される。失敗したファイルがあれば一覧に表示される

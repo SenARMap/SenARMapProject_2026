@@ -1,7 +1,8 @@
 [
   {
     "AllowedOrigins": [
-      "https://REPLACE_WITH_YOUR_PAGES_DOMAIN",
+      "https://image-upload.iku-navi.net",
+      "https://senarmapproject-2026-image-uploader.pages.dev",
       "http://localhost:8788"
     ],
     "AllowedMethods": ["PUT"],
