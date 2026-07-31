@@ -21,9 +21,7 @@ function sanitizeFilename(name: string): string {
 }
 
 function buildObjectKey(originalName: string): string {
-  const date = new Date().toISOString().slice(0, 10);
-  const unique = crypto.randomUUID();
-  return `uploads/${date}/${unique}_${sanitizeFilename(originalName)}`;
+  return sanitizeFilename(originalName);
 }
 
 const app = new Hono<{ Bindings: Bindings }>().basePath("/api");
