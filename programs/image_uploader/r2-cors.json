@@ -1,0 +1,11 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://REPLACE_WITH_YOUR_PAGES_DOMAIN",
+      "http://localhost:8788"
+    ],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["*"],
+    "MaxAgeSeconds": 3600
+  }
+]

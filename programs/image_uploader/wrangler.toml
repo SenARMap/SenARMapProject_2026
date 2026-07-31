@@ -1,0 +1,21 @@
+name = "senarmap-image-uploader"
+compatibility_date = "2026-01-01"
+pages_build_output_dir = "dist"
+
+# R2バケットへの直接バインディング。
+# Presigned URL の発行自体は S3 互換 API (@aws-sdk/client-s3) を使うため必須ではないが、
+# 将来的に一覧取得・削除などをバインディング経由で行えるように用意してある。
+[[r2_buckets]]
+binding = "IMAGE_BUCKET"
+bucket_name = "senarmap-image-uploads"
+
+# --- 環境変数 / シークレット (Cloudflare Pages ダッシュボードで設定する) ---
+# 平文でよいもの [vars] に、秘密情報は `wrangler pages secret put` で設定し、
+# ここには書かない（README参照）。
+[vars]
+R2_ACCOUNT_ID = "REPLACE_WITH_YOUR_ACCOUNT_ID"
+R2_BUCKET_NAME = "senarmap-image-uploads"
+
+# 以下はダッシュボード or `wrangler pages secret put` で別途設定するシークレット:
+#   R2_ACCESS_KEY_ID
+#   R2_SECRET_ACCESS_KEY

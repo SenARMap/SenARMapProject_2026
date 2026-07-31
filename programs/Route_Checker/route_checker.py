@@ -473,28 +473,14 @@ class PathDetailDialog(QDialog):
             vbox.addWidget(box)
 
         elif r["status"] == "error":
-            box = QFrame()
-            box.setStyleSheet(
-                f"QFrame {{ background: #2B0F0F; border: 1px solid {COL_ERR}; border-radius: 6px; }}"
-            )
-            bvbox = QVBoxLayout(box)
-            lbl   = QLabel(f"エラー: {r.get('error_msg', '')}")
-            lbl.setWordWrap(True)
-            lbl.setStyleSheet(f"color: {COL_ERR}; background: transparent;")
-            bvbox.addWidget(lbl)
-            vbox.addWidget(box)
+            vbox.addWidget(self._build_message_box(
+                "#2B0F0F", COL_ERR, f"エラー: {r.get('error_msg', '')}"
+            ))
 
         elif r["status"] == "no_path":
-            box = QFrame()
-            box.setStyleSheet(
-                f"QFrame {{ background: #1A0B2E; border: 1px solid {COL_NOPATH}; border-radius: 6px; }}"
-            )
-            bvbox = QVBoxLayout(box)
-            lbl   = QLabel(f"経路なし: {r.get('error_msg', '')}")
-            lbl.setWordWrap(True)
-            lbl.setStyleSheet(f"color: {COL_NOPATH}; background: transparent;")
-            bvbox.addWidget(lbl)
-            vbox.addWidget(box)
+            vbox.addWidget(self._build_message_box(
+                "#1A0B2E", COL_NOPATH, f"経路なし: {r.get('error_msg', '')}"
+            ))
 
         # ── 経路テーブル ──────────────────────────────────────────────────────
         coords = r.get("path_coords", [])
@@ -515,6 +501,19 @@ class PathDetailDialog(QDialog):
         close_btn.clicked.connect(self.accept)
         btn_row.addWidget(close_btn)
         vbox.addLayout(btn_row)
+
+    def _build_message_box(self, bg: str, color: str, text: str) -> QFrame:
+        """背景色・アクセント色付きの単一メッセージ枠を作る（エラー/経路なし表示用）"""
+        box = QFrame()
+        box.setStyleSheet(
+            f"QFrame {{ background: {bg}; border: 1px solid {color}; border-radius: 6px; }}"
+        )
+        bvbox = QVBoxLayout(box)
+        lbl = QLabel(text)
+        lbl.setWordWrap(True)
+        lbl.setStyleSheet(f"color: {color}; background: transparent;")
+        bvbox.addWidget(lbl)
+        return box
 
     def _build_path_table(
         self, coords: list, edges: list,
@@ -927,10 +926,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "教室不足", "検証対象の教室が 2 室以上必要です。")
             return
 
-        keys    = [(r["room"], r["building"], r["floor"]) for r in rooms]
+        keys = [(r["room"], r["building"], r["floor"]) for r in rooms]
         directed = self._directed.isChecked()
-        pairs   = []
-        n       = len(keys)
+        n = len(keys)
 
         if directed:
             pairs = [
@@ -1097,10 +1095,6 @@ class MainWindow(QMainWindow):
             f"表示: {visible} / {self._table.rowCount()} 件"
         )
 
-    def _refresh_count(self):
-        # 検証完了後のフィルタ変更時に呼ばれる
-        self._apply_filter()
-
     def _on_double_click(self, row: int, _col: int):
         item = self._table.item(row, 0)
         if item is None:
@@ -1121,11 +1115,7 @@ class MainWindow(QMainWindow):
             return
         with open(path, "w", newline="", encoding="utf-8-sig") as f:
             w = csv.writer(f)
-            w.writerow([
-                "出発教室", "出発号館", "出発階",
-                "目的教室", "目的号館", "目的階",
-                "状態", "距離(m)", "経路概要", "異常詳細",
-            ])
+            w.writerow(TABLE_HEADERS[:-1] + ["異常詳細"])
             for r in self._all_results:
                 anom_str = " | ".join(desc for _, desc in r.get("anomalies", []))
                 w.writerow([

@@ -71,50 +71,6 @@ body {
   animation: fadeUp 0.9s var(--ease) both;
 }
 
-.hero-logo {
-  width: 140px;
-  height: auto;
-  margin-bottom: 8px;
-}
-.logo-title {
-  font-size: clamp(48px, 10vw, 90px);
-  font-weight: 900;
-  letter-spacing: -0.04em;
-  line-height: 1;
-}
-
-.logo-iku {
-  color: var(--dark);
-}
-
-.logo-navi {
-  color: var(--blue);
-}
-
-
-
-/* =================================
-   Brand Area
-================================= */
-.brand {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  flex-wrap: nowrap; /* 改行禁止 */
-}
-
-.brand-logo {
-  width: 140px;
-  height: auto;
-  flex-shrink: 0;
-}
-
-.logo {
-  flex-shrink: 1;
-}
-
-
 /* — eyebrow — */
 .eyebrow {
   display: flex;
@@ -211,7 +167,7 @@ body {
 .card:nth-child(2) { animation-delay: 0.22s; }
 
 .card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-5px) scale(1.03);
 }
 
 /* — nav card (blue) — */
@@ -288,10 +244,6 @@ body {
 .card:hover .card-arrow {
   transform: translate(3px, -3px);
 }
-.card:hover {
-  transform: translateY(-5px) scale(1.03);
-}
-
 
 /* ================================================================
    Info / FAQ
@@ -407,36 +359,6 @@ body {
 
 .footer-sep { opacity: 0.35; }
 
-.letter {
-  opacity: 0;
-  animation: logoReveal 0.8s forwards;
-}
-
-.letter:nth-child(1) { animation-delay: 0.2s; }
-.letter:nth-child(2) { animation-delay: 0.4s; }
-.letter:nth-child(3) { animation-delay: 0.6s; }
-.letter:nth-child(4) { animation-delay: 0.8s; }
-.letter:nth-child(5) { animation-delay: 1.0s; }
-.letter:nth-child(6) { animation-delay: 1.2s; }
-.letter:nth-child(7) { animation-delay: 1.4s; }
-
-@keyframes logoReveal {
-  0% {
-    opacity: 0;
-    transform: translateY(80px) scale(0.8);
-  }
-
-  70% {
-    opacity: 1;
-    transform: translateY(-8px) scale(1.03);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
 /* ================================================================
    Animations
 ================================================================ */
@@ -450,33 +372,12 @@ body {
   50%       { opacity: 0.4; transform: scale(0.7); }
 }
 
-@keyframes scan {
-  0% {
-    top: -40%;
-  }
-  100% {
-    top: 140%;
-  }
-}
-
 @media (max-width: 520px) {
 
   /* ページ全体 */
   .page {
     padding: 56px 12px 24px;
     gap: 24px;
-  }
-
-  /* ブランド */
-  .brand {
-    gap: 6px;
-    width: 100%;
-    justify-content: center;
-  }
-
-  .brand-logo {
-    width: 65px;
-    flex-shrink: 0;
   }
 
   .logo {

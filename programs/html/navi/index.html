@@ -16,6 +16,21 @@
   <link rel="icon" href="../images/favicon.ico">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --accent:             #3B82F6;
+      --accent-dark:        #1D4ED8;
+      --accent-darker:      #1E40AF;
+      --accent-light:       #EFF6FF;
+      --accent-border-light: #BFDBFE;
+    }
+    /* イベントモード (?event=1): アクセントカラーを暖色系に切り替える */
+    body.event-mode {
+      --accent:             #EA580C;
+      --accent-dark:        #9A3412;
+      --accent-darker:      #7C2D12;
+      --accent-light:       #FFF7ED;
+      --accent-border-light: #FDBA74;
+    }
     html { height: 100%; overscroll-behavior: none; }
     body {
       height: 100%; overflow: hidden;
@@ -136,11 +151,11 @@
         letter-spacing: 0.03em;
         text-decoration: none;
       }
-      #app-header .hdr-title:hover { color: #3B82F6; }
+      #app-header .hdr-title:hover { color: var(--accent); }
       #app-header .hdr-badge {
         font-size: 11px;
-        color: #3B82F6;
-        background: #EFF6FF;
+        color: var(--accent);
+        background: var(--accent-light);
         padding: 2px 9px;
         border-radius: 10px;
         font-weight: 600;
@@ -181,7 +196,7 @@
       background: white; font-size: 13px; font-weight: 600;
       color: #64748B; cursor: pointer; transition: all 0.2s;
     }
-    .search-tab.active { background: #3B82F6; border-color: #3B82F6; color: white; }
+    .search-tab.active { background: var(--accent); border-color: var(--accent); color: white; }
 
     .route-row {
       display: flex;
@@ -209,7 +224,7 @@
       flex-shrink: 0;
       cursor: pointer;
     }
-    .building-select:focus { outline: none; border-color: #3B82F6; }
+    .building-select:focus { outline: none; border-color: var(--accent); }
 
     .ac-wrap { flex: 1; position: relative; }
     .ac-wrap input {
@@ -223,7 +238,7 @@
       outline: none;
       -webkit-appearance: none;
     }
-    .ac-wrap input:focus { border-color: #3B82F6; }
+    .ac-wrap input:focus { border-color: var(--accent); }
 
     .suggestions {
       display: none;
@@ -247,7 +262,7 @@
     }
     .suggestions .item:last-child { border-bottom: none; }
     .suggestions .item:active,
-    .suggestions .item:hover { background: #EFF6FF; color: #1D4ED8; }
+    .suggestions .item:hover { background: var(--accent-light); color: var(--accent-dark); }
 
     .bottom-row {
       display: flex;
@@ -267,7 +282,7 @@
     .ev-label input[type="checkbox"] {
       width: 16px;
       height: 16px;
-      accent-color: #3B82F6;
+      accent-color: var(--accent);
       cursor: pointer;
     }
     #btn-search {
@@ -275,7 +290,7 @@
       height: 40px;
       border: none;
       border-radius: 10px;
-      background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
       color: white;
       font-size: 15px;
       font-weight: 700;
@@ -291,51 +306,56 @@
       background: white; font-size: 13px; font-weight: 600;
       color: #64748B; cursor: pointer; transition: all 0.2s;
     }
-    .category-tab.active { background: #3B82F6; border-color: #3B82F6; color: white; }
+    .category-tab.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+    /* イベントモード (?event=1) のときだけ表示されるバッジ */
+    #event-badge {
+      display: none;
+      align-items: center;
+      font-size: 11px; font-weight: 700;
+      color: #B45309; background: #FEF3C7;
+      border: 1px solid #FCD34D;
+      padding: 3px 8px; border-radius: 10px;
+      white-space: nowrap; flex-shrink: 0;
+    }
     #btn-fac-search {
       flex: 1; height: 40px; border: none; border-radius: 10px;
-      background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
       color: white; font-size: 15px; font-weight: 700;
       cursor: pointer; transition: opacity 0.15s;
     }
     #btn-fac-search:hover { opacity: 0.9; }
 
     .gps-wrapper {
-      border: 1.5px solid #BFDBFE; border-radius: 8px;
+      border: 1.5px solid var(--accent-border-light); border-radius: 8px;
       margin-bottom: 6px; overflow: hidden;
     }
     .gps-row {
       display: flex; gap: 8px; align-items: center;
-      padding: 8px 12px; background: #EFF6FF;
+      padding: 8px 12px; background: var(--accent-light);
     }
-    .gps-row span { flex: 1; font-size: 13px; color: #1E40AF; word-break: break-all; }
+    .gps-row span { flex: 1; font-size: 13px; color: var(--accent-darker); word-break: break-all; }
     .btn-gps {
       height: 32px; padding: 0 14px; border: none; border-radius: 6px;
-      background: #3B82F6; color: white; font-size: 13px;
+      background: var(--accent); color: white; font-size: 13px;
       font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0;
     }
     .btn-swap {
       display: block; width: 28px; height: 28px;
       margin: 0 0 4px 0;
       background: white; border: 1.5px solid #E2E8F0; border-radius: 50%;
-      font-size: 16px; line-height: 1; cursor: pointer; color: #3B82F6;
+      font-size: 16px; line-height: 1; cursor: pointer; color: var(--accent);
       transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
-    .btn-swap:hover { background: #EFF6FF; color: #3B82F6; border-color: #3B82F6; }
+    .btn-swap:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
 
-    #accuracy-warn {
-      display: none;
-      padding: 6px 12px; font-size: 12px; line-height: 1.6;
-    }
-    #accuracy-warn.warn-low  { background: #FFFBEB; color: #78350F; }
-    #accuracy-warn.warn-high { background: #FEF2F2; color: #7F1D1D; }
-
+    #accuracy-warn,
     #fac-accuracy-warn {
       display: none;
       padding: 6px 12px; font-size: 12px; line-height: 1.6;
     }
-    #fac-accuracy-warn.warn-low  { background: #FFFBEB; color: #78350F; }
-    #fac-accuracy-warn.warn-high { background: #FEF2F2; color: #7F1D1D; }
+    #accuracy-warn.warn-low,  #fac-accuracy-warn.warn-low  { background: #FFFBEB; color: #78350F; }
+    #accuracy-warn.warn-high, #fac-accuracy-warn.warn-high { background: #FEF2F2; color: #7F1D1D; }
 
     /* ================================================================
        Map / SVG
@@ -439,7 +459,7 @@
       letter-spacing: 0.1em;
     }
     #ar-placeholder.arrival {
-      background: linear-gradient(160deg, #EFF6FF 0%, #F0FDF4 100%);
+      background: linear-gradient(160deg, var(--accent-light) 0%, #F0FDF4 100%);
       gap: 12px;
     }
     #ar-placeholder.arrival .arrival-icon {
@@ -447,7 +467,7 @@
       line-height: 1;
     }
     #ar-placeholder.arrival .arrival-title {
-      font-size: 18px; font-weight: 700; color: #1E40AF;
+      font-size: 18px; font-weight: 700; color: var(--accent-darker);
     }
     #ar-placeholder.arrival .arrival-desc {
       font-size: 13px; color: #475569; text-align: center; line-height: 1.6;
@@ -527,7 +547,7 @@
     .modal-icon {
       width: 60px; height: 60px;
       border-radius: 50%;
-      background: #EFF6FF;
+      background: var(--accent-light);
       display: flex; align-items: center; justify-content: center;
       font-size: 26px;
       margin-bottom: 4px;
@@ -544,7 +564,7 @@
     .modal-btn-survey {
       width: 100%; height: 48px;
       border: none; border-radius: 12px;
-      background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
       color: white; font-size: 15px; font-weight: 700;
       cursor: pointer; transition: opacity 0.15s;
       text-decoration: none;
@@ -624,6 +644,7 @@
         <button class="category-tab active" id="cat-room"     onclick="setCategory('room')">教室</button>
         <button class="category-tab"        id="cat-facility" onclick="setCategory('facility')">設備検索</button>
       </div>
+      <span id="event-badge">&#127914; イベント</span>
       <button id="search-toggle" onclick="toggleSearchPanel()" aria-label="検索パネルを開閉">
         <span id="search-chevron" class="open">▾</span>
       </button>
@@ -813,18 +834,32 @@
 // ローカル開発（nginx/Flask 同居）では同一オリジン、本番（Cloudflare Pages）では api サブドメインへ
 const API_BASE = ["localhost", "127.0.0.1"].includes(location.hostname) ? "" : "https://api.iku-navi.net";
 
+// イベントモード: navi/?event=1 で有効化。
+// event.csv に登録されたイベント名（屋台など）を検索候補に加え、イベント名でルート検索できる。
+const EVENT_MODE = new URLSearchParams(location.search).get("event") === "1";
+// 経路の線・ドットなど、CSS(var(--accent))を参照できないJS描画箇所で使うアクセントカラー
+const ACCENT_COLOR = EVENT_MODE ? "#EA580C" : "#3B82F6";
+if (EVENT_MODE) {
+  document.body.classList.add("event-mode");
+  document.getElementById("event-badge").style.display = "inline-flex";
+  ["from-input", "to-input", "to-input-gps", "fac-from-input"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.placeholder = "教室名・屋台名";
+  });
+}
+
 let map;
 let searchMode    = "room";
 let facSearchMode = "room";
 let gpsCoords     = null;
 let facGpsCoords  = null;
 let allNodes   = [];
-let allRooms   = [];        // [{room, building}, ...]
+let allRooms   = [];        // [{room, display, building, isEvent?}, ...] roomはAPI用の生の名前、displayは表示名
 let roomsByBuilding = {};   // {"10": ["101A", ...], ...}
+let buildingNames = {};     // {10: "10号館", ...} data/building_name.csv 由来（未登録は "{id}号館"）
 
 let pathCoords  = [];
 let currentStep = 0;
-let currentView = "map";
 
 let outdoorPolylines = [];
 let stepMarker       = null;
@@ -892,17 +927,26 @@ function initMap() {
 async function loadAllData() {
   prefetchArrowImages(); // ページ読み込み時に矢印画像を事前取得（fire-and-forget）
   try {
-    const [dataRes, imgRes, cafRes] = await Promise.all([
+    const [dataRes, imgRes, cafRes, evRes] = await Promise.all([
       fetch(`${API_BASE}/api/all`),
       fetch(`${API_BASE}/api/edge_images`),
       fetch(`${API_BASE}/api/cafeterias`),
+      EVENT_MODE ? fetch(`${API_BASE}/api/events`) : Promise.resolve(null),
     ]);
     if (dataRes.ok) {
       const data = await dataRes.json();
       allNodes = data.nodes || [];
+      initBuildingNames(data.buildings || []);
       initRoomData(data.rooms || []);
     } else {
       console.warn("API unavailable — room autocomplete disabled");
+    }
+    // イベントモード: イベント名（屋台など）を検索候補プールに追加
+    if (evRes && evRes.ok) {
+      const events = await evRes.json();
+      events.forEach(ev => allRooms.push({
+        room: ev.title, display: ev.title, building: ev.building, isEvent: true,
+      }));
     }
     if (imgRes.ok) edgeImages = await imgRes.json();
     if (cafRes.ok) {
@@ -911,7 +955,7 @@ async function loadAllData() {
       cafList.forEach(c => {
         const opt = document.createElement("option");
         opt.value       = c.name;
-        opt.textContent = `${c.display_name}(${c.building}号館)`;
+        opt.textContent = `${c.display_name}(${bldgLabel(c.building)})`;
         sel.appendChild(opt);
       });
     }
@@ -988,12 +1032,21 @@ function applyUrlParams() {
   if (to && !from) {
     document.getElementById("step-label").textContent = "出発教室を入力してルート検索してください";
     document.getElementById("step-count").textContent =
-      toInfo && toInfo !== "ambiguous" ? `目的地: ${toInfo.building}号館 ${toInfo.room}` : `目的地: ${to}`;
+      toInfo && toInfo !== "ambiguous" ? `目的地: ${bldgLabel(toInfo.building)} ${toInfo.display}` : `目的地: ${to}`;
   }
 }
 
+function bldgLabel(b) {
+  return buildingNames[Number(b)] || (Number(b) === 0 ? "屋外" : `${b}号館`);
+}
+
+function initBuildingNames(buildings) {
+  buildingNames = {};
+  buildings.forEach(b => { buildingNames[Number(b.id)] = b.display_name; });
+}
+
 function initRoomData(rooms) {
-  allRooms = rooms.map(r => ({ room: r.room, building: r.building }));
+  allRooms = rooms.map(r => ({ room: r.room, display: r.display || r.room, building: r.building }));
   roomsByBuilding = {};
   rooms.forEach(r => {
     const key = String(r.building);
@@ -1008,7 +1061,7 @@ function initRoomData(rooms) {
     buildings.forEach(b => {
       const opt = document.createElement("option");
       opt.value = b;
-      opt.textContent = `${b}号館`;
+      opt.textContent = bldgLabel(b);
       sel.appendChild(opt);
     });
   });
@@ -1042,7 +1095,8 @@ function setupAutocomplete(inputId, suggId, bldgSelectId) {
     let candidates = selectedBldg
       ? allRooms.filter(r => String(r.building) === selectedBldg)
       : allRooms;
-    if (query) candidates = candidates.filter(r => r.room.toLowerCase().includes(query));
+    if (query) candidates = candidates.filter(r =>
+      r.room.toLowerCase().includes(query) || r.display.toLowerCase().includes(query));
     return candidates.slice(0, 20);
   }
 
@@ -1053,10 +1107,11 @@ function setupAutocomplete(inputId, suggId, bldgSelectId) {
     matches.forEach(r => {
       const item = document.createElement("div");
       item.className = "item";
-      item.textContent = selectedBldg ? r.room : `${r.building}号館 ${r.room}`;
+      const label = r.isEvent ? `\u{1F3AA} ${r.display}` : r.display;
+      item.textContent = selectedBldg ? label : `${bldgLabel(r.building)} ${label}`;
       item.addEventListener("mousedown", e => {
         e.preventDefault();
-        input.value = r.room;
+        input.value = r.display;
         if (bldg && !bldg.value) bldg.value = String(r.building);
         sugg.style.display = "none";
       });
@@ -1097,11 +1152,13 @@ function resolveRoom(inputId, bldgSelectId) {
   const roomQuery = inputEl.value.trim();
   const bldgVal   = bldgEl ? bldgEl.value : "";
   if (!roomQuery) return null;
+  // 生の名前 (room) と表示名 (display) のどちらで入力されてもマッチさせる
   let matches;
   if (bldgVal) {
-    matches = allRooms.filter(r => String(r.building) === bldgVal && r.room === roomQuery);
+    matches = allRooms.filter(r => String(r.building) === bldgVal
+      && (r.room === roomQuery || r.display === roomQuery));
   } else {
-    matches = allRooms.filter(r => r.room === roomQuery);
+    matches = allRooms.filter(r => r.room === roomQuery || r.display === roomQuery);
   }
   if (matches.length === 0) return null;
   if (matches.length > 1)   return "ambiguous";
@@ -1157,29 +1214,33 @@ function setCategory(cat) {
 // ================================================================
 // Facility autocomplete
 // ================================================================
-async function doToiletSearch() {
-  arRequestPermissionsEarly();
-  const params = new URLSearchParams({
-    type:         document.getElementById("fac-toilet-type").value,
-    use_elevator: document.getElementById("fac-use-elevator").checked ? "1" : "0",
-  });
-
+// facSearchMode ("room"/"gps") から設備検索の出発地点を解決して params に埋め込む。
+// 失敗時はエラーを alert して false を返す（呼び出し元はそのまま return する）。
+function resolveFacFromParams(params) {
   if (facSearchMode === "room") {
     const fromInfo = resolveRoom("fac-from-input", "fac-from-bldg");
-    if (!fromInfo)               { alert("出発教室を入力してください。"); return; }
-    if (fromInfo === "ambiguous") { alert("出発教室が複数の号館に存在します。号館を指定してください。"); return; }
-    params.set("from_room",     fromInfo.room);
-    params.set("from_building", fromInfo.building);
+    if (!fromInfo)               { alert("出発教室を入力してください。"); return false; }
+    if (fromInfo === "ambiguous") { alert("出発教室が複数の号館に存在します。号館を指定してください。"); return false; }
+    if (fromInfo.isEvent) {
+      params.set("from_event", fromInfo.room);
+    } else {
+      params.set("from_room",     fromInfo.room);
+      params.set("from_building", fromInfo.building);
+    }
   } else {
-    if (!facGpsCoords) { alert("GPS位置を先に取得してください。"); return; }
+    if (!facGpsCoords) { alert("GPS位置を先に取得してください。"); return false; }
     const nearest = findNearestNode(facGpsCoords.lat, facGpsCoords.lng);
-    if (!nearest) { alert("近くの出発ノードが見つかりません。\nキャンパスから離れすぎている可能性があります。"); return; }
+    if (!nearest) { alert("近くの出発ノードが見つかりません。\nキャンパスから離れすぎている可能性があります。"); return false; }
     params.set("from_node", nearest.id);
   }
+  return true;
+}
 
+// 検索APIを叩いてルート表示まで行う共通処理（doSearch / doToiletSearch / doCafeteriaSearch で共用）
+async function fetchRouteAndNavigate(url) {
   setLoading(true);
   try {
-    const res = await fetch(`${API_BASE}/api/nearest_toilet?${params}`);
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data.error) { alert("エラー: " + data.error); return; }
@@ -1190,6 +1251,16 @@ async function doToiletSearch() {
   } finally {
     setLoading(false);
   }
+}
+
+async function doToiletSearch() {
+  arRequestPermissionsEarly();
+  const params = new URLSearchParams({
+    type:         document.getElementById("fac-toilet-type").value,
+    use_elevator: document.getElementById("fac-use-elevator").checked ? "1" : "0",
+  });
+  if (!resolveFacFromParams(params)) return;
+  await fetchRouteAndNavigate(`${API_BASE}/api/nearest_toilet?${params}`);
 }
 
 function onFacCategoryChange() {
@@ -1210,31 +1281,8 @@ async function doCafeteriaSearch() {
     use_elevator: document.getElementById("fac-use-elevator").checked ? "1" : "0",
     name:         document.getElementById("fac-cafeteria-name").value,
   });
-  if (facSearchMode === "room") {
-    const fromInfo = resolveRoom("fac-from-input", "fac-from-bldg");
-    if (!fromInfo)               { alert("出発教室を入力してください。"); return; }
-    if (fromInfo === "ambiguous") { alert("出発教室が複数の号館に存在します。号館を指定してください。"); return; }
-    params.set("from_room",     fromInfo.room);
-    params.set("from_building", fromInfo.building);
-  } else {
-    if (!facGpsCoords) { alert("GPS位置を先に取得してください。"); return; }
-    const nearest = findNearestNode(facGpsCoords.lat, facGpsCoords.lng);
-    if (!nearest) { alert("近くの出発ノードが見つかりません。\nキャンパスから離れすぎている可能性があります。"); return; }
-    params.set("from_node", nearest.id);
-  }
-  setLoading(true);
-  try {
-    const res = await fetch(`${API_BASE}/api/nearest_cafeteria?${params}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (data.error) { alert("エラー: " + data.error); return; }
-    await initRoute(data.path_coords);
-  } catch {
-    document.getElementById("step-label").textContent = "サーバーに接続できません";
-    document.getElementById("step-count").textContent = "app.py が起動しているか確認してください";
-  } finally {
-    setLoading(false);
-  }
+  if (!resolveFacFromParams(params)) return;
+  await fetchRouteAndNavigate(`${API_BASE}/api/nearest_cafeteria?${params}`);
 }
 
 // ================================================================
@@ -1424,10 +1472,18 @@ async function doSearch() {
     if (fromInfo === "ambiguous") { alert("出発教室が複数の号館に存在します。号館を指定してください。"); return; }
     if (!toInfo)                { alert("目的教室を入力してください。"); return; }
     if (toInfo   === "ambiguous") { alert("目的教室が複数の号館に存在します。号館を指定してください。"); return; }
-    params.set("from_room",     fromInfo.room);
-    params.set("from_building", fromInfo.building);
-    params.set("to_room",       toInfo.room);
-    params.set("to_building",   toInfo.building);
+    if (fromInfo.isEvent) {
+      params.set("from_event", fromInfo.room);
+    } else {
+      params.set("from_room",     fromInfo.room);
+      params.set("from_building", fromInfo.building);
+    }
+    if (toInfo.isEvent) {
+      params.set("to_event", toInfo.room);
+    } else {
+      params.set("to_room",       toInfo.room);
+      params.set("to_building",   toInfo.building);
+    }
   } else {
     if (!gpsCoords) { alert("GPS位置を先に取得してください。"); return; }
     const toInfo = resolveRoom("to-input-gps", "gps-to-bldg");
@@ -1436,23 +1492,15 @@ async function doSearch() {
     const nearest = findNearestNode(gpsCoords.lat, gpsCoords.lng);
     if (!nearest) { alert("近くの出発ノードが見つかりません。\nキャンパスから離れすぎている可能性があります。"); return; }
     params.set("from_node",   nearest.id);
-    params.set("to_room",     toInfo.room);
-    params.set("to_building", toInfo.building);
+    if (toInfo.isEvent) {
+      params.set("to_event", toInfo.room);
+    } else {
+      params.set("to_room",     toInfo.room);
+      params.set("to_building", toInfo.building);
+    }
   }
 
-  setLoading(true);
-  try {
-    const res = await fetch(`${API_BASE}/api/route?${params}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (data.error) { alert("エラー: " + data.error); return; }
-    await initRoute(data.path_coords);
-  } catch {
-    document.getElementById("step-label").textContent = "サーバーに接続できません";
-    document.getElementById("step-count").textContent = "app.py が起動しているか確認してください";
-  } finally {
-    setLoading(false);
-  }
+  await fetchRouteAndNavigate(`${API_BASE}/api/route?${params}`);
 }
 
 function setLoading(on) {
@@ -1467,8 +1515,13 @@ function updateRouteImage(step) {
   const label  = document.getElementById("ar-label");
   const phEl   = document.getElementById("ar-placeholder");
   const node   = pathCoords[step];
+  const next   = pathCoords[step + 1];
   const isLast = step >= pathCoords.length - 1;
-  const isOutdoor = node && node.building === 0 && node.lat != null && !isLast;
+  // 建物内最終ノード（次が屋外ノード＝出口エッジ）も屋外扱いにして、
+  // 出口専用の連結写真を用意しなくてもそのままカメラARへ移行する。
+  const entersOutdoor = !!next && next.building === 0 && next.lat != null;
+  const isOutdoor = node && !isLast &&
+    ((node.building === 0 && node.lat != null) || entersOutdoor);
 
   if (isOutdoor) {
     Object.values(imgByStep).forEach(img => img.classList.remove("active"));
@@ -1653,7 +1706,7 @@ async function initRoute(coords) {
   arHideView();
   arPrefetchCameraIfNeeded();  // 屋外AR区間がある場合のみカメラを先取り
   clearMapOverlays();
-  drawFullOutdoorRoute(coords);
+  drawFullOutdoorRoute();
   prefetchRouteImages(coords);               // 写真: 並行ダウンロード開始（fire-and-forget）
   await prefetchSvgs(coords);               // SVG:  全フロア一括取得を待機してからナビ開始
   collapseSearchPanel();  // ルート確定後にパネルを収納
@@ -1697,7 +1750,7 @@ function updateOutdoorPolylines(step) {
     if (aheadFrom < seg.length - 1) {
       outdoorPolylines.push(new google.maps.Polyline({
         path: seg.slice(aheadFrom).map(n => ({ lat: n.lat, lng: n.lng })),
-        strokeColor: "#3B82F6", strokeOpacity: 0.85, strokeWeight: 5, geodesic: true, map,
+        strokeColor: ACCENT_COLOR, strokeOpacity: 0.85, strokeWeight: 5, geodesic: true, map,
       }));
     }
 
@@ -1787,7 +1840,7 @@ document.getElementById("completion-modal").addEventListener("click", e => {
 
 function updateNavBar(node, step, total) {
   let label = "—";
-  if (node) label = node.building === 0 ? "屋外を移動中" : `${node.building}号館 ${node.floor}階`;
+  if (node) label = node.building === 0 ? "屋外を移動中" : `${bldgLabel(node.building)} ${node.floor}階`;
   document.getElementById("step-label").textContent = label;
   document.getElementById("step-count").textContent = total ? `${step + 1} / ${total - 1}` : "";
   document.getElementById("prev-btn").disabled = step <= 0;
@@ -1798,7 +1851,6 @@ function updateNavBar(node, step, total) {
 // View switching
 // ================================================================
 function switchView(view) {
-  currentView = view;
   document.getElementById("map").style.display      = view === "map" ? "block" : "none";
   document.getElementById("svg-area").style.display = view === "svg" ? "block" : "none";
   if (view === "map" && map) google.maps.event.trigger(map, "resize");
@@ -1833,7 +1885,7 @@ function moveMapTo(node, step) {
 // SVG — load floor plan
 // ================================================================
 async function loadSvg(building, floor) {
-  document.getElementById("floor-badge").textContent = `${building}号館 ${floor}階`;
+  document.getElementById("floor-badge").textContent = `${bldgLabel(building)} ${floor}階`;
   const container = document.getElementById("svg-container");
   svgOverlay = null;
 
@@ -1856,7 +1908,7 @@ async function loadSvg(building, floor) {
   if (!text) {
     container.innerHTML = `
       <div class="err-box">
-        <div class="err-title">${building}号館 ${floor}階のマップが見つかりません</div>
+        <div class="err-title">${bldgLabel(building)} ${floor}階のマップが見つかりません</div>
         <div class="err-desc">このフロアのSVGデータはまだ登録されていません。</div>
         <div class="err-hint">◀ ▶ で他のステップに進んでください</div>
       </div>`;
@@ -1977,7 +2029,7 @@ function renderSvgStep(step) {
     const ahead = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
     ahead.classList.add("dyn");
     ahead.setAttribute("points",          floorNodes.slice(curFloorIdx).map(n => `${n.svg_x},${n.svg_y}`).join(" "));
-    ahead.setAttribute("stroke",          "#3B82F6");
+    ahead.setAttribute("stroke",          ACCENT_COLOR);
     ahead.setAttribute("stroke-width",    sw);
     ahead.setAttribute("fill",            "none");
     ahead.setAttribute("stroke-linecap",  "round");
@@ -1995,7 +2047,7 @@ function renderSvgStep(step) {
       c.setAttribute("r", rF); c.setAttribute("fill", "#9E9E9E"); c.setAttribute("fill-opacity", "0.6");
     } else {
       // これから: 青ドット
-      c.setAttribute("r", rF); c.setAttribute("fill", "#3B82F6"); c.setAttribute("fill-opacity", "0.75");
+      c.setAttribute("r", rF); c.setAttribute("fill", ACCENT_COLOR); c.setAttribute("fill-opacity", "0.75");
     }
     svgOverlay.appendChild(c);
   });
@@ -2203,7 +2255,6 @@ let arPermissionsRequested = false;
 let arCamWanted      = false;  // カメラストリームを保持してよいか（解放後の遅延取得を防ぐ）
 let arCamRequesting  = false;  // getUserMedia 実行中フラグ（二重取得を防ぐ）
 let arOrientAttached = false;
-let arOrientCount    = 0;
 let arHaveAbsolute   = false;
 let arGOrient        = null;
 
@@ -2243,12 +2294,10 @@ function arAttachOrientation() {
     if (e.alpha == null) return;
     arHaveAbsolute = true;
     arGOrient = e;
-    arOrientCount++;
   };
   const onRelative = (e) => {
     if (arHaveAbsolute && typeof e.webkitCompassHeading !== "number") return;
     arGOrient = e;
-    arOrientCount++;
   };
   window.addEventListener("deviceorientationabsolute", onAbsolute);
   window.addEventListener("deviceorientation",         onRelative);

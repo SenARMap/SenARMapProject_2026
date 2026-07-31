@@ -5,10 +5,8 @@ Blog build script
 posts/*.md を読んでHTMLに変換し、posts.json を更新します。
 """
 
-import os
 import json
 import re
-import sys
 from html import escape
 from pathlib import Path
 

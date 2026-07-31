@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>画像一括アップローダー | SenARMap</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>画像一括アップローダー</h1>
+        <p class="sub">SenARMap 関係者専用 — R2への直接アップロードツール</p>
+      </header>
+
+      <main>
+        <section class="panel">
+          <label for="file-input" class="drop-label" id="drop-label">
+            <span class="drop-icon">＋</span>
+            <span>ここをクリックして画像を選択（数百〜数千枚まとめてOK）</span>
+          </label>
+          <input id="file-input" type="file" accept="image/*" multiple hidden />
+
+          <div id="selection-info" class="selection-info" hidden>
+            <span id="selected-count">0</span> 件選択中
+            <button id="clear-btn" type="button" class="link-btn">クリア</button>
+          </div>
+
+          <div class="controls">
+            <label class="concurrency-label">
+              同時アップロード数
+              <select id="concurrency-select">
+                <option value="5">5</option>
+                <option value="6" selected>6</option>
+                <option value="8">8</option>
+                <option value="10">10</option>
+              </select>
+            </label>
+            <button id="upload-btn" type="button" disabled>アップロード開始</button>
+          </div>
+        </section>
+
+        <section class="panel" id="progress-panel" hidden>
+          <div class="progress-head">
+            <span id="progress-count">0 / 0 件完了</span>
+            <span id="progress-percent">0%</span>
+          </div>
+          <div class="progress-bar-track">
+            <div id="progress-bar-fill" class="progress-bar-fill"></div>
+          </div>
+          <div id="progress-status" class="progress-status"></div>
+          <ul id="fail-list" class="fail-list"></ul>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

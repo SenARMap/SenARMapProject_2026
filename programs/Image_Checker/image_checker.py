@@ -85,6 +85,28 @@ BORDER        = "#2D3748"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 共通ユーティリティ
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _bldg_label(building: int) -> str:
+    """号館番号を表示用ラベルに変換する（0 = 屋外）"""
+    return "屋外" if building == 0 else f"{building}号館"
+
+
+def _edge_sort_key(card):
+    """カードを (building, floor, from_id) の順に並べるためのキー"""
+    return (card.building, card.floor, int(card.key.split("_")[0]))
+
+
+def _count_states(cards) -> tuple[int, int, int]:
+    """カード集合から (ok, missing, unregistered) の件数を返す"""
+    ok      = sum(1 for c in cards if c.state == "ok")
+    missing = sum(1 for c in cards if c.state == "missing")
+    unreg   = sum(1 for c in cards if c.state == "unregistered")
+    return ok, missing, unreg
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ワーカー
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -222,7 +244,9 @@ class ImageCard(QFrame):
         key_lbl.setStyleSheet(f"color: {TXT_KEY}; background: transparent;")
         vb.addWidget(key_lbl)
 
-        bldg_txt = "屋外" if self.building == 0 else f"{self.building}号館 {self.floor}階"
+        bldg_txt = _bldg_label(self.building)
+        if self.building != 0:
+            bldg_txt += f" {self.floor}階"
         bldg_lbl = QLabel(bldg_txt)
         bldg_lbl.setFont(QFont("", 11))
         bldg_lbl.setStyleSheet(f"color: {TXT_SECONDARY}; background: transparent;")
@@ -366,7 +390,7 @@ class ExportDialog(QDialog):
         self._combo = QComboBox()
         self._combo.addItem("全て", -1)
         for b in self._buildings:
-            self._combo.addItem("屋外" if b == 0 else f"{b}号館", b)
+            self._combo.addItem(_bldg_label(b), b)
         self._combo.currentIndexChanged.connect(lambda _: self._on_bldg_changed())
         row.addWidget(self._combo)
         row.addStretch()
@@ -412,14 +436,9 @@ class ExportDialog(QDialog):
             if c.state in target
             and (self._sel_bldg == -1 or c.building == self._sel_bldg)
         ]
-        cards.sort(key=lambda c: (c.building, c.floor, int(c.key.split("_")[0])))
+        cards.sort(key=_edge_sort_key)
 
-        if self._sel_bldg == -1:
-            bldg_label = "全て"
-        elif self._sel_bldg == 0:
-            bldg_label = "屋外"
-        else:
-            bldg_label = f"{self._sel_bldg}号館"
+        bldg_label = "全て" if self._sel_bldg == -1 else _bldg_label(self._sel_bldg)
 
         now   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         lines = [
@@ -448,7 +467,7 @@ class ExportDialog(QDialog):
         ]
 
         for c in cards:
-            bldg_str  = "屋外" if c.building == 0 else f"{c.building}号館"
+            bldg_str  = _bldg_label(c.building)
             floor_str = f"{c.floor}階"
             state_str = "欠損 (CDN に存在しない)" if c.state == "missing" else "未登録 (CSV 未登録)"
             lines.append(
@@ -654,8 +673,7 @@ class MainWindow(QMainWindow):
         self._bldg_btn_map[-1] = all_bldg
 
         for bldg in self._buildings:
-            label = "屋外" if bldg == 0 else f"{bldg}号館"
-            btn   = self._make_pill(label, False)
+            btn = self._make_pill(_bldg_label(bldg), False)
             btn.clicked.connect(lambda _=False, b=bldg: self._filter_building(b))
             self._filterbar_row.addWidget(btn)
             self._bldg_btn_map[bldg] = btn
@@ -717,24 +735,31 @@ class MainWindow(QMainWindow):
                 QPushButton:hover {{ background: #4B5563; }}
             """)
 
-    def _build_scroll(self) -> QScrollArea:
-        self._scroll = QScrollArea()
-        self._scroll.setWidgetResizable(True)
-
+    def _new_grid_widget(self) -> tuple[QWidget, QGridLayout]:
+        """カードを並べるためのグリッドウィジェットを新規生成する"""
         gw = QWidget()
         gw.setStyleSheet(f"background: {BG_WIN};")
         gl = QGridLayout(gw)
         gl.setContentsMargins(16, 16, 16, 16)
         gl.setSpacing(12)
         gl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        return gw, gl
 
-        ph = QLabel("API URL を入力して「取得開始」をクリックしてください")
-        ph.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ph.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 16px;")
-        gl.addWidget(ph, 0, 0)
+    def _placeholder_label(self, text: str) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 16px;")
+        return lbl
 
-        self._grid_widget = gw
-        self._grid_layout = gl
+    def _build_scroll(self) -> QScrollArea:
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+
+        gw, gl = self._new_grid_widget()
+        gl.addWidget(
+            self._placeholder_label("API URL を入力して「取得開始」をクリックしてください"), 0, 0
+        )
+
         self._scroll.setWidget(gw)
         return self._scroll
 
@@ -851,10 +876,8 @@ class MainWindow(QMainWindow):
 
     def _on_images_done(self):
         self._fetch_btn.setEnabled(True)
-        ok      = sum(1 for c in self._cards.values() if c.state == "ok")
-        missing = sum(1 for c in self._cards.values() if c.state == "missing")
-        unreg   = sum(1 for c in self._cards.values() if c.state == "unregistered")
-        total   = len(self._cards)
+        ok, missing, unreg = _count_states(self._cards.values())
+        total = len(self._cards)
 
         if missing or unreg:
             self._set_status(
@@ -883,8 +906,7 @@ class MainWindow(QMainWindow):
             if (self._current_building == -1 or c.building == self._current_building)
             and match_state(c)
         ]
-        # (building, floor, from_id) 順に並べる
-        return sorted(cards, key=lambda c: (c.building, c.floor, int(c.key.split("_")[0])))
+        return sorted(cards, key=_edge_sort_key)
 
     def _refresh_grid(self):
         for card in self._cards.values():
@@ -894,28 +916,16 @@ class MainWindow(QMainWindow):
         if old:
             old.deleteLater()
 
-        gw = QWidget()
-        gw.setStyleSheet(f"background: {BG_WIN};")
-        gl = QGridLayout(gw)
-        gl.setContentsMargins(16, 16, 16, 16)
-        gl.setSpacing(12)
-        gl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-
-        self._grid_widget = gw
-        self._grid_layout = gl
+        gw, gl = self._new_grid_widget()
 
         visible = self._visible_cards()
 
         if not visible and not self._cards:
-            lbl = QLabel("API URL を入力して「取得開始」をクリックしてください")
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 16px;")
-            gl.addWidget(lbl, 0, 0)
+            gl.addWidget(
+                self._placeholder_label("API URL を入力して「取得開始」をクリックしてください"), 0, 0
+            )
         elif not visible:
-            lbl = QLabel("該当するエッジがありません")
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet(f"color: {TXT_SECONDARY}; font-size: 16px;")
-            gl.addWidget(lbl, 0, 0)
+            gl.addWidget(self._placeholder_label("該当するエッジがありません"), 0, 0)
         else:
             vw   = max(1, self._scroll.viewport().width() - 32)
             cols = max(1, vw // (CARD_W + 12))
@@ -954,9 +964,7 @@ class MainWindow(QMainWindow):
             return
 
         total   = len(self._cards)
-        ok      = sum(1 for c in self._cards.values() if c.state == "ok")
-        missing = sum(1 for c in self._cards.values() if c.state == "missing")
-        unreg   = sum(1 for c in self._cards.values() if c.state == "unregistered")
+        ok, missing, unreg = _count_states(self._cards.values())
         loading = total - ok - missing - unreg
         visible = len(self._visible_cards())
 
@@ -966,12 +974,10 @@ class MainWindow(QMainWindow):
         parts += [f"✔ {ok}", f"✕ 欠損 {missing}", f"— 未登録 {unreg}"]
 
         if self._current_building != -1:
-            bldg_cards  = [c for c in self._cards.values() if c.building == self._current_building]
-            bldg_total  = len(bldg_cards)
-            bldg_ok     = sum(1 for c in bldg_cards if c.state == "ok")
-            bldg_miss   = sum(1 for c in bldg_cards if c.state == "missing")
-            bldg_unreg  = sum(1 for c in bldg_cards if c.state == "unregistered")
-            bldg_name   = "屋外" if self._current_building == 0 else f"{self._current_building}号館"
+            bldg_cards = [c for c in self._cards.values() if c.building == self._current_building]
+            bldg_total = len(bldg_cards)
+            bldg_ok, bldg_miss, bldg_unreg = _count_states(bldg_cards)
+            bldg_name  = _bldg_label(self._current_building)
             parts.append(
                 f"[{bldg_name}: 全 {bldg_total}  ✔ {bldg_ok}  ✕ {bldg_miss}  — {bldg_unreg}  表示 {visible}]"
             )
