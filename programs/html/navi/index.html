@@ -849,6 +849,20 @@ if (EVENT_MODE) {
 }
 
 let map;
+let mapReady = false;
+let _pendingMapCallback = null;
+
+// Google Maps 読み込み完了(initMap)前に地図操作が必要な処理が来た場合は、
+// 読み込み完了まで保留してから実行する（教室一覧の表示自体はMapsを待たず即座に行うため）。
+function runWhenMapReady(fn) {
+  if (mapReady) fn();
+  else _pendingMapCallback = fn;
+}
+
+function waitForMapReady() {
+  return new Promise(resolve => runWhenMapReady(resolve));
+}
+
 let searchMode    = "room";
 let facSearchMode = "room";
 let gpsCoords     = null;
@@ -918,7 +932,12 @@ function initMap() {
     fullscreenControl: false,
     rotateControl: true,
   });
-  loadAllData();
+  mapReady = true;
+  if (_pendingMapCallback) {
+    const fn = _pendingMapCallback;
+    _pendingMapCallback = null;
+    fn();
+  }
 }
 
 // ================================================================
@@ -964,6 +983,10 @@ async function loadAllData() {
   }
   applyUrlParams();
 }
+
+// Google Maps の読み込み完了（initMap）を待たず、ページ読み込み直後に教室一覧を取得する。
+// loadAllData は google.maps を一切参照しないため、Mapsの初期化と切り離して問題ない。
+loadAllData();
 
 // ================================================================
 // URL パラメータからの検索プリセット（イベント誘導・QRコード用）
@@ -1237,7 +1260,9 @@ function resolveFacFromParams(params) {
 }
 
 // 検索APIを叩いてルート表示まで行う共通処理（doSearch / doToiletSearch / doCafeteriaSearch で共用）
+// 経路描画は屋外区間があると google.maps.Polyline/Marker を使うため、地図の初期化を待つ。
 async function fetchRouteAndNavigate(url) {
+  await waitForMapReady();
   setLoading(true);
   try {
     const res = await fetch(url);
