@@ -39,6 +39,7 @@ CAFETERIA_CSV       = os.path.join(DATA_DIR, "cafeteria_edge.csv")
 NAME_CSV            = os.path.join(DATA_DIR, "name.csv")
 BUILDING_NAME_CSV   = os.path.join(DATA_DIR, "building_name.csv")
 EVENT_CSV           = os.path.join(DATA_DIR, "event.csv")
+IGNORE_CSV          = os.path.join(DATA_DIR, "ignore.csv")
 CDN_BASE         = "https://cdn.iku-navi.net"
 
 # グローバルID = building_id * ID_OFFSET + ローカルID
@@ -417,8 +418,35 @@ def _building_display_name(building):
     return "屋外" if building == 0 else f"{building}号館"
 
 
+_cached_ignore_set = None   # ignore.csv: {name, ...}（建物を問わず教室検索から除外する生の名前）
+
+
+def get_cached_ignore_set():
+    """
+    ignore.csv（列: id）を読み込み、教室検索・ルート検索から除外する生の名前の集合を返す。
+    building 列は無く、建物を問わずこの名前に一致するエッジは無視される。
+    """
+    global _cached_ignore_set
+    if _cached_ignore_set is None:
+        ignore_set = set()
+        if os.path.exists(IGNORE_CSV):
+            df = pd.read_csv(IGNORE_CSV, dtype=str).fillna("")
+            df.columns = df.columns.str.strip()
+            for _, row in df.iterrows():
+                name = str(row.get("id", "")).strip()
+                if name:
+                    ignore_set.add(name)
+        _cached_ignore_set = ignore_set
+    return _cached_ignore_set
+
+
+# 最寄りトイレ検索専用の生の名前。索引には残すが教室検索の候補には出さない。
+_TOILET_NAMES = {"M_Toilet", "F_Toilet", "C_Toilet"}
+
+
 def _build_room_index(edges_df):
     """エッジの name 列を分解し、教室名→エッジ行 の索引と教室一覧を一度だけ構築する"""
+    ignore_set = get_cached_ignore_set()
     index, rooms_list, seen = {}, [], set()
     for _, row in edges_df.iterrows():
         raw_name = str(row["name"]).strip()
@@ -427,20 +455,23 @@ def _build_room_index(edges_df):
         building = int(row["building"])
         for room in raw_name.split(";"):
             room = room.strip()
-            if not room:
+            if not room or room in ignore_set:
                 continue
             index.setdefault((room, building), []).append(row)
-            if (room, building) not in seen:
-                seen.add((room, building))
-                rooms_list.append({
-                    "room":     room,
-                    "display":  _display_name(building, room),
-                    "building": building,
-                    "floor":    int(row["floor"]),
-                    "edge_id":  int(row["id"]),
-                    "from":     int(row["from"]),
-                    "to":       int(row["to"]),
-                })
+            if (room, building) in seen:
+                continue
+            seen.add((room, building))
+            if room in _TOILET_NAMES:
+                continue  # 最寄りトイレ検索専用。教室検索の候補には含めない
+            rooms_list.append({
+                "room":     room,
+                "display":  _display_name(building, room),
+                "building": building,
+                "floor":    int(row["floor"]),
+                "edge_id":  int(row["id"]),
+                "from":     int(row["from"]),
+                "to":       int(row["to"]),
+            })
     rooms_list.sort(key=lambda r: (r["building"], r["room"]))
     return index, rooms_list
 
@@ -631,6 +662,7 @@ def clear_cache():
     global _cached_nodes_df, _cached_edges_df, _cached_graph_with_ev, _cached_graph_without_ev
     global _cached_room_index, _cached_rooms_list, _cached_nodes_list, _cached_node_xyz
     global _cached_graph_payload, _cached_name_map, _cached_event_index, _cached_events_list
+    global _cached_ignore_set
     _cached_nodes_df = None
     _cached_edges_df = None
     _cached_graph_with_ev = None
@@ -643,6 +675,7 @@ def clear_cache():
     _cached_name_map = None
     _cached_event_index = None
     _cached_events_list = None
+    _cached_ignore_set = None
 
 
 def _edge_to_dict(row):

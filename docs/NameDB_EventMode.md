@@ -1,6 +1,7 @@
-# 名前データベース（name.csv / building_name.csv）とイベントモード（event.csv）
+# 名前データベース（name.csv / building_name.csv / ignore.csv）とイベントモード（event.csv）
 
-`data/name.csv`・`data/building_name.csv`・`data/event.csv` を編集するだけで、コード変更なしに表示名やイベント検索を設定できます。
+`data/name.csv`・`data/building_name.csv`・`data/ignore.csv`・`data/event.csv` を編集するだけで、
+コード変更なしに表示名やイベント検索を設定できます。
 いずれも Flask（`programs/3D_Graph/app.py`）が起動時に読み込みます。編集後はサーバーの再起動（またはキャッシュクリア）が必要です。
 
 ---
@@ -36,10 +37,39 @@ building,name,display_name
   トイレ・食堂など教室でないものは、`教室`が付かないよう必ず `name.csv` に登録してください
   （`data/name.csv` の記入例にある `M_Toilet` → `男子トイレ` などが該当）。
 - API的には `/api/rooms` `/api/all` の各教室に `display` フィールドが付きます。経路検索API（`from_room` / `to_room`）へは従来どおり生の名前を渡します。
+- `M_Toilet` / `F_Toilet` / `C_Toilet`（トイレ）は教室検索の候補（`/api/rooms` `/api/all`）には出ません。
+  最寄りトイレ検索（`/api/nearest_toilet`）専用の名前として索引には残ります。
 
 ---
 
-## 2. 建物名データベース — data/building_name.csv
+## 2. 教室検索の除外リスト — data/ignore.csv
+
+`ignore.csv` に列挙した生の名前は、建物を問わず教室検索・ルート検索から完全に除外されます
+（設備室・非公開エリアなど、誰にも検索させたくない名前を指定する）。
+
+### 列
+
+| 列 | 必須 | 説明 |
+|---|---|---|
+| `id` | 必須 | エッジCSVの `name` 列に書かれている生の名前。建物は指定しない（全建物で無視される） |
+
+### 記入例
+
+```csv
+id
+Boilerroom
+Electrical_Room
+SUBWAY
+```
+
+### 挙動
+
+- ここに列挙した名前は `/api/rooms` `/api/all` の候補に出ないだけでなく、`from_room` / `to_room` による経路検索の対象からも外れます（トイレとは異なり索引ごと除外）。
+- `name.csv` の表示名設定より先に評価されるため、`ignore.csv` に載せた名前は `name.csv` に登録があっても無視されます。
+
+---
+
+## 3. 建物名データベース — data/building_name.csv
 
 建物ID（号館番号）に、任意の表示名（正式名称・愛称など）を割り当てます。未登録の建物は従来どおり
 `{building}号館`（building=0 は `屋外`）がそのまま表示されます。
@@ -68,7 +98,7 @@ building,display_name
 
 ---
 
-## 3. イベントモード — data/event.csv + navi/?event=1
+## 4. イベントモード — data/event.csv + navi/?event=1
 
 学園祭などのイベント開催時に、`https://iku-navi.net/navi/?event=1` でナビを開くと、
 教室名に加えて event.csv に登録した屋台などのタイトルで出発地・目的地を指定できます。
