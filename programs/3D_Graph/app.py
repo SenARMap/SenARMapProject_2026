@@ -418,13 +418,15 @@ def _building_display_name(building):
     return "屋外" if building == 0 else f"{building}号館"
 
 
-_cached_ignore_set = None   # ignore.csv: {name, ...}（建物を問わず教室検索から除外する生の名前）
+_cached_ignore_set = None   # ignore.csv: {name, ...}（建物を問わず教室検索の候補から隠す生の名前）
 
 
 def get_cached_ignore_set():
     """
-    ignore.csv（列: id）を読み込み、教室検索・ルート検索から除外する生の名前の集合を返す。
-    building 列は無く、建物を問わずこの名前に一致するエッジは無視される。
+    ignore.csv（列: id）を読み込み、教室検索の候補一覧から隠す生の名前の集合を返す。
+    building 列は無く、建物を問わずこの名前に一致するエッジが対象になる。
+    ルート検索（from_room/to_room）・最寄りトイレ/食堂検索・event.csvのroom紐付けは
+    索引（room_index）を直接参照するため、ここでの除外の影響を受けない。
     """
     global _cached_ignore_set
     if _cached_ignore_set is None:
@@ -440,7 +442,9 @@ def get_cached_ignore_set():
     return _cached_ignore_set
 
 
-# 最寄りトイレ検索専用の生の名前。索引には残すが教室検索の候補には出さない。
+# 教室検索の候補一覧には出さないが、索引（room_index）には残す生の名前。
+# トイレは最寄りトイレ検索、ignore.csv登録分はルート検索・event.csv・食堂検索などで
+# 個別に参照され続けるため、rooms_list からのみ除外する。
 _TOILET_NAMES = {"M_Toilet", "F_Toilet", "C_Toilet"}
 
 
@@ -455,14 +459,14 @@ def _build_room_index(edges_df):
         building = int(row["building"])
         for room in raw_name.split(";"):
             room = room.strip()
-            if not room or room in ignore_set:
+            if not room:
                 continue
             index.setdefault((room, building), []).append(row)
             if (room, building) in seen:
                 continue
             seen.add((room, building))
-            if room in _TOILET_NAMES:
-                continue  # 最寄りトイレ検索専用。教室検索の候補には含めない
+            if room in _TOILET_NAMES or room in ignore_set:
+                continue  # 教室検索の候補には含めない（索引には残す）
             rooms_list.append({
                 "room":     room,
                 "display":  _display_name(building, room),
