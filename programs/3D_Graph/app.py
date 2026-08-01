@@ -39,6 +39,7 @@ CAFETERIA_CSV       = os.path.join(DATA_DIR, "cafeteria_edge.csv")
 NAME_CSV            = os.path.join(DATA_DIR, "name.csv")
 BUILDING_NAME_CSV   = os.path.join(DATA_DIR, "building_name.csv")
 EVENT_CSV           = os.path.join(DATA_DIR, "event.csv")
+IGNORE_CSV          = os.path.join(DATA_DIR, "ignore.csv")
 CDN_BASE         = "https://cdn.iku-navi.net"
 
 # グローバルID = building_id * ID_OFFSET + ローカルID
@@ -375,9 +376,13 @@ def get_cached_name_map():
 
 
 def _display_name(building, name):
-    """name.csv の表示名を返す。建物指定 → 全建物共通 → 生の名前 の順で解決"""
+    """name.csv の表示名を返す。建物指定 → 全建物共通 → 生の名前+「教室」 の順で解決"""
     name_map = get_cached_name_map()
-    return name_map.get((int(building), name)) or name_map.get((None, name)) or name
+    return (
+        name_map.get((int(building), name))
+        or name_map.get((None, name))
+        or f"{name}教室"
+    )
 
 
 _cached_building_name_map = None   # building_name.csv: {building: display_name}
@@ -413,8 +418,39 @@ def _building_display_name(building):
     return "屋外" if building == 0 else f"{building}号館"
 
 
+_cached_ignore_set = None   # ignore.csv: {name, ...}（建物を問わず教室検索の候補から隠す生の名前）
+
+
+def get_cached_ignore_set():
+    """
+    ignore.csv（列: id）を読み込み、教室検索の候補一覧から隠す生の名前の集合を返す。
+    building 列は無く、建物を問わずこの名前に一致するエッジが対象になる。
+    ルート検索（from_room/to_room）・最寄りトイレ/食堂検索・event.csvのroom紐付けは
+    索引（room_index）を直接参照するため、ここでの除外の影響を受けない。
+    """
+    global _cached_ignore_set
+    if _cached_ignore_set is None:
+        ignore_set = set()
+        if os.path.exists(IGNORE_CSV):
+            df = pd.read_csv(IGNORE_CSV, dtype=str).fillna("")
+            df.columns = df.columns.str.strip()
+            for _, row in df.iterrows():
+                name = str(row.get("id", "")).strip()
+                if name:
+                    ignore_set.add(name)
+        _cached_ignore_set = ignore_set
+    return _cached_ignore_set
+
+
+# 教室検索の候補一覧には出さないが、索引（room_index）には残す生の名前。
+# トイレは最寄りトイレ検索、ignore.csv登録分はルート検索・event.csv・食堂検索などで
+# 個別に参照され続けるため、rooms_list からのみ除外する。
+_TOILET_NAMES = {"M_Toilet", "F_Toilet", "C_Toilet"}
+
+
 def _build_room_index(edges_df):
     """エッジの name 列を分解し、教室名→エッジ行 の索引と教室一覧を一度だけ構築する"""
+    ignore_set = get_cached_ignore_set()
     index, rooms_list, seen = {}, [], set()
     for _, row in edges_df.iterrows():
         raw_name = str(row["name"]).strip()
@@ -426,17 +462,20 @@ def _build_room_index(edges_df):
             if not room:
                 continue
             index.setdefault((room, building), []).append(row)
-            if (room, building) not in seen:
-                seen.add((room, building))
-                rooms_list.append({
-                    "room":     room,
-                    "display":  _display_name(building, room),
-                    "building": building,
-                    "floor":    int(row["floor"]),
-                    "edge_id":  int(row["id"]),
-                    "from":     int(row["from"]),
-                    "to":       int(row["to"]),
-                })
+            if (room, building) in seen:
+                continue
+            seen.add((room, building))
+            if room in _TOILET_NAMES or room in ignore_set:
+                continue  # 教室検索の候補には含めない（索引には残す）
+            rooms_list.append({
+                "room":     room,
+                "display":  _display_name(building, room),
+                "building": building,
+                "floor":    int(row["floor"]),
+                "edge_id":  int(row["id"]),
+                "from":     int(row["from"]),
+                "to":       int(row["to"]),
+            })
     rooms_list.sort(key=lambda r: (r["building"], r["room"]))
     return index, rooms_list
 
@@ -627,6 +666,7 @@ def clear_cache():
     global _cached_nodes_df, _cached_edges_df, _cached_graph_with_ev, _cached_graph_without_ev
     global _cached_room_index, _cached_rooms_list, _cached_nodes_list, _cached_node_xyz
     global _cached_graph_payload, _cached_name_map, _cached_event_index, _cached_events_list
+    global _cached_ignore_set
     _cached_nodes_df = None
     _cached_edges_df = None
     _cached_graph_with_ev = None
@@ -639,6 +679,7 @@ def clear_cache():
     _cached_name_map = None
     _cached_event_index = None
     _cached_events_list = None
+    _cached_ignore_set = None
 
 
 def _edge_to_dict(row):

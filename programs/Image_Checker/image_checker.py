@@ -8,6 +8,9 @@
   ok           … CSV 登録済み + CDN に実在
   missing      … CSV 登録済み + CDN に存在しない
   unregistered … グラフ上にエッジがあるが edge_image.csv に未登録
+  not_required … 建物出入口エッジ（type=7, anchors.csv由来）。
+                 navi側はこの区間で写真の代わりにカメラARを起動するため、
+                 edge_image.csv 未登録でも欠損・未登録として扱わない。
 """
 
 import sys
@@ -70,6 +73,7 @@ BG_CARD_OK    = "#0C2318"
 BG_CARD_NG    = "#2B0F0F"
 BG_CARD_UNREG = "#1A1A2A"
 BG_CARD_LOAD  = "#1A2233"
+BG_CARD_NOTREQ = "#12283A"
 BG_THUMB      = "#0D1626"
 TXT_PRIMARY   = "#F1F5F9"
 TXT_SECONDARY = "#94A3B8"
@@ -78,6 +82,7 @@ ACCENT        = "#00B8E6"
 COL_OK        = "#4ADE80"
 COL_NG        = "#F87171"
 COL_UNREG     = "#6B7280"
+COL_NOTREQ    = "#38BDF8"
 COL_WARN      = "#FBBF24"
 BTN_ACTIVE    = "#0E7490"
 BTN_IDLE      = "#374151"
@@ -98,12 +103,13 @@ def _edge_sort_key(card):
     return (card.building, card.floor, int(card.key.split("_")[0]))
 
 
-def _count_states(cards) -> tuple[int, int, int]:
-    """カード集合から (ok, missing, unregistered) の件数を返す"""
-    ok      = sum(1 for c in cards if c.state == "ok")
-    missing = sum(1 for c in cards if c.state == "missing")
-    unreg   = sum(1 for c in cards if c.state == "unregistered")
-    return ok, missing, unreg
+def _count_states(cards) -> tuple[int, int, int, int]:
+    """カード集合から (ok, missing, unregistered, not_required) の件数を返す"""
+    ok           = sum(1 for c in cards if c.state == "ok")
+    missing      = sum(1 for c in cards if c.state == "missing")
+    unreg        = sum(1 for c in cards if c.state == "unregistered")
+    not_required = sum(1 for c in cards if c.state == "not_required")
+    return ok, missing, unreg, not_required
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -198,6 +204,7 @@ class ImageCard(QFrame):
         "ok":           BG_CARD_OK,
         "missing":      BG_CARD_NG,
         "unregistered": BG_CARD_UNREG,
+        "not_required": BG_CARD_NOTREQ,
     }
 
     def __init__(self, key: str, url: str | None,
@@ -277,6 +284,7 @@ class ImageCard(QFrame):
             "ok":           ("✔  OK",              COL_OK),
             "missing":      ("✕  CDN に存在しない", COL_NG),
             "unregistered": ("—  CSV 未登録",       COL_UNREG),
+            "not_required": ("◎  AR起動区間（不要）", COL_NOTREQ),
         }
         text, color = conf.get(self._state, ("", TXT_SECONDARY))
         self._status.setText(text)
@@ -293,6 +301,8 @@ class ImageCard(QFrame):
             self._draw_text_thumb("✕  画像なし", COL_NG, "#180808")
         elif self._state == "unregistered":
             self._draw_text_thumb("—  未登録", COL_UNREG, "#111120")
+        elif self._state == "not_required":
+            self._draw_text_thumb("◎  AR起動区間", COL_NOTREQ, "#0B1C2A")
         # ok はセット時に上書き
 
     def _draw_text_thumb(self, text: str, color: str, bg: str):
@@ -503,10 +513,11 @@ class ExportDialog(QDialog):
 # ─────────────────────────────────────────────────────────────────────────────
 
 # フィルタ定数
-FILTER_ALL   = "all"
-FILTER_NG    = "missing"       # CDN 欠損
-FILTER_UNREG = "unregistered"  # CSV 未登録
-FILTER_ATTN  = "attention"     # 欠損 + 未登録まとめて
+FILTER_ALL     = "all"
+FILTER_NG      = "missing"        # CDN 欠損
+FILTER_UNREG   = "unregistered"   # CSV 未登録
+FILTER_ATTN    = "attention"      # 欠損 + 未登録まとめて
+FILTER_NOTREQ  = "not_required"   # 建物出入口エッジ（AR起動のため写真不要）
 
 
 class MainWindow(QMainWindow):
@@ -694,10 +705,11 @@ class MainWindow(QMainWindow):
 
         self._state_btns: dict[str, QPushButton] = {}
         filters = [
-            (FILTER_ALL,   "全て"),
-            (FILTER_NG,    "欠損"),
-            (FILTER_UNREG, "未登録"),
-            (FILTER_ATTN,  "要対応"),
+            (FILTER_ALL,    "全て"),
+            (FILTER_NG,     "欠損"),
+            (FILTER_UNREG,  "未登録"),
+            (FILTER_ATTN,   "要対応"),
+            (FILTER_NOTREQ, "AR区間(不要)"),
         ]
         for fkey, flabel in filters:
             btn = self._make_pill(flabel, fkey == FILTER_ALL)
@@ -808,6 +820,9 @@ class MainWindow(QMainWindow):
         for edge in edges_list:
             from_id  = int(edge["from"])
             to_id    = int(edge["to"])
+            # type=7 は anchors.csv から自動生成される建物出入口エッジ。
+            # navi側はこの区間で写真を使わずカメラARを起動するため写真登録は不要。
+            is_entrance_edge = str(edge.get("type", "1")) == "7"
             # エッジのノードが nodes_map になければ from_id を参照
             nf       = nodes_map.get(from_id, {})
             building = nf.get("building", edge.get("building", -1))
@@ -827,12 +842,15 @@ class MainWindow(QMainWindow):
                     floor    = nt.get("floor",    edge.get("floor",    1))
                     buildings_set.add(building)
 
-                url = edge_images.get(key)
-                if url:
-                    card = ImageCard(key, url, building, floor, "loading")
-                    tasks.append((key, url))
+                if is_entrance_edge:
+                    card = ImageCard(key, None, building, floor, "not_required")
                 else:
-                    card = ImageCard(key, None, building, floor, "unregistered")
+                    url = edge_images.get(key)
+                    if url:
+                        card = ImageCard(key, url, building, floor, "loading")
+                        tasks.append((key, url))
+                    else:
+                        card = ImageCard(key, None, building, floor, "unregistered")
 
                 self._cards[key] = card
 
@@ -843,9 +861,10 @@ class MainWindow(QMainWindow):
 
         total_edges = len(self._cards)
         registered  = len(tasks)
-        unreg       = total_edges - registered
+        _, _, unreg, not_required = _count_states(self._cards.values())
         self._set_status(
-            f"全 {total_edges} エッジ  登録済 {registered}  未登録 {unreg}  — 画像取得中...",
+            f"全 {total_edges} エッジ  登録済 {registered}  未登録 {unreg}  "
+            f"AR起動区間(不要) {not_required}  — 画像取得中...",
             TXT_SECONDARY,
         )
         self._progress.setRange(0, max(1, registered))
@@ -876,7 +895,7 @@ class MainWindow(QMainWindow):
 
     def _on_images_done(self):
         self._fetch_btn.setEnabled(True)
-        ok, missing, unreg = _count_states(self._cards.values())
+        ok, missing, unreg, _ = _count_states(self._cards.values())
         total = len(self._cards)
 
         if missing or unreg:
@@ -896,9 +915,10 @@ class MainWindow(QMainWindow):
     def _visible_cards(self) -> list[ImageCard]:
         def match_state(c: ImageCard) -> bool:
             if self._filter_state == FILTER_ALL:   return True
-            if self._filter_state == FILTER_NG:    return c.state == "missing"
-            if self._filter_state == FILTER_UNREG: return c.state == "unregistered"
-            if self._filter_state == FILTER_ATTN:  return c.state in ("missing", "unregistered")
+            if self._filter_state == FILTER_NG:     return c.state == "missing"
+            if self._filter_state == FILTER_UNREG:  return c.state == "unregistered"
+            if self._filter_state == FILTER_ATTN:   return c.state in ("missing", "unregistered")
+            if self._filter_state == FILTER_NOTREQ: return c.state == "not_required"
             return True
 
         cards = [
@@ -964,22 +984,23 @@ class MainWindow(QMainWindow):
             return
 
         total   = len(self._cards)
-        ok, missing, unreg = _count_states(self._cards.values())
-        loading = total - ok - missing - unreg
+        ok, missing, unreg, not_required = _count_states(self._cards.values())
+        loading = total - ok - missing - unreg - not_required
         visible = len(self._visible_cards())
 
         parts = [f"全 {total} エッジ"]
         if loading:
             parts.append(f"読込中 {loading}")
-        parts += [f"✔ {ok}", f"✕ 欠損 {missing}", f"— 未登録 {unreg}"]
+        parts += [f"✔ {ok}", f"✕ 欠損 {missing}", f"— 未登録 {unreg}", f"◎ AR区間 {not_required}"]
 
         if self._current_building != -1:
             bldg_cards = [c for c in self._cards.values() if c.building == self._current_building]
             bldg_total = len(bldg_cards)
-            bldg_ok, bldg_miss, bldg_unreg = _count_states(bldg_cards)
+            bldg_ok, bldg_miss, bldg_unreg, bldg_notreq = _count_states(bldg_cards)
             bldg_name  = _bldg_label(self._current_building)
             parts.append(
-                f"[{bldg_name}: 全 {bldg_total}  ✔ {bldg_ok}  ✕ {bldg_miss}  — {bldg_unreg}  表示 {visible}]"
+                f"[{bldg_name}: 全 {bldg_total}  ✔ {bldg_ok}  ✕ {bldg_miss}  "
+                f"— {bldg_unreg}  ◎ {bldg_notreq}  表示 {visible}]"
             )
         else:
             parts.append(f"[表示 {visible}]")

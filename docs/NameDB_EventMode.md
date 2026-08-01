@@ -1,6 +1,7 @@
-# 名前データベース（name.csv / building_name.csv）とイベントモード（event.csv）
+# 名前データベース（name.csv / building_name.csv / ignore.csv）とイベントモード（event.csv）
 
-`data/name.csv`・`data/building_name.csv`・`data/event.csv` を編集するだけで、コード変更なしに表示名やイベント検索を設定できます。
+`data/name.csv`・`data/building_name.csv`・`data/ignore.csv`・`data/event.csv` を編集するだけで、
+コード変更なしに表示名やイベント検索を設定できます。
 いずれも Flask（`programs/3D_Graph/app.py`）が起動時に読み込みます。編集後はサーバーの再起動（またはキャッシュクリア）が必要です。
 
 ---
@@ -30,14 +31,49 @@ building,name,display_name
 
 ### 挙動
 
-- 表示名は建物指定の行 → 全建物共通の行（`building` 空欄） → 生の名前 の優先順で解決されます。
+- 表示名は建物指定の行 → 全建物共通の行（`building` 空欄） → 生の名前+「教室」 の優先順で解決されます。
 - ナビ画面のサジェスト・目的地表示には表示名が使われますが、**入力欄には生の名前・表示名のどちらを打っても検索できます**。
-- `name.csv` に登録がない名前は従来どおり生の名前がそのまま表示されます。
+- `name.csv` に登録がない名前は `{生の名前}教室`（例: `101` → `101教室`）が表示されます。
+  トイレ・食堂など教室でないものは、`教室`が付かないよう必ず `name.csv` に登録してください
+  （`data/name.csv` の記入例にある `M_Toilet` → `男子トイレ` などが該当）。
 - API的には `/api/rooms` `/api/all` の各教室に `display` フィールドが付きます。経路検索API（`from_room` / `to_room`）へは従来どおり生の名前を渡します。
+- `M_Toilet` / `F_Toilet` / `C_Toilet`（トイレ）は教室検索の候補（`/api/rooms` `/api/all`）には出ません。
+  最寄りトイレ検索（`/api/nearest_toilet`）専用の名前として索引には残ります。
 
 ---
 
-## 2. 建物名データベース — data/building_name.csv
+## 2. 教室検索の除外リスト — data/ignore.csv
+
+`ignore.csv` に列挙した生の名前は、建物を問わず**教室検索の候補一覧からだけ**隠されます
+（設備室など、通常の教室検索には出したくないが、イベント紐付けなど他の用途では
+引き続き使いたい名前を指定する）。
+
+### 列
+
+| 列 | 必須 | 説明 |
+|---|---|---|
+| `id` | 必須 | エッジCSVの `name` 列に書かれている生の名前。建物は指定しない（全建物で対象になる） |
+
+### 記入例
+
+```csv
+id
+Boilerroom
+Electrical_Room
+SUBWAY
+```
+
+### 挙動
+
+- ここに列挙した名前は `/api/rooms` `/api/all` の教室検索候補には出なくなります（トイレと同じ扱い）。
+- **ルート検索（`from_room`/`to_room`）・最寄りトイレ/食堂検索・`event.csv` の `room` 紐付けには影響しません。**
+  これらは内部の索引（room_index）を直接参照するため、`ignore.csv` に載せてもそのまま使えます。
+  例えば `SUBWAY` を登録しても、`event.csv` で `room=SUBWAY` として引き続き紐付けられます。
+- 完全に検索・ルート探索そのものから消したい場合はこの機能では対応していません（別途相談してください）。
+
+---
+
+## 3. 建物名データベース — data/building_name.csv
 
 建物ID（号館番号）に、任意の表示名（正式名称・愛称など）を割り当てます。未登録の建物は従来どおり
 `{building}号館`（building=0 は `屋外`）がそのまま表示されます。
@@ -66,7 +102,7 @@ building,display_name
 
 ---
 
-## 3. イベントモード — data/event.csv + navi/?event=1
+## 4. イベントモード — data/event.csv + navi/?event=1
 
 学園祭などのイベント開催時に、`https://iku-navi.net/navi/?event=1` でナビを開くと、
 教室名に加えて event.csv に登録した屋台などのタイトルで出発地・目的地を指定できます。
