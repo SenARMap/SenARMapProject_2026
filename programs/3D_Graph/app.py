@@ -375,9 +375,13 @@ def get_cached_name_map():
 
 
 def _display_name(building, name):
-    """name.csv の表示名を返す。建物指定 → 全建物共通 → 生の名前 の順で解決"""
+    """name.csv の表示名を返す。建物指定 → 全建物共通 → 生の名前+「教室」 の順で解決"""
     name_map = get_cached_name_map()
-    return name_map.get((int(building), name)) or name_map.get((None, name)) or name
+    return (
+        name_map.get((int(building), name))
+        or name_map.get((None, name))
+        or f"{name}教室"
+    )
 
 
 _cached_building_name_map = None   # building_name.csv: {building: display_name}
