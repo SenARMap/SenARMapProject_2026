@@ -1,0 +1,8 @@
+# Cloudflare Pages のリダイレクト定義
+# https://developers.cloudflare.com/pages/configuration/redirects/
+# 配布済み QR コード（https://iku-navi.net/redirect/...）と旧 3D ビューア URL を
+# サーバー側（api サブドメイン）へ転送する。クエリ文字列は自動で引き継がれる。
+
+/redirect/* https://api.iku-navi.net/redirect/:splat 301
+/3d/* https://api.iku-navi.net/3d/:splat 301
+/3d https://api.iku-navi.net/3d/ 301

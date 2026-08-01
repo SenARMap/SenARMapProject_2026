@@ -1,7 +1,5 @@
 FROM python:3.13-slim-trixie
 
-WORKDIR /project/enviroments
-
 ENV TERM=xterm-256color
 
 RUN echo "alias ls='ls --color=auto'" >> /root/.bashrc && \
@@ -13,10 +11,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-    
+WORKDIR /project/enviroments
+
+COPY deploy_env/python/requirements.txt .
+
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN pip install -r requirements.txt
+COPY . /project/
+
+RUN find /project -type d -exec chmod 755 {} \; && \
+    find /project -type f -exec chmod 644 {} \;
 
 WORKDIR /project/programs/3D_Graph

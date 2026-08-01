@@ -3,7 +3,7 @@ services:
     image: iki_project_2026:1.0
     build: ./
     container_name: 'iki_project_2026'
-    ports: 
+    ports:
       - 5001:5001
     working_dir: '/project/programs'
     volumes:
@@ -14,7 +14,7 @@ services:
     build: ./nginx/
     container_name: 'iki_project_2026_nginx'
     ports:
-      - 8080:80
+      - 8081:80
       - 4430:443
     volumes:
       - ./nginx/ssl/:/etc/nginx/certs/

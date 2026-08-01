@@ -30,6 +30,8 @@
       --green-dim:   rgba(0, 212, 152, 0.10);
       --red:         #f03858;
       --red-dim:     rgba(240, 56, 88, 0.12);
+      --gold:        #f2c437;
+      --gold-dim:    rgba(242, 196, 55, 0.12);
       --header-h:    52px;
       --peek-h:      64px;
       --sheet-r:     20px;
@@ -97,27 +99,6 @@
       font-family: var(--font-mono);
     }
 
-    .viewer-link {
-      margin-left: auto;
-      display: flex; align-items: center; gap: 6px;
-      background: var(--accent-dim);
-      border: 1px solid rgba(0,192,238,0.35);
-      color: var(--accent);
-      padding: 6px 12px;
-      border-radius: 8px;
-      text-decoration: none;
-      font-size: 0.75rem;
-      font-weight: 600;
-      letter-spacing: 0.03em;
-      white-space: nowrap;
-      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
-    }
-    .viewer-link:hover {
-      background: rgba(0,192,238,0.2);
-      border-color: rgba(0,192,238,0.6);
-      box-shadow: 0 0 12px var(--accent-glow);
-    }
-
     /* ============================================================
        MAIN LAYOUT
     ============================================================ */
@@ -183,8 +164,6 @@
       border-bottom-color: var(--accent);
     }
     .tab:hover:not(.active) { color: var(--text-sub); }
-
-    .tab-icon { display: block; font-size: 1rem; margin-bottom: 2px; }
 
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
@@ -404,8 +383,7 @@
     }
 
     /* Distance value highlight */
-    .success br + b,
-    .dist-value {
+    .success br + b {
       font-family: var(--font-mono);
     }
 
@@ -453,7 +431,7 @@
       background: var(--bg);
       min-width: 0;
     }
-    #map { width: 100%; height: 100%; }
+    #map { width: 100%; height: 100%; touch-action: none; }
 
     .map-hint {
       position: absolute;
@@ -539,8 +517,7 @@
         border-bottom-color: transparent;
       }
       .sidebar.sheet-open .tab-bar { border-bottom-color: var(--border); }
-      .tab { font-size: 0.65rem; padding: 8px 2px; }
-      .tab-icon { font-size: 0.9rem; }
+      .tab { font-size: 0.72rem; padding: 8px 2px; }
 
       .sheet-scroll-area {
         flex: 1;
@@ -614,11 +591,15 @@
       #scroll-top-btn { display: flex; }
     }
 
-    /* 俯瞰ボタン */
-    #top-view-btn {
+    /* マップ右上のツールボタン群 */
+    #map-tools {
       position: absolute;
       top: 10px; right: 10px;
       z-index: 5;
+      display: flex; flex-direction: column; gap: 6px;
+      align-items: flex-end;
+    }
+    .map-tool {
       background: rgba(12, 27, 45, 0.88);
       border: 1px solid var(--border-hi);
       color: var(--text-sub);
@@ -632,21 +613,130 @@
       backdrop-filter: blur(8px);
       transition: border-color 0.15s, color 0.15s;
     }
-    #top-view-btn:hover {
+    .map-tool:hover {
       border-color: var(--accent);
       color: var(--accent);
     }
+    #zoom-btns { display: flex; gap: 6px; }
+    #zoom-btns .map-tool {
+      width: 34px; padding: 7px 0;
+      font-size: 0.85rem; line-height: 1;
+      text-align: center;
+    }
+    #zoom-route-btn { display: none; }
+    #zoom-route-btn.available { display: block; }
+    #zoom-route-btn.zoomed {
+      color: var(--gold);
+      border-color: rgba(242, 196, 55, 0.5);
+      background: var(--gold-dim);
+    }
+
+    /* ノードピッカー（3Dクリックで出発→目的を選択） */
+    #pick-panel {
+      position: absolute; top: 10px; left: 10px; z-index: 5;
+      max-width: min(300px, calc(100% - 130px));
+      background: rgba(12, 27, 45, 0.88);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      backdrop-filter: blur(8px);
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .pick-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .pick-chip {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      padding: 2px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border-hi);
+      color: var(--text);
+      background: var(--surface-hi);
+    }
+    .pick-chip.start { border-color: rgba(0, 212, 152, 0.5); color: var(--green); }
+    .pick-chip.goal  { border-color: rgba(242, 196, 55, 0.5); color: var(--gold); }
+    .pick-chip.empty { color: var(--text-muted); border-style: dashed; background: transparent; }
+    #pick-clear {
+      margin-left: auto;
+      background: none; border: none; cursor: pointer;
+      color: var(--text-muted); font-size: 0.78rem; padding: 0 2px;
+      line-height: 1;
+    }
+    #pick-clear:hover { color: var(--red); }
+
+    /* 経路サマリー（フロア遷移リボン） */
+    .journey { margin-top: 10px; }
+    .journey-strip {
+      display: flex; width: 100%; height: 22px;
+      border-radius: 6px; overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .journey-seg {
+      min-width: 24px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.58rem; font-family: var(--font-mono);
+      color: #07111d; font-weight: 700;
+      white-space: nowrap; overflow: hidden;
+    }
+    .journey-meta {
+      display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px;
+    }
+    .meta-chip {
+      font-size: 0.62rem; font-family: var(--font-mono);
+      padding: 2px 8px; border-radius: 10px;
+      border: 1px solid var(--border-hi); color: var(--text-sub);
+      background: var(--surface-hi);
+    }
+    .journey-error { margin-top: 8px; font-size: 0.66rem; color: var(--red); }
+
+    /* 検索中インジケータ */
+    #busy {
+      position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+      z-index: 6; display: none;
+      background: rgba(12, 27, 45, 0.92);
+      border: 1px solid var(--border-hi);
+      color: var(--text-sub); border-radius: 20px; padding: 5px 14px;
+      font-size: 0.7rem; font-family: var(--font-mono);
+      backdrop-filter: blur(8px);
+    }
+    #busy.show { display: block; }
+
+    /* 起動失敗画面 */
+    #boot-error {
+      position: absolute; inset: 0; z-index: 20;
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center; gap: 10px;
+      background: var(--bg); color: var(--text-sub);
+      text-align: center; padding: 24px;
+    }
+    #boot-error.show { display: flex; }
+    #boot-error .be-title { font-size: 0.95rem; font-weight: 700; color: var(--text); }
+    #boot-error .be-desc  { font-size: 0.78rem; line-height: 1.8; }
+    #boot-error button {
+      margin-top: 6px; padding: 9px 22px;
+      border: 1px solid var(--border-hi);
+      background: var(--accent-dim); color: var(--accent);
+      border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+    }
+    #boot-error button:hover { border-color: var(--accent); }
   </style>
 </head>
 <body>
 
 <header>
-  <div class="header-icon">🗺</div>
+  <div class="header-icon" aria-hidden="true">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M2.2 11.8 C2.2 7.5, 6 8.2, 7 5.2 S 11.8 3.5, 11.8 2.2"
+            stroke="#00c0ee" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="2.2" cy="11.8" r="1.7" fill="#00d498"/>
+      <circle cx="11.8" cy="2.2" r="1.7" fill="#f2c437"/>
+    </svg>
+  </div>
   <div class="header-title-wrap">
     <h1>大学 AR マップ</h1>
     <div class="sub">3D ROUTE VIEWER · DIJKSTRA</div>
   </div>
-  <a href="/3d/viewer" class="viewer-link">👁 一人称ビューア</a>
 </header>
 
 <div class="main-layout">
@@ -657,18 +747,10 @@
     <div class="sheet-drag-handle" id="sheet-handle"></div>
 
     <div class="tab-bar">
-      <div class="tab active" onclick="switchTab('room')">
-        <span class="tab-icon">🏫</span>教室
-      </div>
-      <div class="tab" onclick="switchTab('node')">
-        <span class="tab-icon">🔵</span>ノード
-      </div>
-      <div class="tab" onclick="switchTab('toilet')">
-        <span class="tab-icon">🚻</span>トイレ
-      </div>
-      <div class="tab" onclick="switchTab('info')">
-        <span class="tab-icon">ℹ</span>情報
-      </div>
+      <div class="tab active" data-tab="room" onclick="switchTab('room')">教室</div>
+      <div class="tab" data-tab="node" onclick="switchTab('node')">ノード</div>
+      <div class="tab" data-tab="toilet" onclick="switchTab('toilet')">トイレ</div>
+      <div class="tab" data-tab="info" onclick="switchTab('info')">情報</div>
     </div>
 
     <div class="sheet-scroll-area">
@@ -759,6 +841,10 @@
             <option value="{{ b }}">Building {{ b }}</option>
             {% endfor %}
           </select>
+          <label for="filter-floor">階で絞り込み</label>
+          <select id="filter-floor" onchange="applyFilter()">
+            <option value="0">すべての階</option>
+          </select>
         </div>
       </div>
 
@@ -832,10 +918,40 @@
   <!-- ========== 3D MAP ========== -->
   <div id="map-container">
     <div id="map"></div>
-    <button id="top-view-btn" onclick="setTopView()">俯瞰 ↑</button>
+
+    <!-- 3Dクリックでの経路作成パネル -->
+    <div id="pick-panel">
+      <div class="pick-row">
+        <span>ノードをクリックして経路を作成</span>
+        <button id="pick-clear" onclick="clearPick()" title="選択を解除" aria-label="選択を解除">✕</button>
+      </div>
+      <div class="pick-row">
+        <span class="pick-chip empty" id="pick-start-chip">出発: 未選択</span>
+        <span class="pick-chip empty" id="pick-goal-chip">目的: 未選択</span>
+      </div>
+      <div id="pick-journey"></div>
+    </div>
+
+    <div id="busy">検索中…</div>
+
+    <div id="map-tools">
+      <button class="map-tool" onclick="setTopView()">俯瞰 ↑</button>
+      <button class="map-tool" id="zoom-route-btn" onclick="toggleRouteZoom()">ルートを拡大</button>
+      <div id="zoom-btns">
+        <button class="map-tool" onclick="zoomCamera(0.72)" aria-label="拡大">＋</button>
+        <button class="map-tool" onclick="zoomCamera(1.4)"  aria-label="縮小">−</button>
+      </div>
+    </div>
+
+    <div id="boot-error">
+      <div class="be-title">グラフデータを読み込めませんでした</div>
+      <div class="be-desc">app.py が起動しているか、/api/graph が応答するか確認してください。</div>
+      <button onclick="location.reload()">再読み込み</button>
+    </div>
+
     <div class="map-hint">
-      <span class="hint-desktop">左ドラッグ: 回転 ／ スクロール: ズーム ／ 右ドラッグ: 移動</span>
-      <span class="hint-mobile">1本指: 回転 ／ ピンチ: ズーム</span>
+      <span class="hint-desktop">ノードをクリック: 経路作成 ／ 左ドラッグ: 回転 ／ スクロール: ズーム</span>
+      <span class="hint-mobile">ノードをタップ: 経路作成 ／ 1本指: 回転 ／ ピンチ: ズーム</span>
     </div>
   </div>
 
@@ -845,15 +961,21 @@
 // ============================================================
 //  Globals
 // ============================================================
-const Z_SCALE   = 3.0;  // 高さ方向の倍率（viewer.htmlと共通）
+const Z_SCALE   = 3.0;  // 高さ方向の倍率（建物を厚く見せる）
 let graphData   = null;
 let currentPath = null;
 let startEdge   = null;
 let destEdge    = null;
 let filterBuilding = 0;
+let filterFloor    = 0;
 let acStart       = null;
 let acGoal        = null;
 let acToiletStart = null;
+
+let edgeByPair  = null;  // "from-to" → エッジ（種別の逆引き用）
+let pickStart   = null;  // 3Dクリックで選択中の出発ノードID
+let pickGoal    = null;  // 3Dクリックで選択中の目的ノードID
+let routeZoomed = false; // 「ルートを拡大」中か
 
 // フロアカラーパレット (1F〜8F)
 const FLOOR_COLORS = [
@@ -868,13 +990,31 @@ function floorColor(f) {
 //  Boot
 // ============================================================
 (async () => {
-  const res = await fetch("/api/graph");
-  graphData = await res.json();
+  try {
+    const res = await fetch("/api/graph");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    graphData = await res.json();
+  } catch {
+    document.getElementById("boot-error").classList.add("show");
+    return;
+  }
   graphData.nodes.forEach(n => { n.z *= Z_SCALE; });
   graphData.edges.forEach(e => { e.z0 *= Z_SCALE; e.z1 *= Z_SCALE; });
+
+  // エッジ種別の逆引き索引（経路サマリーで使用）
+  edgeByPair = new Map();
+  graphData.edges.forEach(e => {
+    edgeByPair.set(`${e.from}-${e.to}`, e);
+    edgeByPair.set(`${e.to}-${e.from}`, e);
+  });
+
   buildLegend();
   updateStats();
+  buildFloorFilter();
   renderMap();
+  initNodePicker();
+  initMapResize();
+  initPinchZoom();
   prefetchRooms();
 
   acStart = new RoomAutocomplete({
@@ -895,9 +1035,11 @@ function floorColor(f) {
 })();
 
 async function prefetchRooms() {
-  const res = await fetch("/api/rooms");
-  const all = await res.json();
-  document.getElementById("stat-rooms").textContent = new Set(all.map(r => r.room)).size;
+  try {
+    const res = await fetch("/api/rooms");
+    const all = await res.json();
+    document.getElementById("stat-rooms").textContent = new Set(all.map(r => r.room)).size;
+  } catch { /* 統計表示のみなので失敗しても続行 */ }
 }
 
 // ============================================================
@@ -958,9 +1100,8 @@ function initSheet() {
 //  Tab switching
 // ============================================================
 function switchTab(name) {
-  const names = ["room", "node", "toilet", "info"];
-  document.querySelectorAll(".tab").forEach((t, i) =>
-    t.classList.toggle("active", names[i] === name));
+  document.querySelectorAll(".tab").forEach(t =>
+    t.classList.toggle("active", t.dataset.tab === name));
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
   document.getElementById("tab-" + name).classList.add("active");
 
@@ -1115,7 +1256,16 @@ async function navigateToRoom() {
     `&start_room=${encodeURIComponent(sRoom)}&start_building=${sBuilding}` +
     `&use_elevator=${useElevatorRoom}`;
 
-  const data = scalePathZ(await fetch(url).then(r => r.json()));
+  let data;
+  setBusy(true);
+  try {
+    data = scalePathZ(await fetch(url).then(r => r.json()));
+  } catch {
+    showResult(box, "error", "サーバーに接続できません。app.py が起動しているか確認してください。");
+    return;
+  } finally {
+    setBusy(false);
+  }
 
   if (data.error) {
     showResult(box, "error", data.error);
@@ -1124,12 +1274,10 @@ async function navigateToRoom() {
     currentPath = data;
     startEdge   = data.start_edge       || null;
     destEdge    = data.destination_edge || null;
-    const totalLen = data.path_edges.reduce((s, e) => s + (e.length || 0), 0);
     showResult(box, "success",
       `<b>出発:</b> ${sRoom}（Building ${sBuilding}）<br>` +
-      `<b>目的地:</b> ${gRoom}（Building ${gBuilding}）<br>` +
-      `<b>経路:</b> ${data.path.join(" → ")}<br>` +
-      `<b>距離:</b> ${totalLen.toFixed(1)} m`
+      `<b>目的地:</b> ${gRoom}（Building ${gBuilding}）` +
+      buildJourneyHTML(data)
     );
   }
   renderMap();
@@ -1145,7 +1293,17 @@ async function findPathByNode() {
   box.style.display = "none";
 
   const useElevatorNode = document.getElementById("chk-elevator-node").checked ? "1" : "0";
-  const data = scalePathZ(await fetch(`/api/shortest_path?start=${start}&goal=${goal}&use_elevator=${useElevatorNode}`).then(r => r.json()));
+
+  let data;
+  setBusy(true);
+  try {
+    data = scalePathZ(await fetch(`/api/shortest_path?start=${start}&goal=${goal}&use_elevator=${useElevatorNode}`).then(r => r.json()));
+  } catch {
+    showResult(box, "error", "サーバーに接続できません。app.py が起動しているか確認してください。");
+    return;
+  } finally {
+    setBusy(false);
+  }
 
   if (data.error) {
     showResult(box, "error", data.error);
@@ -1153,10 +1311,9 @@ async function findPathByNode() {
   } else {
     currentPath = data;
     startEdge = null; destEdge = null;
-    const totalLen = data.path_edges.reduce((s, e) => s + (e.length || 0), 0);
     showResult(box, "success",
-      `<b>経路:</b> ${data.path.join(" → ")}<br>` +
-      `<b>距離:</b> ${totalLen.toFixed(1)} m`
+      `<b>出発:</b> Node ${start}　<b>目的:</b> Node ${goal}` +
+      buildJourneyHTML(data)
     );
   }
   renderMap();
@@ -1181,7 +1338,16 @@ async function findNearestToilet() {
     `?from_room=${encodeURIComponent(room)}&from_building=${building}` +
     `&type=${type}&use_elevator=${useElevator}`;
 
-  const data = scalePathZ(await fetch(url).then(r => r.json()));
+  let data;
+  setBusy(true);
+  try {
+    data = scalePathZ(await fetch(url).then(r => r.json()));
+  } catch {
+    showResult(box, "error", "サーバーに接続できません。app.py が起動しているか確認してください。");
+    return;
+  } finally {
+    setBusy(false);
+  }
 
   if (data.error) {
     showResult(box, "error", data.error);
@@ -1190,11 +1356,10 @@ async function findNearestToilet() {
     currentPath = data;
     startEdge   = data.from_edge    || null;
     destEdge    = data.toilet_edge  || null;
-    const totalLen = data.path_edges.reduce((s, e) => s + (e.length || 0), 0);
     showResult(box, "success",
       `<b>出発:</b> ${room}（Building ${building}）<br>` +
-      `<b>最寄り:</b> ${data.toilet_label}（Building ${data.toilet_building} / ${data.toilet_floor}F）<br>` +
-      `<b>距離:</b> ${totalLen.toFixed(1)} m`
+      `<b>最寄り:</b> ${data.toilet_label}（Building ${data.toilet_building} / ${data.toilet_floor}F）` +
+      buildJourneyHTML(data)
     );
   }
   renderMap();
@@ -1202,11 +1367,18 @@ async function findNearestToilet() {
 
 function clearPath() {
   currentPath = null; startEdge = null; destEdge = null;
+  pickStart = null; pickGoal = null;
+  updatePickPanel();
+  if (routeZoomed) resetRouteZoom();
   acStart?.reset(); acGoal?.reset(); acToiletStart?.reset();
   document.getElementById("room-result-box").style.display   = "none";
   document.getElementById("result-box").style.display        = "none";
   document.getElementById("toilet-result-box").style.display = "none";
   renderMap();
+}
+
+function setBusy(on) {
+  document.getElementById("busy").classList.toggle("show", on);
 }
 
 function showResult(el, type, html) {
@@ -1220,7 +1392,21 @@ function showResult(el, type, html) {
 // ============================================================
 function applyFilter() {
   filterBuilding = parseInt(document.getElementById("filter-building").value);
+  filterFloor    = parseInt(document.getElementById("filter-floor").value);
   renderMap();
+}
+
+function buildFloorFilter() {
+  const sel = document.getElementById("filter-floor");
+  const floors = [...new Set(
+    graphData.nodes.filter(n => n.building !== 0).map(n => n.floor)
+  )].sort((a, b) => a - b);
+  floors.forEach(f => {
+    const o = document.createElement("option");
+    o.value = f;
+    o.textContent = `${f}F`;
+    sel.appendChild(o);
+  });
 }
 
 // ============================================================
@@ -1257,7 +1443,7 @@ function computeBuildingBounds(nodes) {
   const bounds = {};
   Object.entries(byBuilding).forEach(([b, bNodes]) => {
     const cfg = graphData.config?.[b] || {};
-    
+
     const localNodes = bNodes.map(n => {
       const { lx, ly } = getLocalCoords(n.x, n.y, cfg);
       return { ...n, lx, ly };
@@ -1266,7 +1452,7 @@ function computeBuildingBounds(nodes) {
     const lxs = localNodes.map(n => n.lx);
     const lys = localNodes.map(n => n.ly);
     const zs  = localNodes.map(n => n.z);
-    
+
     const rangeXY = Math.max(Math.max(...lxs) - Math.min(...lxs), Math.max(...lys) - Math.min(...lys));
     const padXY = Math.max(rangeXY * 0.04, 1);
 
@@ -1276,7 +1462,7 @@ function computeBuildingBounds(nodes) {
     let maxLy = Math.max(...lys);
 
     const doorways = localNodes.filter(n => String(n.type) === "2");
-    
+
     let lx0 = minLx - padXY;
     let lx1 = maxLx + padXY;
     let ly0 = minLy - padXY;
@@ -1287,7 +1473,7 @@ function computeBuildingBounds(nodes) {
       const doorMaxLx = Math.max(...doorways.map(n => n.lx));
       const doorMinLy = Math.min(...doorways.map(n => n.ly));
       const doorMaxLy = Math.max(...doorways.map(n => n.ly));
-      
+
       const EPS = 0.001;
       if (doorMinLx <= minLx + EPS) lx0 = doorMinLx;
       if (doorMaxLx >= maxLx - EPS) lx1 = doorMaxLx;
@@ -1300,10 +1486,10 @@ function computeBuildingBounds(nodes) {
     const c2 = getGlobalCoords(lx1, ly1, cfg);
     const c3 = getGlobalCoords(lx0, ly1, cfg);
     const center = getGlobalCoords((lx0+lx1)/2, (ly0+ly1)/2, cfg);
-    
+
     bounds[b] = { c0, c1, c2, c3, center, zs };
   });
-  
+
   return bounds;
 }
 
@@ -1323,18 +1509,9 @@ function buildBuildingBoxTraces(nodes, bounds) {
 
     const z0 = Math.min(...zs) - 0.5, z1 = Math.max(...zs) + 0.5;
 
-    const vx = [c0.x, c1.x, c2.x, c3.x,  c0.x, c1.x, c2.x, c3.x];
-    const vy = [c0.y, c1.y, c2.y, c3.y,  c0.y, c1.y, c2.y, c3.y];
-    const vz = [z0,z0,z0,z0, z1,z1,z1,z1];
-    const fi = [0,0, 4,4, 0,0, 2,2, 0,0, 1,1];
-    const fj = [1,2, 5,6, 1,5, 3,7, 3,7, 2,6];
-    const fk = [2,3, 6,7, 5,4, 7,6, 7,4, 6,5];
-
-    traces.push({
-      type:"mesh3d", x:vx, y:vy, z:vz, i:fi, j:fj, k:fk,
-      color, opacity:0.06, hoverinfo:"none", showlegend:false,
-    });
-
+    // 塗りつぶし面(mesh3d)は使わずワイヤーフレームのみ描画する。塗りつぶしメッシュは
+    // Plotlyの3Dピッキングで背後のノードマーカーより手前と判定されクリックを奪ってしまい
+    // (hoverinfoの設定では回避できない)、建物に囲まれたノードが選択できなくなるため。
     const ex = [c0.x, c1.x, null, c1.x, c2.x, null, c2.x, c3.x, null, c3.x, c0.x, null,
                 c0.x, c1.x, null, c1.x, c2.x, null, c2.x, c3.x, null, c3.x, c0.x, null,
                 c0.x, c0.x, null, c1.x, c1.x, null, c2.x, c2.x, null, c3.x, c3.x, null];
@@ -1346,7 +1523,7 @@ function buildBuildingBoxTraces(nodes, bounds) {
                 z0,z1,null, z0,z1,null, z0,z1,null, z0,z1,null];
     traces.push({
       type:"scatter3d", mode:"lines", x:ex, y:ey, z:ez,
-      line:{color, width:1.5}, hoverinfo:"none", showlegend:false,
+      line:{color, width:1.5}, hoverinfo:"skip", showlegend:false,
     });
 
     traces.push({
@@ -1354,7 +1531,7 @@ function buildBuildingBoxTraces(nodes, bounds) {
       x:[center.x], y:[center.y], z:[z1+0.4],
       text:[`B${b}`],
       textfont:{color, size:14, family:"Arial Black"},
-      hoverinfo:"none", showlegend:false,
+      hoverinfo:"skip", showlegend:false,
     });
   });
   return traces;
@@ -1380,14 +1557,16 @@ function buildFloorPlaneTraces(nodes, bounds) {
     if (!bData) return;
     const { c0, c1, c2, c3 } = bData;
 
+    // 塗りつぶし面(mesh3d)は使わずワイヤーフレームのみ描画する。塗りつぶしメッシュは
+    // 各フロアのノードとちょうど同じ高さに広がるため、Plotlyの3Dピッキングで
+    // ノードマーカーより手前と判定されクリックを奪ってしまうことがあるため。
     traces.push({
-      type:"mesh3d",
-      x:[c0.x, c1.x, c2.x, c3.x], y:[c0.y, c1.y, c2.y, c3.y],
-      z:[zVal,zVal,zVal,zVal],
-      i:[0,0], j:[1,2], k:[2,3],
-      color, opacity:0.15,
-      hovertemplate:`B${building} — ${floor}F<extra></extra>`,
-      showlegend:false,
+      type:"scatter3d", mode:"lines",
+      x:[c0.x, c1.x, c2.x, c3.x, c0.x], y:[c0.y, c1.y, c2.y, c3.y, c0.y],
+      z:[zVal,zVal,zVal,zVal,zVal],
+      line:{color, width:1, dash:"dot"},
+      opacity:0.5,
+      hoverinfo:"skip", showlegend:false,
     });
 
     traces.push({
@@ -1395,7 +1574,7 @@ function buildFloorPlaneTraces(nodes, bounds) {
       x:[c1.x], y:[c0.y], z:[zVal],
       text:[`${floor}F`],
       textfont:{color, size:9},
-      hoverinfo:"none", showlegend:false,
+      hoverinfo:"skip", showlegend:false,
     });
   });
   return traces;
@@ -1415,13 +1594,16 @@ function sameEdge(a, b) {
 }
 
 function renderMap() {
-  const indoorNodes = (filterBuilding
-    ? graphData.nodes.filter(n => n.building === filterBuilding)
-    : graphData.nodes).filter(n => n.building !== 0);
+  const indoorNodes = graphData.nodes.filter(n =>
+    n.building !== 0 &&
+    (!filterBuilding || n.building === filterBuilding) &&
+    (!filterFloor    || n.floor    === filterFloor));
   const nodes   = indoorNodes;
   const nodeIds = new Set(nodes.map(n => n.id));
-  const edges   = filterBuilding
+  const edges   = (filterBuilding || filterFloor)
     ? graphData.edges.filter(e => nodeIds.has(e.from) && nodeIds.has(e.to)) : graphData.edges;
+
+  const dimmed = !!currentPath;  // ルート表示中は背景要素を淡くしてパスを際立たせる
 
   const traces = [];
   const bounds = computeBuildingBounds(nodes);
@@ -1429,22 +1611,26 @@ function renderMap() {
   traces.push(...buildBuildingBoxTraces(nodes, bounds));
 
   // --- 屋外ノード・エッジ (building=0) ---
-  if (!filterBuilding) {
-    const outdoorNodes = graphData.nodes.filter(n => n.building === 0);
-    const outdoorNodeIds = new Set(outdoorNodes.map(n => n.id));
-    const outdoorEdges = graphData.edges.filter(e =>
-      outdoorNodeIds.has(e.from) || outdoorNodeIds.has(e.to));
+  const outdoorNodes   = graphData.nodes.filter(n => n.building === 0);
+  const outdoorNodeIds = new Set(outdoorNodes.map(n => n.id));
+  const outdoorEdges   = graphData.edges.filter(e =>
+    outdoorNodeIds.has(e.from) || outdoorNodeIds.has(e.to));
+  const outdoorEdgeIds = new Set(outdoorEdges.map(e => e.id));
+
+  if (!filterBuilding && !filterFloor) {
     if (outdoorEdges.length) {
       const ox=[],oy=[],oz=[];
       outdoorEdges.forEach(e=>{ox.push(e.x0,e.x1,null);oy.push(e.y0,e.y1,null);oz.push(e.z0,e.z1,null);});
       traces.push({ type:"scatter3d", mode:"lines", x:ox, y:oy, z:oz,
-        line:{color:"#5AFF5A", width:3, dash:"dot"}, hoverinfo:"none",
+        line:{color:"#5AFF5A", width:3, dash:"dot"}, hoverinfo:"skip",
+        opacity: dimmed ? 0.25 : 1,
         name:"屋外通路", showlegend:true });
     }
     if (outdoorNodes.length) {
       traces.push({ type:"scatter3d", mode:"markers",
         x:outdoorNodes.map(n=>n.x), y:outdoorNodes.map(n=>n.y), z:outdoorNodes.map(n=>n.z),
-        marker:{size:7, color:"#5AFF5A", opacity:0.9, symbol:"square",
+        customdata:outdoorNodes.map(n=>n.id),
+        marker:{size:7, color:"#5AFF5A", opacity: dimmed ? 0.3 : 0.9, symbol:"square",
                 line:{color:"#fff", width:1}},
         text:outdoorNodes.map(n=>n.label), hovertemplate:"%{text}<extra></extra>",
         name:"屋外ノード", showlegend:true });
@@ -1453,7 +1639,9 @@ function renderMap() {
   const pathEdgeSet = buildPathEdgeSet();
   const pathNodeSet = new Set(currentPath ? currentPath.path : []);
 
+  // 屋外エッジは上で専用トレースとして描画済みなので除外（二重描画防止）
   const normalEdges = edges.filter(e =>
+    !outdoorEdgeIds.has(e.id) &&
     !pathEdgeSet.has(`${e.from}-${e.to}`) && !pathEdgeSet.has(`${e.to}-${e.from}`) &&
     !sameEdge(e, destEdge) && !sameEdge(e, startEdge));
 
@@ -1466,7 +1654,8 @@ function renderMap() {
     const ex=[],ey=[],ez=[];
     fEdges.forEach(e=>{ex.push(e.x0,e.x1,null);ey.push(e.y0,e.y1,null);ez.push(e.z0,e.z1,null);});
     traces.push({ type:"scatter3d", mode:"lines", x:ex, y:ey, z:ez,
-      line:{color, width:3}, hoverinfo:"none", name:`${f}F 通路`, showlegend:false });
+      line:{color, width:3}, opacity: dimmed ? 0.22 : 1,
+      hoverinfo:"skip", name:`${f}F 通路`, showlegend:false });
   });
 
   [["2","#FFB347","階段"], ["3","#00CED1","エスカレーター"], ["4","#DA70D6","EV"], ["5","#00FF88","上りESC"], ["6","#FF4500","下りESC"]].forEach(([t, color, label]) => {
@@ -1475,7 +1664,8 @@ function renderMap() {
     const ex=[],ey=[],ez=[];
     typeEdges.forEach(e=>{ex.push(e.x0,e.x1,null);ey.push(e.y0,e.y1,null);ez.push(e.z0,e.z1,null);});
     traces.push({ type:"scatter3d", mode:"lines", x:ex, y:ey, z:ez,
-      line:{color, width:5}, hoverinfo:"none", name:label, showlegend:false });
+      line:{color, width:5}, opacity: dimmed ? 0.25 : 1,
+      hoverinfo:"skip", name:label, showlegend:false });
   });
 
   const byFloor = {};
@@ -1487,14 +1677,16 @@ function renderMap() {
     if (regular.length) {
       traces.push({ type:"scatter3d", mode:"markers",
         x:regular.map(n=>n.x), y:regular.map(n=>n.y), z:regular.map(n=>n.z),
-        marker:{size:5, color, opacity:.9, symbol:"circle", line:{color:"rgba(0,0,0,0.3)",width:.5}},
+        customdata:regular.map(n=>n.id),
+        marker:{size:5, color, opacity: dimmed ? 0.25 : 0.9, symbol:"circle", line:{color:"rgba(0,0,0,0.3)",width:.5}},
         text:regular.map(n=>n.label), hovertemplate:"%{text}<extra></extra>",
         name:`${f}F`, showlegend:true });
     }
     if (entries.length) {
       traces.push({ type:"scatter3d", mode:"markers",
         x:entries.map(n=>n.x), y:entries.map(n=>n.y), z:entries.map(n=>n.z),
-        marker:{size:10, color, opacity:1, symbol:"diamond", line:{color:"#fff",width:1}},
+        customdata:entries.map(n=>n.id),
+        marker:{size:10, color, opacity: dimmed ? 0.3 : 1, symbol:"diamond", line:{color:"#fff",width:1}},
         text:entries.map(n=>n.label), hovertemplate:"%{text}<extra></extra>",
         name:`${f}F 出入口`, showlegend:true });
     }
@@ -1504,7 +1696,7 @@ function renderMap() {
     const px=[],py=[],pz=[];
     currentPath.path_edges.forEach(e=>{px.push(e.x0,e.x1,null);py.push(e.y0,e.y1,null);pz.push(e.z0,e.z1,null);});
     traces.push({ type:"scatter3d", mode:"lines", x:px, y:py, z:pz,
-      line:{color:"#ffd700",width:6}, hoverinfo:"none", name:"最短経路" });
+      line:{color:"#ffd700",width:6}, hoverinfo:"skip", name:"最短経路" });
   }
 
   if (startEdge) {
@@ -1533,6 +1725,23 @@ function renderMap() {
       hovertemplate:"Node %{text}<extra></extra>", name:"経路ノード" });
   }
 
+  // 3Dクリックで選択中のノードを強調表示
+  if (pickStart != null || pickGoal != null) {
+    const picked = [];
+    const ps = graphData.nodes.find(n => n.id === pickStart);
+    const pg = graphData.nodes.find(n => n.id === pickGoal);
+    if (ps) picked.push({ ...ps, c: "#00d498", t: "出発" });
+    if (pg) picked.push({ ...pg, c: "#f2c437", t: "目的" });
+    if (picked.length) {
+      traces.push({ type:"scatter3d", mode:"markers+text",
+        x:picked.map(n=>n.x), y:picked.map(n=>n.y), z:picked.map(n=>n.z),
+        marker:{size:12, color:picked.map(n=>n.c), symbol:"circle", line:{color:"#fff", width:2}},
+        text:picked.map(n=>n.t), textposition:"top center",
+        textfont:{color:"#fff", size:10},
+        hoverinfo:"skip", showlegend:false });
+    }
+  }
+
   const layout = {
     paper_bgcolor:"#07111d", plot_bgcolor:"#07111d",
     margin:{l:0,r:0,t:0,b:0},
@@ -1550,6 +1759,14 @@ function renderMap() {
     uirevision:"keep",
   };
   Plotly.react("map", traces, layout, { responsive:true });
+
+  // 「ルートを拡大」ボタンの表示状態を同期
+  const zoomBtn = document.getElementById("zoom-route-btn");
+  zoomBtn.classList.toggle("available", !!(currentPath?.path_coords?.length));
+  if (routeZoomed) {
+    if (currentPath?.path_coords?.length) applyRouteZoom();
+    else resetRouteZoom();
+  }
 }
 
 function axisStyle(title) {
@@ -1561,9 +1778,18 @@ function axisStyle(title) {
   };
 }
 
-document.getElementById("sidebar").addEventListener("transitionend", () => {
-  Plotly.Plots.resize(document.getElementById("map"));
-});
+// #map-container のサイズが変わるたび（初期レイアウト確定・サイドバー開閉・
+// ウィンドウリサイズ・フォント読み込み後のリフローなど）にPlotlyの
+// WebGLキャンバスを追従させる。初回描画時にコンテナサイズがまだ確定して
+// おらず、reloadを繰り返さないと3Dグラフが表示されない問題への対策。
+function initMapResize() {
+  const mapContainer = document.getElementById("map-container");
+  const mapEl = document.getElementById("map");
+  const observer = new ResizeObserver(() => {
+    Plotly.Plots.resize(mapEl);
+  });
+  observer.observe(mapContainer);
+}
 
 // ============================================================
 //  トップへ戻るボタン（モバイル）
@@ -1579,6 +1805,245 @@ function initScrollTopBtn() {
   btn.addEventListener("click", () => {
     scrollArea.scrollTo({ top: 0, behavior: "smooth" });
   });
+}
+
+// ============================================================
+//  ノードピッカー — 3D上のノードをクリックして経路を作成
+//  1回目のクリック = 出発、2回目 = 目的（そのまま経路探索）
+//  3回目は新しい出発として選び直し。Esc または ✕ で解除。
+// ============================================================
+function initNodePicker() {
+  const gd = document.getElementById("map");
+  gd.on("plotly_click", ev => {
+    const p = ev.points && ev.points[0];
+    if (!p || p.customdata == null) return;
+    onNodePicked(Number(p.customdata));
+  });
+  addEventListener("keydown", e => { if (e.key === "Escape") clearPick(); });
+}
+
+function onNodePicked(id) {
+  if (pickStart == null || pickGoal != null) {
+    // 未選択、または経路確定済み → 新しい出発として選び直し
+    pickStart = id;
+    pickGoal  = null;
+    currentPath = null; startEdge = null; destEdge = null;
+    document.getElementById("pick-journey").innerHTML = "";
+    renderMap();
+  } else if (id !== pickStart) {
+    pickGoal = id;
+    routeFromPick();
+  }
+  updatePickPanel();
+}
+
+async function routeFromPick() {
+  const useElevator = document.getElementById("chk-elevator-node").checked ? "1" : "0";
+  const journeyEl   = document.getElementById("pick-journey");
+  setBusy(true);
+  try {
+    const data = scalePathZ(await fetch(
+      `/api/shortest_path?start=${pickStart}&goal=${pickGoal}&use_elevator=${useElevator}`
+    ).then(r => r.json()));
+    if (data.error) {
+      journeyEl.innerHTML = `<div class="journey-error">${data.error}</div>`;
+      currentPath = null; startEdge = null; destEdge = null;
+    } else {
+      currentPath = data; startEdge = null; destEdge = null;
+      journeyEl.innerHTML = buildJourneyHTML(data);
+    }
+  } catch {
+    journeyEl.innerHTML = `<div class="journey-error">サーバーに接続できません</div>`;
+  } finally {
+    setBusy(false);
+    renderMap();
+  }
+}
+
+function updatePickPanel() {
+  const s = document.getElementById("pick-start-chip");
+  const g = document.getElementById("pick-goal-chip");
+  s.textContent = pickStart != null ? `出発: ${pickStart}` : "出発: 未選択";
+  g.textContent = pickGoal  != null ? `目的: ${pickGoal}`  : "目的: 未選択";
+  s.className = "pick-chip" + (pickStart != null ? " start" : " empty");
+  g.className = "pick-chip" + (pickGoal  != null ? " goal"  : " empty");
+}
+
+function clearPick() {
+  const hadRoute = pickGoal != null && currentPath != null;
+  pickStart = null; pickGoal = null;
+  document.getElementById("pick-journey").innerHTML = "";
+  updatePickPanel();
+  if (hadRoute) {
+    currentPath = null; startEdge = null; destEdge = null;
+    if (routeZoomed) resetRouteZoom();
+  }
+  renderMap();
+}
+
+// ============================================================
+//  経路サマリー — フロア遷移を距離比例の色帯（リボン）で表示
+// ============================================================
+function buildJourneyHTML(data) {
+  const coords = data.path_coords || [];
+  const edges  = data.path_edges  || [];
+  if (coords.length < 2) return "";
+
+  // 連続する (building, floor) 区間ごとに距離を集計
+  const segs = [];
+  coords.forEach((n, i) => {
+    const key = `${n.building}_${n.floor}`;
+    if (!segs.length || segs[segs.length - 1].key !== key) {
+      segs.push({ key, building: n.building, floor: n.floor, dist: 0 });
+    }
+    if (i < edges.length) segs[segs.length - 1].dist += edges[i].length || 0;
+  });
+
+  const total    = edges.reduce((s, e) => s + (e.length || 0), 0);
+  const colors   = graphData.building_colors || [];
+  const segColor = b => b === 0 ? "#5AFF5A" : colors[(b - 1) % colors.length];
+  const segLabel = s => s.building === 0 ? "屋外" : `${s.building}-${s.floor}F`;
+
+  const strip = segs.map(s =>
+    `<div class="journey-seg" style="flex:${Math.max(s.dist, total * 0.05) || 1} 1 0;` +
+    `background:${segColor(s.building)};" title="${segLabel(s)} ${s.dist.toFixed(0)}m">${segLabel(s)}</div>`
+  ).join("");
+
+  // 階段・EV などの内訳（グラフのエッジ種別から逆引き）
+  const TYPE_LABEL = { "2": "階段", "3": "エスカレーター", "4": "EV", "5": "上りESC", "6": "下りESC", "7": "入口" };
+  const typeDist = {};
+  edges.forEach(e => {
+    const g = edgeByPair && edgeByPair.get(`${e.from}-${e.to}`);
+    if (!g) return;
+    const t = String(g.type);
+    if (TYPE_LABEL[t]) typeDist[t] = (typeDist[t] || 0) + (e.length || 0);
+  });
+
+  const chips = [`<span class="meta-chip">合計 ${total.toFixed(0)}m ・ ${coords.length}ノード</span>`];
+  Object.entries(typeDist).forEach(([t, d]) => {
+    chips.push(`<span class="meta-chip">${TYPE_LABEL[t]} ${d.toFixed(0)}m</span>`);
+  });
+
+  return `<div class="journey">
+    <div class="journey-strip">${strip}</div>
+    <div class="journey-meta">${chips.join("")}</div>
+  </div>`;
+}
+
+// ============================================================
+//  ルートを拡大 — 経路の範囲にシーンをクロップして注視する
+// ============================================================
+function applyRouteZoom() {
+  const cs = currentPath?.path_coords;
+  if (!cs?.length) return;
+  const pad = a => {
+    const mn = Math.min(...a), mx = Math.max(...a);
+    const p = Math.max((mx - mn) * 0.15, 6);
+    return [mn - p, mx + p];
+  };
+  const [x0, x1] = pad(cs.map(n => n.x));
+  const [y0, y1] = pad(cs.map(n => n.y));
+  const [z0, z1] = pad(cs.map(n => n.z));
+  Plotly.relayout("map", {
+    "scene.xaxis.autorange": false, "scene.xaxis.range": [x0, x1],
+    "scene.yaxis.autorange": false, "scene.yaxis.range": [y1, y0],  // Y軸は反転表示
+    "scene.zaxis.autorange": false, "scene.zaxis.range": [z0, z1],
+  });
+}
+
+function toggleRouteZoom() {
+  if (routeZoomed) { resetRouteZoom(); return; }
+  if (!currentPath?.path_coords?.length) return;
+  applyRouteZoom();
+  routeZoomed = true;
+  const b = document.getElementById("zoom-route-btn");
+  b.textContent = "全体に戻す";
+  b.classList.add("zoomed");
+}
+
+function resetRouteZoom() {
+  Plotly.relayout("map", {
+    "scene.xaxis.autorange": true,
+    "scene.yaxis.autorange": "reversed",
+    "scene.zaxis.autorange": true,
+  });
+  routeZoomed = false;
+  const b = document.getElementById("zoom-route-btn");
+  b.textContent = "ルートを拡大";
+  b.classList.remove("zoomed");
+}
+
+// ============================================================
+//  カメラズーム — ＋/−ボタン と 2本指ピンチ（タブレット対応）
+//  Plotly gl3d のタッチ操作は回転しか効かないため、ピンチは
+//  キャプチャ段階で横取りしてカメラの注視点との距離を直接変える。
+// ============================================================
+const ZOOM_DIST_MIN = 0.25;  // 注視点へ寄れる最小距離（最大ズームイン）
+const ZOOM_DIST_MAX = 12;    // 引ける最大距離（最大ズームアウト）
+
+// 現在のカメラ状態を取得（回転中の内部状態を優先し、無ければレイアウト値）
+function getLiveCamera() {
+  const gd = document.getElementById("map");
+  const scene = gd._fullLayout?.scene?._scene;
+  if (scene?.getCamera) return scene.getCamera();
+  return gd.layout?.scene?.camera || { eye: { x: 1.8, y: 1.8, z: 1.4 } };
+}
+
+// factor < 1 で拡大（注視点へ近づく）、> 1 で縮小
+function zoomCamera(factor, baseCam) {
+  const cam    = baseCam || getLiveCamera();
+  const center = cam.center || { x: 0, y: 0, z: 0 };
+  const eye    = cam.eye;
+  const dx = eye.x - center.x, dy = eye.y - center.y, dz = eye.z - center.z;
+  const dist = Math.hypot(dx, dy, dz);
+  if (!dist) return;
+  const newDist = Math.max(ZOOM_DIST_MIN, Math.min(dist * factor, ZOOM_DIST_MAX));
+  const s = newDist / dist;
+  Plotly.relayout("map", {
+    "scene.camera": {
+      eye:    { x: center.x + dx * s, y: center.y + dy * s, z: center.z + dz * s },
+      center: { ...center },
+      up:     cam.up || { x: 0, y: 0, z: 1 },
+    },
+  });
+}
+
+function initPinchZoom() {
+  const mapEl = document.getElementById("map");
+  let pinch    = null;   // { d0, cam0 } ピンチ開始時の指間距離とカメラ
+  let blocking = false;  // ピンチ中〜全指が離れるまで Plotly へのタッチ伝播を止める
+
+  const touchDist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  const block = e => { e.preventDefault(); e.stopPropagation(); };
+
+  // capture:true — Plotly がキャンバスで受け取る前に横取りする
+  mapEl.addEventListener("touchstart", e => {
+    if (e.touches.length >= 2) {
+      pinch    = { d0: touchDist(e.touches), cam0: getLiveCamera() };
+      blocking = true;
+      block(e);
+    } else if (blocking) {
+      block(e);
+    }
+  }, { capture: true, passive: false });
+
+  mapEl.addEventListener("touchmove", e => {
+    if (pinch && e.touches.length >= 2) {
+      const d = touchDist(e.touches);
+      if (d >= 1) zoomCamera(pinch.d0 / d, pinch.cam0);
+      block(e);
+    } else if (blocking) {
+      block(e);
+    }
+  }, { capture: true, passive: false });
+
+  const endTouch = e => {
+    if (!blocking) return;
+    if (e.touches.length < 2)   pinch = null;
+    if (e.touches.length === 0) blocking = false;  // 全指が離れたら通常操作へ復帰
+  };
+  mapEl.addEventListener("touchend",    endTouch, { capture: true });
+  mapEl.addEventListener("touchcancel", endTouch, { capture: true });
 }
 
 // ============================================================

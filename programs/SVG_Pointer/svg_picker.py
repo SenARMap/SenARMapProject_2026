@@ -67,8 +67,8 @@ class SVGView(QGraphicsView):
         if event.button() == Qt.LeftButton and self._press_pos is not None:
             # 5px以内の移動ならクリック扱い（ドラッグと区別）
             if (event.pos() - self._press_pos).manhattanLength() < 5:
-                sp = self.mapToScene(event.pos())
-                self._on_click(sp.x(), sp.y())
+                scene_pos = self.mapToScene(event.pos())
+                self._on_click(scene_pos.x(), scene_pos.y())
             self._press_pos = None
         super().mouseReleaseEvent(event)
 
@@ -176,8 +176,9 @@ class MainWindow(QMainWindow):
         line = self._scene.addLine(sx, sy - r - 8, sx, sy - r, pen_r)
         line.setZValue(10)
 
-        circle = self._scene.addEllipse(sx - r, sy - r, r * 2, r * 2,
-                                        pen_w, QBrush(PIN_FILL))
+        circle = self._scene.addEllipse(
+            sx - r, sy - r, r * 2, r * 2, pen_w, QBrush(PIN_FILL)
+        )
         circle.setZValue(10)
 
         text = self._scene.addSimpleText(str(n))
@@ -199,7 +200,7 @@ class MainWindow(QMainWindow):
         n = len(self.points)
         self._draw_pin(sx, sy, n)
 
-        self._list.addItem(f"{n:>3}: {sx:>10.3f}, {sy:>10.3f}")
+        self._list.addItem(self._point_line(n, sx, sy))
         self._list.scrollToBottom()
         self._copy_all()
         self.statusBar().showMessage(
@@ -246,7 +247,11 @@ class MainWindow(QMainWindow):
     def _rebuild_list(self):
         self._list.clear()
         for i, (x, y) in enumerate(self.points, 1):
-            self._list.addItem(f"{i:>3}: {x:>10.3f}, {y:>10.3f}")
+            self._list.addItem(self._point_line(i, x, y))
+
+    @staticmethod
+    def _point_line(n: int, x: float, y: float) -> str:
+        return f"{n:>3}: {x:>10.3f}, {y:>10.3f}"
 
 
 # ---------------------------------------------------------------------------

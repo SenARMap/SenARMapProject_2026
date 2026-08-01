@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>Dockerに嫌われた | IKU NAVI ブログ</title>
+    <link rel="stylesheet" href="../style.css">
+    <link rel="icon" href="../../images/favicon.ico">
+</head>
+<body>
+    <header class="site-header">
+        <nav class="breadcrumb">
+            <a href="../../index.html">IKU NAVI</a>
+            <span>›</span>
+            <a href="../index.html">ブログ</a>
+            <span>›</span>
+            <span>Dockerに嫌われた</span>
+        </nav>
+    </header>
+
+    <main class="post-container">
+        <article class="post">
+            <div class="post-meta">
+                <time datetime="2026-06-30">2026年6月30日</time>
+                <span class="post-author">ES</span>
+            </div>
+            <h1 class="post-title">Dockerに嫌われた</h1>
+            
+            <div class="post-body">
+                <h2>k８sへの挑戦</h2>
+
+<p>　Kubernetesに挑戦するために、いろいろしてみました。まず、GitHub ActionsでDockerfileを元にして自動的にビルド済みのimageを作るようにしてみました。</p>
+<p>管理は非常に簡単になりましたが、PRをMergeするたびに2分ぐらいのBuildが走るので、割と更新までに時間かかるのがネックかもしれません。</p>
+<p>　K8sですが、Docker composeファイルを元にいろいろやってみました。どれだけやっても内部のDNSの名前解決ができないってなって上手く立ち上がりませんでした。</p>
+<p>セキュリティグループも正しく設定できてたはずなのになぜでしょうか？5~6時間試行錯誤して上手くいかなかったので今回はk8sを断念しました。</p>
+
+<h2>だから私はDocker Swarm</h2>
+
+<p>　Docker Swarmを使ってみることにしました。今までcomposeで管理してたので、別に最初の移行は問題ありませんでした。これはいける！！って思ったのも束の間、</p>
+<p>二台目のサーバ立ち上げて設定流し込んで、いざ！！って思ってスケールする用のコマンド入れたら、上手く設定できておらず、1台に4コンテナが生えてきて、OOMでLinuxからKillされました。</p>
+<p>SSHも繋がらないし、コンソールもフリーズしてるのでダッシュボードから再起動したのになぜか環境が変わらず、結局Imageから無理やり過去のバージョンに戻しました。</p>
+
+<h2>本番どうしよう。</h2>
+<p>　またタイミング見計らって、実験して本番までにはどうにかしたいと思っている。</p>
+
+<hr>
+
+<p>Dockerって難しい。</p>
+            </div>
+        </article>
+    </main>
+
+    <footer class="site-footer">
+        <a href="../index.html">← ブログ一覧に戻る</a>
+    </footer>
+</body>
+</html>

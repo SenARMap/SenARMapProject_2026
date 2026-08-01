@@ -214,3 +214,12 @@ pyrightconfig.json
 config.js
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,python
+# YOLOv8 / PyTorch モデルファイル
+*.pt
+*.pth
+
+# Kubernetes Secrets (絶対にコミットしないこと)
+deploy_env/k8s/secrets.yaml
+
+# Map_Editor で撮影したAR経路写真（CDNへは手動アップロード。リポジトリには含めない）
+captured_photos/

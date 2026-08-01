@@ -1,0 +1,12 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://image-upload.iku-navi.net",
+      "https://senarmapproject-2026-image-uploader.pages.dev",
+      "http://localhost:8788"
+    ],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["*"],
+    "MaxAgeSeconds": 3600
+  }
+]

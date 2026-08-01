@@ -1,0 +1,23 @@
+{
+  "name": "image_uploader",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:vite": "vite build --watch",
+    "dev": "wrangler pages dev dist --compatibility-date=2026-01-01",
+    "build": "vite build",
+    "deploy": "vite build && wrangler pages deploy dist",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p functions/tsconfig.json"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.686.0",
+    "@aws-sdk/s3-request-presigner": "^3.686.0",
+    "hono": "^4.6.9"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260730.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "wrangler": "^4.0.0"
+  }
+}

@@ -3,7 +3,88 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IKU NAVI — 生亀プロジェクト 2026</title>
+  <meta name="description" content="専修大学 生田キャンパスのARキャンパスマップ「IKU NAVI」。教室名で検索するだけで、AR写真ガイドが目的の教室・建物まで道案内。新入生や来訪者のキャンパス内ナビゲーションに。2026年度 生亀プロジェクト。">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <title>IKU NAVI — 専修大学 生田キャンパスARマップ | 生亀プロジェクト 2026</title>
+  <link rel="canonical" href="https://iku-navi.net/">
+
+  <!-- OGP / SNSシェア -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="IKU NAVI">
+  <meta property="og:title" content="IKU NAVI — 専修大学 生田キャンパスARマップ">
+  <meta property="og:description" content="専修大学 生田キャンパスのARキャンパスマップ。教室名で検索するだけで、AR写真ガイドが目的の教室・建物まで道案内します。">
+  <meta property="og:url" content="https://iku-navi.net/">
+  <meta property="og:image" content="https://iku-navi.net/images/logo.png">
+  <meta property="og:locale" content="ja_JP">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="IKU NAVI — 専修大学 生田キャンパスARマップ">
+  <meta name="twitter:description" content="専修大学 生田キャンパスのARキャンパスマップ。教室名で検索して、AR写真ガイドで目的地まで道案内。">
+  <meta name="twitter:image" content="https://iku-navi.net/images/logo.png">
+
+  <!-- 構造化データ -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "IKU NAVI",
+    "alternateName": ["イクナビ", "専修大学 生田キャンパスマップ"],
+    "url": "https://iku-navi.net/",
+    "description": "専修大学 生田キャンパスのARキャンパスマップ。教室名で検索するだけで、AR写真ガイドが目的の教室・建物まで道案内します。",
+    "inLanguage": "ja",
+    "about": {
+      "@type": "Place",
+      "name": "専修大学 生田キャンパス",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "川崎市多摩区",
+        "addressRegion": "神奈川県",
+        "addressCountry": "JP"
+      }
+    }
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "専修大学 生田キャンパスの教室の場所はどうやって調べられますか？",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "IKU NAVIで教室名（例: 101、10301）を検索すると、出発地点から目的の教室までの最短経路を写真付きのARガイドで案内します。建物をまたぐ移動にも対応しています。"
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "紙のフロアマップ・キャンパス案内図との違いは？",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "フロアごとの地図から自分で経路を考える必要がなく、階段・エレベータ・エスカレータの上下移動まで含めた最短ルートを自動で計算します。エレベータを使わない経路の指定もできます。"
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "トイレや食堂も探せますか？",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "現在地から最寄りのトイレ（男子・女子・多目的）や学生食堂までの経路を検索できます。"
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "専修大学 生田キャンパスへのアクセスは？",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "小田急線「向ヶ丘遊園」駅が最寄り駅です。IKU NAVIはキャンパス到着後の建物・教室までの道案内を担当します。"
+        }
+      }
+    ]
+  }
+  </script>
+
+  <link rel="icon" href="images/favicon.ico">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -19,21 +100,21 @@
         <span class="logo-iku">IKU</span><span class="logo-navi">NAVI</span>
       </h1>
       <p class="tagline">キャンパスを、もっとスマートに。</p>
-      <p class="subline">2026年度 生亀プロジェクト</p>
+      <p class="subline">専修大学 生田キャンパスのARキャンパスマップ — 2026年度 生亀プロジェクト</p>
     </header>
 
     <nav class="cards" aria-label="メインメニュー">
-      <a href="navi/index.html" class="card card-nav">
+      <a href="navi/" class="card card-nav">
         <span class="card-label">Navigation</span>
         <div class="card-body">
           <span class="card-glyph" aria-hidden="true">→</span>
           <h2 class="card-heading">ナビを使う</h2>
-          <p class="card-text">教室名で検索して、AR写真ガイドで目的地まで確実に案内します。</p>
+          <p class="card-text">生田キャンパスの教室名で検索して、AR写真ガイドで目的地まで確実に案内します。</p>
         </div>
         <span class="card-cta">アプリを開く <span aria-hidden="true" class="card-arrow">↗</span></span>
       </a>
 
-      <a href="blog/index.html" class="card card-blog">
+      <a href="blog/" class="card card-blog">
         <span class="card-label">Blog</span>
         <div class="card-body">
           <span class="card-glyph" aria-hidden="true">✦</span>
@@ -43,6 +124,44 @@
         <span class="card-cta">記事を読む <span aria-hidden="true" class="card-arrow">↗</span></span>
       </a>
     </nav>
+
+    <section class="info" aria-label="IKU NAVIについて">
+      <h2 class="info-heading">専修大学 生田キャンパスの教室検索・道案内ナビ</h2>
+      <p class="info-text">
+        IKU NAVIは、専修大学 生田キャンパス向けのキャンパスマップ・ナビゲーションアプリです。
+        フロアマップを眺めて教室を探す代わりに、教室名で検索するだけで、階段・エレベータ・エスカレータまで
+        考慮した最短ルートを、実際の風景写真に矢印を重ねたARガイドで案内します。
+        最寄りのトイレや学生食堂の検索にも対応。アプリのインストールは不要で、スマホのブラウザからそのまま使えます。
+      </p>
+      <p class="info-buildings">
+        <span class="info-label">対応建物</span>
+        2号館・5号館・7号館・8号館・10号館（130年記念館）と屋外エリア — 順次拡大中
+      </p>
+      <p class="info-buildings">
+        <span class="info-label">運営</span>
+        専修大学 ネットワーク情報学部
+        <a class="info-link" href="https://project.ne.senshu-u.ac.jp/2026/04/">生亀プロジェクト（公式紹介ページ）</a>
+      </p>
+
+      <dl class="faq">
+        <div class="faq-item">
+          <dt>教室の場所はどうやって調べられますか？</dt>
+          <dd>「ナビを使う」から教室名（例: 101、10301）で検索すると、出発地点から目的の教室までの最短経路を写真付きで案内します。建物をまたぐ移動にも対応しています。</dd>
+        </div>
+        <div class="faq-item">
+          <dt>紙のフロアマップ・案内図との違いは？</dt>
+          <dd>フロアごとの地図から自分で経路を考える必要がなく、階段・エレベータ・エスカレータの上下移動まで含めたルートを自動で計算します。エレベータを使わない経路の指定もできます。</dd>
+        </div>
+        <div class="faq-item">
+          <dt>トイレや食堂も探せますか？</dt>
+          <dd>現在地から最寄りのトイレ（男子・女子・多目的）や学生食堂までの経路を検索できます。</dd>
+        </div>
+        <div class="faq-item">
+          <dt>生田キャンパスへのアクセスは？</dt>
+          <dd>小田急線「向ヶ丘遊園」駅が最寄り駅です。IKU NAVIは、キャンパス到着後の建物・教室までの道案内を担当します。</dd>
+        </div>
+      </dl>
+    </section>
 
   </main>
 
