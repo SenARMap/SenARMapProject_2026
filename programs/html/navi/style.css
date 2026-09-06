@@ -1,0 +1,605 @@
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --accent:             #3B82F6;
+      --accent-dark:        #1D4ED8;
+      --accent-darker:      #1E40AF;
+      --accent-light:       #EFF6FF;
+      --accent-border-light: #BFDBFE;
+    }
+    /* イベントモード (?event=1): アクセントカラーを暖色系に切り替える */
+    body.event-mode {
+      --accent:             #EA580C;
+      --accent-dark:        #9A3412;
+      --accent-darker:      #7C2D12;
+      --accent-light:       #FFF7ED;
+      --accent-border-light: #FDBA74;
+    }
+    html { height: 100%; overscroll-behavior: none; }
+    body {
+      height: 100%; overflow: hidden;
+      overscroll-behavior: none;
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
+      display: flex;
+      flex-direction: column; /* mobile: stacked */
+    }
+    button, a, select, input, label {
+      touch-action: manipulation; /* ダブルタップズームを無効化 */
+    }
+
+    /* ================================================================
+       Mobile layout — sidebar dissolves via display:contents;
+       children participate directly in body's flex flow via order.
+    ================================================================ */
+    #sidebar { display: contents; }
+
+    #app-header  { display: none; } /* mobile: hidden */
+
+    #search-panel {
+      order: 1;
+      background: white;
+      padding: 0;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+      flex-shrink: 0;
+      z-index: 100;
+    }
+    #search-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+    }
+    #btn-home {
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      border: 1.5px solid #E2E8F0; border-radius: 50%;
+      background: white;
+      display: flex; align-items: center; justify-content: center;
+      color: #64748B; font-size: 15px; line-height: 1;
+      text-decoration: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #btn-home:active { background: #F1F5F9; }
+    #search-toggle {
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      border: 1.5px solid #E2E8F0; border-radius: 50%;
+      background: white;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: #64748B; font-size: 13px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #search-chevron {
+      display: inline-block;
+      transition: transform 0.3s ease;
+      line-height: 1;
+    }
+    #search-chevron.open { transform: rotate(180deg); }
+    #search-content {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.3s ease;
+    }
+    #search-content.open { grid-template-rows: 1fr; }
+    .search-content-inner {
+      overflow: hidden;
+      padding: 0 10px 8px;
+    }
+    #map-area {
+      order: 2;
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      min-height: 0;
+    }
+    #ar-area {
+      order: 4;
+      flex: 1;
+      background: #E8ECF0;
+      position: relative;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* ================================================================
+       Desktop layout (>= 768px) — sidebar + map side by side
+    ================================================================ */
+    @media (min-width: 768px) {
+      body { flex-direction: row; }
+
+      #sidebar {
+        display: flex;
+        flex-direction: column;
+        width: 340px;
+        flex-shrink: 0;
+        height: 100%;
+        background: #fff;
+        border-right: 1px solid #E2E8F0;
+        /* no overflow:hidden — needed so suggestions can overflow */
+      }
+
+      #app-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: 52px;
+        padding: 0 18px;
+        border-bottom: 1px solid #F1F5F9;
+        flex-shrink: 0;
+        background: #fff;
+      }
+      #app-header .hdr-title {
+        font-size: 15px;
+        font-weight: 700;
+        color: #1E293B;
+        letter-spacing: 0.03em;
+        text-decoration: none;
+      }
+      #app-header .hdr-title:hover { color: var(--accent); }
+      #app-header .hdr-badge {
+        font-size: 11px;
+        color: var(--accent);
+        background: var(--accent-light);
+        padding: 2px 9px;
+        border-radius: 10px;
+        font-weight: 600;
+      }
+
+      #search-panel {
+        order: 0;
+        box-shadow: none;
+        border-bottom: 1px solid #F1F5F9;
+        padding: 0;
+        flex-shrink: 0;
+      }
+      #search-header { padding: 14px 16px 8px; }
+      #search-toggle { display: none; }
+      #btn-home      { display: none; } /* desktop: app-header にリンクがあるため不要 */
+      #search-content { display: block; }
+      .search-content-inner { overflow: visible; padding: 0 16px 14px; }
+
+      #ar-area {
+        order: 0;
+        flex: 1;
+        min-height: 0;
+      }
+
+      #map-area {
+        flex: 1;
+        min-width: 0;
+      }
+    }
+
+    /* ================================================================
+       Search Panel internals
+    ================================================================ */
+    .search-tabs { display: flex; gap: 6px; flex: 1; }
+    .search-tab {
+      flex: 1; height: 34px;
+      border: 1.5px solid #CBD5E1; border-radius: 17px;
+      background: white; font-size: 13px; font-weight: 600;
+      color: #64748B; cursor: pointer; transition: all 0.2s;
+    }
+    .search-tab.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+    .route-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .route-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #64748B;
+      width: 28px;
+      flex-shrink: 0;
+      text-align: center;
+    }
+    .building-select {
+      height: 38px;
+      padding: 0 3px;
+      border: 1.5px solid #E2E8F0;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #1E293B;
+      background: white;
+      width: 76px;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .building-select:focus { outline: none; border-color: var(--accent); }
+
+    .ac-wrap { flex: 1; position: relative; }
+    .ac-wrap input {
+      width: 100%;
+      height: 38px;
+      padding: 0 12px;
+      border: 1.5px solid #E2E8F0;
+      border-radius: 8px;
+      font-size: 15px;
+      color: #1E293B;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .ac-wrap input:focus { border-color: var(--accent); }
+
+    .suggestions {
+      display: none;
+      position: absolute;
+      top: calc(100% + 3px);
+      left: 0; right: 0;
+      background: white;
+      border: 1.5px solid #E2E8F0;
+      border-radius: 8px;
+      max-height: 180px;
+      overflow-y: auto;
+      z-index: 200;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    .suggestions .item {
+      padding: 9px 12px;
+      font-size: 14px;
+      color: #1E293B;
+      cursor: pointer;
+      border-bottom: 1px solid #F1F5F9;
+    }
+    .suggestions .item:last-child { border-bottom: none; }
+    .suggestions .item:active,
+    .suggestions .item:hover { background: var(--accent-light); color: var(--accent-dark); }
+
+    .bottom-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .ev-label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+      color: #475569;
+      white-space: nowrap;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .ev-label input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    #btn-search {
+      flex: 1;
+      height: 40px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+      color: white;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    #btn-search:hover { opacity: 0.9; }
+
+    .category-tabs { display: flex; gap: 6px; flex: 1; }
+    .category-tab {
+      flex: 1; height: 34px;
+      border: 1.5px solid #CBD5E1; border-radius: 17px;
+      background: white; font-size: 13px; font-weight: 600;
+      color: #64748B; cursor: pointer; transition: all 0.2s;
+    }
+    .category-tab.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+    /* イベントモード (?event=1) のときだけ表示されるバッジ */
+    #event-badge {
+      display: none;
+      align-items: center;
+      font-size: 11px; font-weight: 700;
+      color: #B45309; background: #FEF3C7;
+      border: 1px solid #FCD34D;
+      padding: 3px 8px; border-radius: 10px;
+      white-space: nowrap; flex-shrink: 0;
+    }
+    #btn-fac-search {
+      flex: 1; height: 40px; border: none; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+      color: white; font-size: 15px; font-weight: 700;
+      cursor: pointer; transition: opacity 0.15s;
+    }
+    #btn-fac-search:hover { opacity: 0.9; }
+
+    .gps-wrapper {
+      border: 1.5px solid var(--accent-border-light); border-radius: 8px;
+      margin-bottom: 6px; overflow: hidden;
+    }
+    .gps-row {
+      display: flex; gap: 8px; align-items: center;
+      padding: 8px 12px; background: var(--accent-light);
+    }
+    .gps-row span { flex: 1; font-size: 13px; color: var(--accent-darker); word-break: break-all; }
+    .btn-gps {
+      height: 32px; padding: 0 14px; border: none; border-radius: 6px;
+      background: var(--accent); color: white; font-size: 13px;
+      font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    }
+    .btn-swap {
+      display: block; width: 28px; height: 28px;
+      margin: 0 0 4px 0;
+      background: white; border: 1.5px solid #E2E8F0; border-radius: 50%;
+      font-size: 16px; line-height: 1; cursor: pointer; color: var(--accent);
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .btn-swap:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
+
+    #accuracy-warn,
+    #fac-accuracy-warn {
+      display: none;
+      padding: 6px 12px; font-size: 12px; line-height: 1.6;
+    }
+    #accuracy-warn.warn-low,  #fac-accuracy-warn.warn-low  { background: #FFFBEB; color: #78350F; }
+    #accuracy-warn.warn-high, #fac-accuracy-warn.warn-high { background: #FEF2F2; color: #7F1D1D; }
+
+    /* ================================================================
+       Map / SVG
+    ================================================================ */
+    #map { width: 100%; height: 100%; }
+
+    #svg-area {
+      display: none; width: 100%; height: 100%;
+      position: absolute; inset: 0; background: #F8FAFC; overflow: hidden;
+    }
+    #svg-container {
+      width: 100%; height: 100%;
+      touch-action: none;        /* ブラウザスクロール抑制（ドラッグ用） */
+      user-select: none;
+      cursor: grab;
+    }
+    #svg-container:active { cursor: grabbing; }
+    #svg-container svg { width: 100%; height: 100%; overflow: visible; }
+
+    .err-box {
+      width: 100%; height: 100%; min-height: 180px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 10px; padding: 24px; text-align: center;
+      color: #94A3B8;
+    }
+    .err-box .err-title { font-size: 15px; font-weight: 700; color: #64748B; }
+    .err-box .err-desc  { font-size: 13px; line-height: 1.7; }
+    .err-box .err-hint  {
+      font-size: 12px; color: #64748B;
+      background: #F1F5F9; padding: 8px 16px; border-radius: 8px; margin-top: 4px;
+    }
+
+    #floor-badge {
+      position: absolute; top: 10px; left: 10px; z-index: 10;
+      background: white; border-radius: 20px; padding: 6px 14px;
+      font-size: 13px; font-weight: 700; color: #1E293B;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    }
+
+    /* ================================================================
+       Step navigation — AR画像上のオーバーレイ
+    ================================================================ */
+    .nav-arrow {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      width: 46px; height: 46px; border-radius: 50%;
+      border: none; background: rgba(255,255,255,0.92);
+      font-size: 18px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: #475569; z-index: 20;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.12s, opacity 0.12s;
+    }
+    #prev-btn { left: 10px; }
+    #next-btn { right: 10px; }
+    .nav-arrow:not(:disabled):hover  { background: white; }
+    .nav-arrow:not(:disabled):active { transform: translateY(-50%) scale(0.92); }
+    .nav-arrow:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    #step-info {
+      position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+      max-width: calc(100% - 20px);
+      z-index: 20; text-align: center;
+      background: rgba(0,0,0,0.55); color: rgba(255,255,255,0.95);
+      padding: 5px 16px; border-radius: 16px;
+      backdrop-filter: blur(4px);
+      pointer-events: none;
+    }
+    #step-label {
+      font-size: 13px; font-weight: 700;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #step-count { font-size: 11px; color: rgba(255,255,255,0.75); margin-top: 1px; }
+
+    @media (min-width: 768px) {
+      #step-label { font-size: 14px; }
+      .nav-arrow  { width: 50px; height: 50px; }
+    }
+
+    /* ================================================================
+       AR Area
+    ================================================================ */
+    .ar-cached-img {
+      display: none;
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    .ar-cached-img.active { display: block; }
+    #ar-placeholder {
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 8px;
+    }
+    #ar-placeholder .ph-text {
+      font-size: 12px;
+      color: #94A3B8;
+      letter-spacing: 0.1em;
+    }
+    #ar-placeholder.arrival {
+      background: linear-gradient(160deg, var(--accent-light) 0%, #F0FDF4 100%);
+      gap: 12px;
+    }
+    #ar-placeholder.arrival .arrival-icon {
+      font-size: 48px;
+      line-height: 1;
+    }
+    #ar-placeholder.arrival .arrival-title {
+      font-size: 18px; font-weight: 700; color: var(--accent-darker);
+    }
+    #ar-placeholder.arrival .arrival-desc {
+      font-size: 13px; color: #475569; text-align: center; line-height: 1.6;
+    }
+    #ar-label {
+      display: none;
+      position: absolute; bottom: 10px; left: 10px;
+      background: rgba(0,0,0,0.55);
+      color: rgba(255,255,255,0.9);
+      font-size: 12px; font-weight: 600;
+      padding: 4px 12px; border-radius: 14px;
+      backdrop-filter: blur(4px);
+      pointer-events: none;
+    }
+    #direction-arrow {
+      display: none;
+      position: absolute;
+      left: 50%;
+      /* ↓ 矢印の縦位置: 値を大きくすると画面下（手前）に移動 / 小さくすると奥に移動 */
+      top: 80%;
+      transform: translate(-50%, -50%);
+      /* ↓ 矢印のサイズ: clamp(最小, 基準, 最大) — 基準値を変えると全体的なサイズが変わる */
+      width: clamp(130px, 50vmin, 220px);
+      height: auto;
+      opacity: 0.90;
+      pointer-events: none;
+      z-index: 10;
+      filter: drop-shadow(0 3px 10px rgba(0,0,0,0.65));
+    }
+    /* 最終区間（目的地エッジ上）で矢印の代わりに出すバッジ */
+    #near-goal-badge {
+      display: none;
+      position: absolute;
+      left: 50%;
+      top: 80%;
+      transform: translate(-50%, -50%);
+      background: rgba(30, 64, 175, 0.92);
+      color: #fff;
+      font-size: 16px; font-weight: 700;
+      padding: 10px 22px; border-radius: 999px;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 10;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.45);
+    }
+
+    /* ================================================================
+       Completion modal
+    ================================================================ */
+    #completion-modal {
+      display: none;
+      position: fixed; inset: 0; z-index: 600;
+      align-items: center; justify-content: center;
+      padding: 20px;
+      background: rgba(15, 23, 42, 0.5);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      animation: modalFadeIn 0.25s ease both;
+    }
+    #completion-modal.show { display: flex; }
+
+    #completion-box {
+      background: white;
+      border-radius: 24px;
+      padding: 36px 32px 28px;
+      max-width: 360px;
+      width: 100%;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.22);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      text-align: center;
+      animation: modalSlideUp 0.3s cubic-bezier(0.22,1,0.36,1) both;
+    }
+
+    .modal-icon {
+      width: 60px; height: 60px;
+      border-radius: 50%;
+      background: var(--accent-light);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px;
+      margin-bottom: 4px;
+    }
+    .modal-title {
+      font-size: 20px; font-weight: 800;
+      color: #0F172A; letter-spacing: -0.02em;
+      margin-bottom: 2px;
+    }
+    .modal-desc {
+      font-size: 14px; color: #64748B;
+      line-height: 1.65; margin-bottom: 12px;
+    }
+    .modal-btn-survey {
+      width: 100%; height: 48px;
+      border: none; border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+      color: white; font-size: 15px; font-weight: 700;
+      cursor: pointer; transition: opacity 0.15s;
+      text-decoration: none;
+      display: flex; align-items: center; justify-content: center;
+      gap: 6px;
+    }
+    .modal-btn-survey:hover { opacity: 0.88; }
+    .modal-btn-continue {
+      width: 100%; height: 44px;
+      border: 1.5px solid #E2E8F0; border-radius: 12px;
+      background: white; color: #475569;
+      font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s;
+      margin-top: 4px;
+    }
+    .modal-btn-continue:hover { background: #F8FAFC; }
+
+    @keyframes modalFadeIn {
+      from { opacity: 0; } to { opacity: 1; }
+    }
+    @keyframes modalSlideUp {
+      from { opacity: 0; transform: translateY(24px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0)    scale(1); }
+    }
+
+    /* ================================================================
+       Loading overlay
+    ================================================================ */
+    #loading {
+      display: none; position: fixed; inset: 0; z-index: 500;
+      background: rgba(15,23,42,0.45);
+      align-items: center; justify-content: center;
+    }
+    #loading.show { display: flex; }
+    #loading-box {
+      background: white; border-radius: 16px; padding: 22px 36px;
+      font-size: 16px; font-weight: 600; color: #1E293B;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+
+    /* ================================================================
+       AR Outdoor Elements
+    ================================================================ */
+    #ar-bg-video {
+      display: none;
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover; z-index: 1;
+    }
+    #ar-gl-canvas {
+      display: none;
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      z-index: 2; pointer-events: none;
+    }

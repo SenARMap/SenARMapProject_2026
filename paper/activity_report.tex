@@ -1,0 +1,269 @@
+\documentclass[a4paper,10.5pt]{ltjsarticle}
+
+\usepackage{luatexja}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage[table]{xcolor}
+\usepackage[a4paper,margin=25mm]{geometry}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+
+\ltjsetparameter{jacharrange={-2}}
+
+\title{\textbf{AR技術を用いた大学キャンパスナビゲーションシステム\\
+「IKU NAVI」の開発 \\[2mm]
+\large ---専修大学生田キャンパスにおける屋内外統合経路案内の実装と運用---}}
+\author{専修大学 ネットワーク情報学部 生亀プロジェクト}
+\date{2026年9月}
+
+\lstset{
+  basicstyle=\small\ttfamily,
+  breaklines=true,
+  frame=single,
+  columns=fullflexible,
+  keepspaces=true
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+専修大学生田キャンパスは複数の建物が入り組んで配置されており，初めて訪れる学生・教職員・来訪者が目的の教室や施設に迷わずたどり着くことは容易ではない。本活動報告では，我々「生亀プロジェクト」が開発・運用しているAR対応キャンパスナビゲーションWebアプリケーション「IKU NAVI」について述べる。本システムは，CSVで管理された建物内外のノード・エッジデータをもとにDijkstra法による最短経路探索を行い，屋外はGoogle Maps，屋内はSVGフロアマップを用いて経路を可視化する。さらに，AR領域では屋内は経路写真と方向矢印のオーバーレイ，屋外はThree.jsとスマートフォンのGPS・ジャイロセンサを用いたリアルタイムARによって，直感的なステップナビゲーションを実現している。インフラにはDocker Swarmおよびcloudflareトンネルを用いた低コストかつスケーラブルな運用体制を構築した。本稿では要件定義からシステム設計，実装，運用に至る一連の開発プロセスと，そこから得られた知見，および今後の課題について報告する。
+\end{abstract}
+
+\tableofcontents
+
+\section{はじめに}
+
+専修大学生田キャンパスは，複数号館が渡り廊下や連絡通路で接続された複雑な構造を持ち，新入生や来訪者にとって目的の教室・食堂・トイレなどへの経路を把握することが困難な場合がある。従来の紙媒体の案内図や，館内に設置された固定の案内板だけでは，現在地から目的地までの動的な経路案内を提供することができない。
+
+そこで我々「生亀プロジェクト」は，2026年度ネットワーク情報学部の活動として，スマートフォンから利用できるAR対応キャンパスナビゲーションシステム「IKU NAVI」を企画・開発した。本プロジェクトの基本方針は，複雑な位置合わせや専用アプリのインストールを要する本格的なAR（拡張現実）ではなく，\textbf{まず経路写真に矢印を合成するというシンプルな形式のARマップから着手し，段階的に発展させる}というものである。この方針のもと，2026年2月のプロジェクト開始以降，データ設計・経路探索アルゴリズム・フロントエンドUI・インフラ構築までを一貫して自作し，本稿執筆時点（2026年9月）で本番運用中である。
+
+本稿では，第\ref{sec:overview}章でシステム全体の概要を，第\ref{sec:data}章でデータ設計を，第\ref{sec:routing}章で経路探索アルゴリズムを，第\ref{sec:frontend}章でフロントエンドUIを，第\ref{sec:ar}章でAR実装を，第\ref{sec:infra}章でインフラ構成を，第\ref{sec:process}章で開発プロセスと運用実績を，第\ref{sec:future}章で今後の課題をそれぞれ述べる。
+
+\section{システム全体概要}
+\label{sec:overview}
+
+IKU NAVIは，専修大学生田キャンパス内の経路をブラウザだけで案内するWebアプリケーションである。ネイティブアプリのインストールを必要とせず，スマートフォンやPCのブラウザから \url{https://iku-navi.net/} にアクセスするだけで利用できる。
+
+\subsection{基本機能}
+
+\begin{itemize}[itemsep=1pt]
+  \item 教室名・食堂名などのキーワード検索によるオートコンプリート付き目的地指定
+  \item GPSによる現在地取得（現在地から目的地までの自動ルーティング）
+  \item 屋外区間はGoogle Maps上に，屋内区間はSVGフロアマップ上に経路を重畳表示
+  \item ステップ単位（矢印ボタン）でのナビゲーション進行
+  \item AR領域：屋内は経路写真＋方向矢印，屋外はThree.jsによるリアルタイムAR表示
+  \item 最寄りのトイレ・食堂への経路探索
+\end{itemize}
+
+\subsection{技術スタック}
+
+\begin{table}[h]
+\centering
+\caption{IKU NAVI 技術スタック一覧}
+\begin{tabular}{ll}
+\toprule
+区分 & 使用技術 \\
+\midrule
+バックエンド & Python 3 / Flask / Gunicorn / NetworkX / pandas \\
+フロントエンド & HTML / CSS / Vanilla JavaScript / Google Maps API / Three.js / インラインSVG \\
+インフラ & Docker Swarm / ConoHa VPS / Cloudflare Pages（静的配信） \\
+ネットワーク & Cloudflare Tunnel（API公開）/ Cloudflare R2（画像CDN） \\
+監視 & Prometheus / Grafana / cAdvisor \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+システム全体のアーキテクチャは，静的コンテンツをCloudflare Pagesで配信し，経路探索APIをConoHa VPS上のDocker Swarmクラスタで稼働させる構成である。2026年7月には，従来Nginxが担っていた静的配信・振り分け機能をCloudflare PagesとCloudflare Tunnelのパスルーティングに置き換え，VPS側の負荷を軽減する移行を行った。
+
+\section{データ設計}
+\label{sec:data}
+
+経路探索の基盤となるデータは，スプレッドシートで管理され，スクリプトによってCSV形式でGitHubリポジトリに反映される運用となっている。
+
+\subsection{ノードID体系}
+
+建物内外のノードを単一の座標系・IDで扱うため，以下の規則でグローバルIDを付与している。
+
+\begin{lstlisting}
+屋内ノード = building_id x 100,000 + local_id
+屋外ノード = local_id + 9,000,000
+\end{lstlisting}
+
+各建物のローカル座標（x, y, z）は，\texttt{anchors.csv}に記録された2点のアンカー座標から回転角$\theta$と平行移動量$(t_x, t_y, t_z)$を自動算出し，以下の式でキャンパス全体のグローバル座標系へ変換される。
+
+\begin{align}
+X_{global} &= \cos\theta \cdot X_{local} - \sin\theta \cdot Y_{local} + t_x \\
+Y_{global} &= \sin\theta \cdot X_{local} + \cos\theta \cdot Y_{local} + t_y \\
+Z_{global} &= Z_{local} + t_z
+\end{align}
+
+アンカーが1点しか取得できない建物については，\texttt{buildings.json}に定義した\texttt{rot\_deg}を回転角として用いる。
+
+\subsection{主要データファイル}
+
+\begin{table}[h]
+\centering
+\small
+\caption{主要CSVデータファイル}
+\begin{tabular}{lp{9.5cm}}
+\toprule
+ファイル & 内容 \\
+\midrule
+\texttt{node.csv}（建物毎） & 建物ローカル座標(x,y,z)，SVG座標(svg\_x,svg\_y)，階数，ノード種別 \\
+\texttt{global\_node.csv} & 屋外ノードの緯度経度(lat,lng)，グローバル座標 \\
+\texttt{edge.csv}（建物毎） & 接続ノード対，教室名（\texttt{;}区切りで複数対応），探索コスト係数，実距離，エッジ種別 \\
+\texttt{edge\_image.csv} & エッジ両端ノードとCDN上の経路画像ファイル名の対応（約999行） \\
+\texttt{cafeteria\_edge.csv} & 食堂の識別名・所属建物・UI表示名 \\
+\texttt{anchors.csv} & 建物ローカル座標とグローバル座標のアンカー対応点 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+エッジ種別は表\ref{tab:edgetype}の7種類を定義しており，エスカレーターの一方向性やエレベーターの利用可否といった経路上の制約をデータ側で表現している。
+
+\begin{table}[h]
+\centering
+\caption{エッジ種別一覧}
+\label{tab:edgetype}
+\begin{tabular}{cll}
+\toprule
+type & 意味 & 方向性 \\
+\midrule
+1 & 通路 & 双方向 \\
+2 & 階段 & 双方向 \\
+3 & スロープ & 双方向 \\
+4 & エレベーター & 双方向（\texttt{use\_elevator=0}で除外可） \\
+5 & 上りエスカレーター & 一方向（低い階→高い階のみ） \\
+6 & 下りエスカレーター & 一方向（高い階→低い階のみ） \\
+7 & 入口（屋内外接続） & 双方向（入口ペナルティ+50を加算） \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+なお，教室はノードそのものではなく\emph{エッジの属性}として管理している点が本システムのデータ設計上の特徴である。これにより，1つの教室が複数の出入口（ノード）を持つ場合でも自然に表現でき，経路探索時にはエッジの両端ノードを候補として全組み合わせを評価する方式を採っている（第\ref{sec:routing}章）。
+
+\section{経路探索アルゴリズム}
+\label{sec:routing}
+
+\subsection{グラフ構築}
+
+バックエンドはNetworkXの有向グラフ（\texttt{DiGraph}）を用いてキャンパス全体のグラフを構築する。エスカレーターのような一方向エッジはそのまま1方向のみ追加し，それ以外の通路・階段・エレベーター・入口については順方向・逆方向の両エッジを追加することで無向グラフと等価に扱っている。エレベーター利用の有無で経路が変わるため，起動時に「エレベーターあり」「エレベーターなし」の2種類のグラフを事前に構築してメモリにキャッシュし，切り替えコストをゼロにしている。
+
+\subsection{最短経路計算}
+
+経路探索には\texttt{networkx.bidirectional\_dijkstra}を用いる。各エッジのコストは
+
+\[
+\mathrm{cost}(e) = \mathrm{weight}(e) \times \mathrm{length}(e)
+\]
+
+で定義され，\texttt{weight}は経路種別ごとの通りやすさを表す係数，\texttt{length}は実距離（メートル）である。教室がエッジ属性として管理されているため，出発地・目的地がともに教室名で指定された場合は，それぞれの教室に対応するエッジの両端ノードを候補集合とし，全ての組み合わせについて\texttt{bidirectional\_dijkstra}を実行して最小コストの経路を採用する。
+
+\subsection{屋内外接続とGPS連携}
+
+\texttt{anchors.csv}に記録されたアンカーポイントをもとに，屋内ノードと屋外ノードを結ぶエッジを自動生成することで，建物をまたぐ経路探索を単一のグラフ上で完結させている。また，スマートフォンのGPSから取得した現在地は，Haversine距離により最近傍の屋外ノードへスナップして出発ノードとする。GPSの精度が30mを超える場合は案内板の参照を促す警告を表示し，最近傍ノードまでの距離が500m（\texttt{MAX\_GPS\_NODE\_DIST\_M}）を超える場合はキャンパス外にいると判断して自動出発地点の採用を行わない。
+
+\section{フロントエンドUI}
+\label{sec:frontend}
+
+フロントエンドはフレームワークを用いず，Vanilla JavaScriptで実装している。画面はレスポンシブ設計とし，768px未満のスマートフォン表示では検索パネル・マップ・ナビゲーションバー・AR領域を縦に積んだレイアウトに，768px以上のPC・タブレット表示では左サイドバー（検索・ナビ・AR，幅340px）と右側フルハイトのマップからなる2カラムレイアウトに切り替える。
+
+経路上の各ノードが持つ\texttt{building}属性の値によって，屋内外表示を自動的に切り替える。\texttt{building}が0であれば屋外と判定してGoogle Mapsを表示し，進行方向に応じて\texttt{map.setHeading()}で地図を回転させる。0以外であれば屋内と判定し，該当するSVGフロアマップを\texttt{fetch}してインライン挿入した上に，Dijkstra法で求めた経路を重畳描画する。SVG側は現在地までの区間を青色でハイライトし，進行方向を赤い三角矢印で示すとともに，経路の範囲から自動計算したビューボックスで表示領域を追従させる。
+
+目的地検索には\texttt{datalist}要素を用いず，独自実装のサジェストドロップダウンを採用している。クリック確定処理を\texttt{blur}イベントより先に発火させるため，選択肢の\texttt{mousedown}イベントで\texttt{preventDefault()}を呼び出し，クリックが無効化される典型的な不具合を回避している。
+
+\section{AR実装}
+\label{sec:ar}
+
+本システムのAR表示は，ナビゲーション中の各ステップが屋内・屋外いずれのノードに属するかによって自動的に切り替わる，2段階構成となっている。
+
+\subsection{屋内AR：経路写真と方向矢印のオーバーレイ}
+
+屋内区間では，Cloudflare R2上のCDNから配信される経路写真（両端ノードの組に対応するJPEG画像）を表示し，その上に進行方向（左・右・直進）を示す矢印画像を重畳する。折れ角が45度以内の場合は直進と判定する。経路確定直後に全ステップ分の画像を\texttt{<img>}要素として先読みし，DOM上に積んでおくことで，ステップ移動時は表示クラスの付け替えのみで即座に画像を切り替えられるようにし，体感的な表示遅延を排除している。
+
+\subsection{屋外AR：Three.js + GPS + ジャイロセンサ}
+
+屋外区間では，Three.jsによるWebGLレンダリングとリアカメラ映像を重ね合わせた本格的なARを実装している。緯度経度は基準点からの相対距離（メートル）に変換した上で，ENU（東・上・北）に対応する右手系のThree.js座標系にマッピングし，GPS更新のたびに世界座標グループの位置を動かすことで，常に現在地を原点とする相対配置を実現している。
+
+端末の方位センサーは機種・OSによって取得可能なイベントが異なるため，(1) \texttt{deviceorientationabsolute}（Android Chrome，絶対方位），(2) \texttt{webkitCompassHeading}（iOS Safari），(3) \texttt{deviceorientation}の\texttt{alpha}（その他Android，相対方位）の優先順位でフォールバックする実装とした。またiOS 13以降はセンサー利用に関するユーザー許可がタップ操作のコールスタック内でしか取得できない制約があるため，検索ボタン押下時点で許可ダイアログを先取りリクエストし，実際にAR表示へ遷移する際の許可待ちを解消している。
+
+\subsection{プライバシー・バッテリーへの配慮}
+
+カメラおよびGPSの起動・解放は必要最小限に制御している。カメラは経路確定時に，ルート中に屋外AR区間が含まれる場合のみ先取り起動し，屋内のみの経路では一切起動しない。GPSの継続取得（\texttt{watchPosition}）も屋外AR表示中のみ有効化する。ステップ移動のたびに「以降のステップに屋外AR区間が残っているか」を判定し，残っていなければカメラストリームの停止と位置情報取得の解除を行う。屋外区間に再突入した際は許可ダイアログを再表示せずにストリームを再取得する設計とし，プライバシーとバッテリー消費の両面に配慮した。
+
+\section{インフラ構成}
+\label{sec:infra}
+
+\subsection{本番環境}
+
+本番環境はConoHa VPS（平常時メモリ2GB・vCPU3コア）上でDocker Swarmを用いて構築している。表\ref{tab:swarm}に主要サービスの構成を示す。学園祭などイベント開催時には4GBサーバーをSwarmワーカーとして追加増設し，Flaskアプリのレプリカ数を2から4に拡張することで同時接続の増加に対応する運用としている。
+
+\begin{table}[h]
+\centering
+\small
+\caption{Docker Swarm サービス構成}
+\label{tab:swarm}
+\begin{tabular}{llc}
+\toprule
+サービス & 役割 & 平常時レプリカ \\
+\midrule
+python & Flask + Gunicorn（経路探索API） & 2 \\
+counter & アクセスカウンター（Rails） & 2 \\
+db & MariaDB 11 & 1（manager固定） \\
+cloudflared & Cloudflare Tunnel & 1（manager固定） \\
+prometheus & メトリクス収集 & 1（manager固定） \\
+grafana & 監視ダッシュボード & 1（manager固定） \\
+cadvisor & コンテナリソース監視 & 全ノード \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+サーバーへは公開ポートを一切開放せず，Cloudflare Tunnelを介してのみ外部からアクセス可能とすることでファイアウォール設定の負担を軽減している。デプロイはcron（30分毎）による\texttt{update.sh}の自動実行と，\texttt{start-first}によるローリングアップデートで無停止更新を実現している。
+
+\subsection{Cloudflare Pages移行}
+
+2026年7月，静的コンテンツ配信を担っていたNginxを完全に撤去し，メインドメインをCloudflare Pages，APIドメインをCloudflare Tunnel経由の直接配信に切り替える構成変更を行った。これにより，VPS側で稼働させるサービスをPython・アクセスカウンター・DB・監視基盤・cloudflaredのみに縮小し，2GBサーバーの負荷を軽減した。CORSはFlask側の\texttt{after\_request}で許可オリジンを制御し，QRコードなど既存導線との互換性は静的配信側のリダイレクト設定で担保している。
+
+\subsection{今後の静的データ配信への移行方針}
+
+現在は開発中のデータ追加・経路ロジック変更を1箇所（Flaskバックエンド）に集約しておく方が変更コストが低いため，経路探索APIはFlaskのまま運用している。キャンパス全体のグラフ規模は約360ノード・300エッジと小さく，ブラウザ上のJavaScriptでもDijkstra計算は1ミリ秒未満で完了する見込みであるため，全建物のデータ投入と経路ロジックの安定化が完了した段階で，グラフをビルド時に\texttt{graph.json}として静的出力し，経路計算をブラウザ側JavaScriptへ移行する計画である。この移行により，VPS上のPythonコンテナとCORS設定が不要となり，イベント時の同時接続増加に対しても静的配信の強みを活かせる見込みである。
+
+\section{開発プロセスと運用実績}
+\label{sec:process}
+
+本プロジェクトは2026年2月にリポジトリを開設して以降，本稿執筆時点（2026年9月）までに463件のコミットを重ねてきた。開発体制はGitHubを用いたチーム開発とし，スプレッドシート上でのデータ編集を専用スクリプトによって自動的にコミット・プッシュする仕組みを整備することで，プログラミング経験の少ないメンバーでもデータ整備に参加できる体制を構築した。
+
+開発補助ツールとして，全エッジ画像のCDN上の存在確認を行う\texttt{Image\_Checker}，全教室ペア間の経路を並列探索して異常な迂回・想定外の建物経由・フロアの逆走などを自動検出する\texttt{Route\_Checker}を独自に開発し，データ追加時の品質担保に活用している。また，建物内座標のマッピング作業を支援する\texttt{Map\_Editor}や，AR用経路写真からの人物モザイク処理を行う\texttt{Human\_Remover}など，データ整備・画像処理を効率化するツール群もあわせて内製した。
+
+非機能要件としては，通常時30人以下・ピーク時（授業切替時）100人以下の同時接続を想定し，静的ページは500ms以内，APIレスポンスは2秒以内の応答を目標としている。可用性については大学内利用が主目的であることを踏まえ，高可用性クラスタ構成は採用せず，目標稼働率70\%以上・Prometheus/Grafanaによるリソース監視という現実的な水準に設定している。
+
+\section{今後の課題}
+\label{sec:future}
+
+本稿執筆時点で認識している主な課題は以下の通りである。
+
+\begin{enumerate}[itemsep=2pt]
+  \item \textbf{屋内フロアマップデータの拡充}：現在SVGフロアマップが整備済みなのは1建物分のみであり，ノード・エッジデータが存在する他の建物についても順次SVG化を進める必要がある。
+  \item \textbf{表示名データベース・イベントモードのデータ投入}：教室表示名や学園祭時の特別表示に関するテーブルはコードとして実装済みだが，実データが未投入のため機能していない。学園祭等の次回イベント前にデータ投入を完了させたい。
+  \item \textbf{自動テストの整備}：経路探索ロジック（エスカレーターの一方向制約・エレベーター除外・入口ペナルティ等）や\texttt{Route\_Checker}の異常検出ロジックについて，現状は手動確認に依存しており，pytest等によるCI組み込みが望まれる。
+  \item \textbf{屋内ARの高度化}：現在の屋内ARは経路写真＋矢印オーバーレイという簡易な形式にとどまっており，屋外ARで確立したカメラ・GPSライフサイクル管理の知見を活かしつつ，将来的にはWebXRやCSS 3D変換によるカメラ映像上への矢印重畳表示への発展を検討している。
+  \item \textbf{静的データ配信への移行}：第\ref{sec:infra}章で述べた通り，経路探索のブラウザ側移行はデータ整備が一段落した後の重要なマイルストーンである。
+  \item \textbf{多言語対応・アクセシブルルート}：留学生やオープンキャンパス来場者向けの英語表示，および階段回避などのアクセシブルな経路提示についても検討課題として挙げられる。
+\end{enumerate}
+
+\section{おわりに}
+
+本活動報告では，専修大学生田キャンパスを対象としたAR対応ナビゲーションシステム「IKU NAVI」について，企画の背景から，データ設計，経路探索アルゴリズム，フロントエンドUI，屋内外統合AR実装，そしてDocker Swarm・Cloudflareを用いたインフラ構成に至るまでの開発内容を報告した。「まず写真に矢印を合成するシンプルな形式のARマップから始め，段階的に発展させる」という当初方針のもと，本システムは実際に大学構内で稼働するサービスとして実装・運用段階に至っている。今後はデータ整備の完了と自動テストの導入を優先課題としつつ，静的データ配信への移行や屋内ARの高度化といった技術的発展にも取り組み，より多くの学生・来訪者にとって使いやすいキャンパスナビゲーションの実現を目指す。
+
+\begin{thebibliography}{9}
+\bibitem{iku-navi} IKU NAVI 本番サイト, \url{https://iku-navi.net/}
+\bibitem{repo} 生亀プロジェクト GitHubリポジトリ, SenARMapProject\_2026（学内限定）
+\end{thebibliography}
+
+\end{document}
