@@ -9,7 +9,7 @@ pages_build_output_dir = "dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "timetables-db"
-database_id = "REPLACE_WITH_REAL_D1_DATABASE_ID"
+database_id = "0da9c3ae-bf08-46f4-9d6b-171eeacfe4d1"
 
 # --- 環境変数 / シークレット (Cloudflare Pages ダッシュボードで設定する) ---
 # 平文でよいもの [vars] に、秘密情報は `wrangler pages secret put` で設定し、
@@ -21,7 +21,7 @@ ALLOWED_EMAIL_DOMAIN = "senshu-u.jp"
 OAUTH_REDIRECT_URI = "https://timetables.iku-navi.net/api/auth/callback"
 # Google Cloud ConsoleでOAuthクライアントを作成すると発行される値。秘密情報ではない
 # （クライアントサイドに公開される前提の値。認可は GOOGLE_CLIENT_SECRET 側で担保される）。
-GOOGLE_CLIENT_ID = "REPLACE_WITH_REAL_GOOGLE_CLIENT_ID"
+GOOGLE_CLIENT_ID = "178048918023-5kr2gbeurb05a9dj662drv6gccn5us62.apps.googleusercontent.com"
 
 # 以下はダッシュボード or `wrangler pages secret put` で別途設定するシークレット:
 #   GOOGLE_CLIENT_SECRET
