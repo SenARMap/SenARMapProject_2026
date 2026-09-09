@@ -60,7 +60,11 @@ export async function exchangeCodeForIdToken(params: {
     body,
   });
   if (!res.ok) {
-    throw new Error(`Googleトークン交換に失敗しました (HTTP ${res.status})`);
+    // Googleのエラー応答本体(error/error_description)には invalid_client(client_secret違い)・
+    // redirect_uri_mismatch・invalid_grant(コード再利用/期限切れ)など原因の手がかりが入っているため、
+    // デバッグ用に必ずログへ残す(呼び出し元でconsole.errorされる想定)。
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Googleトークン交換に失敗しました (HTTP ${res.status}): ${detail}`);
   }
   const data = (await res.json()) as { id_token?: string };
   if (!data.id_token) {
