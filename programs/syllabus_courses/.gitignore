@@ -1,0 +1,4 @@
+# 中間データ(再開用キャッシュ)。最終成果物の output/courses.json だけをコミットする。
+output/courses_raw.jsonl
+output/.checkpoint.json
+__pycache__/

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>シラバス検索（学部/学科版）</title>
+  <link rel="stylesheet" href="search.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="title">
+      <h1>シラバス検索</h1>
+      <p class="subtitle">大学公式サイトのバグを踏まない、開講科目一覧のオフライン検索ページ</p>
+    </div>
+
+    <div class="filters">
+      <label>
+        学部
+        <select id="faculty-select">
+          <option value="">すべての学部</option>
+        </select>
+      </label>
+      <label>
+        学科
+        <select id="department-select" disabled>
+          <option value="">すべての学科</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="search-row">
+      <input type="search" id="query-input" placeholder="科目名で検索（例: プログラミング）" autocomplete="off">
+      <span id="result-count" class="result-count"></span>
+    </div>
+
+    <p id="placeholder-hint" class="hint">
+      科目名を入力するか、上の学部/学科を選ぶと一覧が表示されます（全件表示はしません）。
+    </p>
+
+    <div class="table-wrap">
+      <table id="results-table" hidden>
+        <thead>
+          <tr>
+            <th>科目名</th>
+            <th>学期</th>
+            <th>曜日・時限</th>
+            <th>担当教員</th>
+            <th>学部/学科</th>
+          </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <p>
+      このデータは大学のシラバス検索サイトが公開している「開講科目一覧」のスナップショットです。
+      特定の学生の履修状況（誰が実際にその授業を取っているか）を示すものではありません。
+      教室情報はサイト側に掲載がないため表示されません。
+    </p>
+  </footer>
+
+  <script src="search.js"></script>
+</body>
+</html>
