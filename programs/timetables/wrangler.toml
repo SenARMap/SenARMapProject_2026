@@ -1,0 +1,27 @@
+name = "senarmapproject-2026-timetables"
+compatibility_date = "2026-01-01"
+pages_build_output_dir = "dist"
+
+# D1データベースへのバインディング。
+# database_id は `wrangler d1 create timetables-db` 実行後に発行される値に書き換えること
+# （README「2. Cloudflare側の初期設定」参照）。database_name はダッシュボード上の表示名なので
+# 変更しても動作に影響しない。
+[[d1_databases]]
+binding = "DB"
+database_name = "timetables-db"
+database_id = "REPLACE_WITH_REAL_D1_DATABASE_ID"
+
+# --- 環境変数 / シークレット (Cloudflare Pages ダッシュボードで設定する) ---
+# 平文でよいもの [vars] に、秘密情報は `wrangler pages secret put` で設定し、
+# ここには書かない（README参照）。
+[vars]
+# 大学のGoogle Workspaceドメイン（このドメインのアカウントのみログインを許可する）。
+ALLOWED_EMAIL_DOMAIN = "senshu-u.jp"
+# OAuthコールバック先。実運用ドメインが決まったら書き換える。
+OAUTH_REDIRECT_URI = "https://timetables.iku-navi.net/api/auth/callback"
+# Google Cloud ConsoleでOAuthクライアントを作成すると発行される値。秘密情報ではない
+# （クライアントサイドに公開される前提の値。認可は GOOGLE_CLIENT_SECRET 側で担保される）。
+GOOGLE_CLIENT_ID = "REPLACE_WITH_REAL_GOOGLE_CLIENT_ID"
+
+# 以下はダッシュボード or `wrangler pages secret put` で別途設定するシークレット:
+#   GOOGLE_CLIENT_SECRET
