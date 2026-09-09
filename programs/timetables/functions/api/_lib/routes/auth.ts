@@ -40,6 +40,13 @@ authRoutes.get("/callback", async (c) => {
     return c.redirect(`/?login_error=${encodeURIComponent(query.error)}`);
   }
   if (!query.code || !query.state || !expectedState || !codeVerifier || query.state !== expectedState) {
+    // Cookieが読めていない場合、ログイン開始時と違うオリジン(例: *.pages.devで開始してカスタム
+    // ドメインにコールバックされた等)でCookieが分断されている可能性が高い。
+    console.error("oauth callback: invalid_state", {
+      hasCode: !!query.code, hasQueryState: !!query.state,
+      hasExpectedState: !!expectedState, hasCodeVerifier: !!codeVerifier,
+      stateMatches: query.state === expectedState,
+    });
     return c.redirect("/?login_error=invalid_state");
   }
 
@@ -52,14 +59,16 @@ authRoutes.get("/callback", async (c) => {
       redirectUri: c.env.OAUTH_REDIRECT_URI,
       codeVerifier,
     });
-  } catch {
+  } catch (err) {
+    console.error("oauth callback: token exchange failed", err);
     return c.redirect("/?login_error=token_exchange_failed");
   }
 
   let payload;
   try {
     payload = await verifyIdToken(idToken, c.env.GOOGLE_CLIENT_ID);
-  } catch {
+  } catch (err) {
+    console.error("oauth callback: id token verification failed", err);
     return c.redirect("/?login_error=invalid_token");
   }
 
